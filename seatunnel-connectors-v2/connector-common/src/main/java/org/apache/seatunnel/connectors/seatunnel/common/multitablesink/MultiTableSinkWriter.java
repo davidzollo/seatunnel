@@ -20,10 +20,12 @@ package org.apache.seatunnel.connectors.seatunnel.common.multitablesink;
 import org.apache.seatunnel.api.sink.MultiTableResourceManager;
 import org.apache.seatunnel.api.sink.SinkWriter;
 import org.apache.seatunnel.api.sink.SupportMultiTableSinkWriter;
+import org.apache.seatunnel.api.sink.SupportResourceShare;
 import org.apache.seatunnel.api.table.event.SchemaChangeEvent;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.tracing.MDCTracer;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -44,11 +46,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class MultiTableSinkWriter
-        implements SinkWriter<SeaTunnelRow, MultiTableCommitInfo, MultiTableState> {
+        implements SinkWriter<SeaTunnelRow, MultiTableCommitInfo, MultiTableState>,
+                SupportResourceShare {
 
     private final Map<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkWriters;
     private final Map<String, Optional<Integer>> sinkPrimaryKeys = new HashMap<>();
+
+    @Getter
     private final List<Map<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>>> sinkWritersWithIndex;
+
     private final List<MultiTableWriterRunnable> runnable = new ArrayList<>();
     private final Random random = new Random();
     private final List<BlockingQueue<SeaTunnelRow>> blockingQueues = new ArrayList<>();
@@ -82,6 +88,7 @@ public class MultiTableSinkWriter
             Map<String, SinkWriter<SeaTunnelRow, ?, ?>> tableIdWriterMap = new HashMap<>();
             Map<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkIdentifierMap = new HashMap<>();
             int finalI = i;
+            blockingQueues.add(queue);
             sinkWriters.entrySet().stream()
                     .filter(entry -> entry.getKey().getIndex() % queueSize == finalI)
                     .forEach(
@@ -91,7 +98,6 @@ public class MultiTableSinkWriter
                                 sinkIdentifierMap.put(entry.getKey(), entry.getValue());
                             });
             sinkWritersWithIndex.add(sinkIdentifierMap);
-            blockingQueues.add(queue);
             MultiTableWriterRunnable r = new MultiTableWriterRunnable(tableIdWriterMap, queue);
             runnable.add(r);
         }
@@ -102,9 +108,17 @@ public class MultiTableSinkWriter
     private void initResourceManager(int queueSize) {
         for (SinkIdentifier tableIdentifier : sinkWriters.keySet()) {
             SinkWriter<SeaTunnelRow, ?, ?> sink = sinkWriters.get(tableIdentifier);
-            resourceManager =
-                    ((SupportMultiTableSinkWriter<?>) sink)
-                            .initMultiTableResourceManager(sinkWriters.size(), queueSize);
+            if (sink instanceof MultiTableTtlWriter) {
+                SinkWriter<SeaTunnelRow, ?, ?> ttlWriter = ((MultiTableTtlWriter) sink).create();
+                resourceManager =
+                        ((SupportMultiTableSinkWriter<?>) ttlWriter)
+                                .initMultiTableResourceManager(
+                                        sinkWritersWithIndex.size(), queueSize);
+            } else {
+                resourceManager =
+                        ((SupportMultiTableSinkWriter<?>) sink)
+                                .initMultiTableResourceManager(sinkWriters.size(), queueSize);
+            }
             break;
         }
 
@@ -113,10 +127,16 @@ public class MultiTableSinkWriter
                     sinkWritersWithIndex.get(i);
             for (Map.Entry<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> entry :
                     writerMap.entrySet()) {
-                SupportMultiTableSinkWriter<?> sink =
-                        ((SupportMultiTableSinkWriter<?>) entry.getValue());
-                sink.setMultiTableResourceManager(resourceManager, i);
-                sinkPrimaryKeys.put(entry.getKey().getTableIdentifier(), sink.primaryKey());
+                if (entry.getValue() instanceof MultiTableTtlWriter) {
+                    MultiTableTtlWriter multiTableTtlWriter =
+                            (MultiTableTtlWriter) entry.getValue();
+                    multiTableTtlWriter.setMultiTableResourceManager(resourceManager, i);
+                } else {
+                    SupportMultiTableSinkWriter<?> sink =
+                            ((SupportMultiTableSinkWriter<?>) entry.getValue());
+                    sink.setMultiTableResourceManager(resourceManager, i);
+                    sinkPrimaryKeys.put(entry.getKey().getTableIdentifier(), sink.primaryKey());
+                }
             }
         }
     }
@@ -165,18 +185,37 @@ public class MultiTableSinkWriter
             runnable.forEach(executorService::submit);
         }
         subSinkErrorCheck();
-        Optional<Integer> primaryKey = sinkPrimaryKeys.get(element.getTableId());
+        Optional<Integer> primaryKey =
+                sinkPrimaryKeys.computeIfAbsent(
+                        element.getTableId(),
+                        v -> {
+                            Optional<Integer> pk = Optional.empty();
+                            Map<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkWriterMap =
+                                    sinkWritersWithIndex.get(0);
+                            for (Map.Entry<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>>
+                                    sinkWriterEntry : sinkWriterMap.entrySet()) {
+                                if (sinkWriterEntry.getValue() instanceof MultiTableTtlWriter) {
+                                    return Optional.empty();
+                                }
+                                if (sinkWriterEntry
+                                        .getKey()
+                                        .getTableIdentifier()
+                                        .equals(element.getTableId())) {
+                                    MultiTableTtlWriter multiTableTtlWriter =
+                                            (MultiTableTtlWriter) sinkWriterEntry.getValue();
+                                    pk = multiTableTtlWriter.primaryKey();
+                                    break;
+                                }
+                            }
+                            return pk;
+                        });
         try {
-            if ((primaryKey == null && sinkPrimaryKeys.size() == 1)
-                    || (primaryKey != null && !primaryKey.isPresent())) {
+            if (sinkPrimaryKeys.size() == 1 || !primaryKey.isPresent()) {
                 int index = random.nextInt(blockingQueues.size());
                 BlockingQueue<SeaTunnelRow> queue = blockingQueues.get(index);
                 while (!queue.offer(element, 500, TimeUnit.MILLISECONDS)) {
                     subSinkErrorCheck();
                 }
-            } else if (primaryKey == null) {
-                throw new RuntimeException(
-                        "multi table sink can not write table: " + element.getTableId());
             } else {
                 Object object = element.getField(primaryKey.get());
                 int index = 0;
@@ -203,7 +242,7 @@ public class MultiTableSinkWriter
             for (Map.Entry<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkWriterEntry :
                     sinkWritersWithIndex.get(i).entrySet()) {
                 synchronized (runnable.get(i)) {
-                    List states = sinkWriterEntry.getValue().snapshotState(checkpointId);
+                    List<?> states = sinkWriterEntry.getValue().snapshotState(checkpointId);
                     multiTableState.getStates().put(sinkWriterEntry.getKey(), states);
                 }
             }

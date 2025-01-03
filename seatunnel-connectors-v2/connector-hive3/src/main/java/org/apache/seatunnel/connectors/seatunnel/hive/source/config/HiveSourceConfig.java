@@ -185,7 +185,7 @@ public class HiveSourceConfig implements Serializable {
                 .getOptional(HdfsConfigOptions.HDFS_SITE_PATH)
                 .ifPresent(hiveHadoopConfig::setHdfsSitePath);
         readonlyConfig
-                .getOptional(HdfsConfigOptions.KERBEROS_KRB5_CONF_PATH)
+                .getOptional(HdfsConfigOptions.KRB5_PATH)
                 .ifPresent(hiveHadoopConfig::setKrb5Path);
         readonlyConfig
                 .getOptional(HdfsConfigOptions.KERBEROS_PRINCIPAL)

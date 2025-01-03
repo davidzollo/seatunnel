@@ -49,6 +49,7 @@ import java.util.stream.Collectors;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.seatunnel.api.sink.SinkCommonOptions.MULTI_TABLE_SINK_REPLICA;
+import static org.apache.seatunnel.api.sink.SinkCommonOptions.MULTI_TABLE_SINK_TTL_SEC;
 import static org.apache.seatunnel.connectors.selectdb.config.SelectDBConfig.BASE_URL;
 import static org.apache.seatunnel.connectors.selectdb.config.SelectDBConfig.CLUSTER_NAME;
 import static org.apache.seatunnel.connectors.selectdb.config.SelectDBConfig.CUSTOM_SQL;
@@ -98,6 +99,7 @@ public class SelectDBSinkFactory
                         SAVE_MODE_CREATE_TEMPLATE,
                         SELECTDB_SINK_CONFIG_PREFIX,
                         MULTI_TABLE_SINK_REPLICA,
+                        MULTI_TABLE_SINK_TTL_SEC,
                         NEEDS_UNSUPPORTED_TYPE_CASTING)
                 .conditional(DATA_SAVE_MODE, DataSaveMode.CUSTOM_PROCESSING, CUSTOM_SQL)
                 .build();

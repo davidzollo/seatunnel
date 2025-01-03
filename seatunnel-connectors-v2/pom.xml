@@ -37,6 +37,7 @@
         <module>connector-fake</module>
         <module>connector-http</module>
         <module>connector-jdbc</module>
+        <module>connector-jdbc-hive3</module>
         <module>connector-jdbc-hive1</module>
         <module>connector-jdbc-hive2</module>
         <module>connector-jdbc-cdh-hive2</module>

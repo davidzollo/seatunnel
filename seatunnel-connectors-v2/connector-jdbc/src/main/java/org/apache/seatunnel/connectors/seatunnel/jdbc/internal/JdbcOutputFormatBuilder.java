@@ -28,6 +28,7 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.converter.JdbcRow
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.executor.BufferReducedBatchStatementExecutor;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.executor.BufferedBatchStatementExecutor;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.executor.DynamicBufferedBatchStatementExecutor;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.executor.FieldNamedPreparedStatement;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.executor.InsertOrUpdateBatchStatementExecutor;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.executor.JdbcBatchStatementExecutor;
@@ -65,9 +66,14 @@ public class JdbcOutputFormatBuilder {
                 dialect.extractTableName(
                         TablePath.of(
                                 jdbcSinkConfig.getDatabase() + "." + jdbcSinkConfig.getTable()));
-
         final List<String> primaryKeys = jdbcSinkConfig.getPrimaryKeys();
-        if (StringUtils.isNotBlank(jdbcSinkConfig.getSimpleSql())) {
+
+        if ((JdbcSinkConfig.WriteMode.COPY.equals(jdbcSinkConfig.getWriteMode())
+                || JdbcSinkConfig.WriteMode.MERGE.equals(jdbcSinkConfig.getWriteMode())
+                || JdbcSinkConfig.WriteMode.COPY_MERGE.equals(jdbcSinkConfig.getWriteMode())
+                || JdbcSinkConfig.WriteMode.COPY_SQL.equals(jdbcSinkConfig.getWriteMode()))) {
+            statementExecutorFactory = this::createDynamicBufferedExecutor;
+        } else if (StringUtils.isNotBlank(jdbcSinkConfig.getSimpleSql())) {
             statementExecutorFactory =
                     () ->
                             createSimpleBufferedExecutor(
@@ -99,6 +105,42 @@ public class JdbcOutputFormatBuilder {
                 connectionProvider,
                 jdbcSinkConfig.getJdbcConnectionConfig(),
                 statementExecutorFactory);
+    }
+
+    private JdbcBatchStatementExecutor<SeaTunnelRow> createDynamicBufferedExecutor() {
+        final String database = jdbcSinkConfig.getDatabase();
+        final TablePath tablePath =
+                TablePath.of(jdbcSinkConfig.getDatabase() + "." + jdbcSinkConfig.getTable());
+        final String table = dialect.extractTableName(tablePath);
+
+        JdbcBatchStatementExecutor<SeaTunnelRow> bufferReducedBatchStatementExecutor = null;
+        final List<String> primaryKeys = jdbcSinkConfig.getPrimaryKeys();
+        if (JdbcSinkConfig.WriteMode.COPY_SQL.equals(jdbcSinkConfig.getWriteMode())) {
+            if (primaryKeys == null || primaryKeys.isEmpty()) {
+                throw new RuntimeException(
+                        "Primary key is not set, can not execute upsert operation");
+            }
+            bufferReducedBatchStatementExecutor =
+                    createUpsertBufferedExecutor(
+                            dialect,
+                            database,
+                            table,
+                            tableSchema,
+                            databaseTableSchema,
+                            primaryKeys.toArray(new String[0]),
+                            jdbcSinkConfig.isEnableUpsert(),
+                            jdbcSinkConfig.isPrimaryKeyUpdated(),
+                            jdbcSinkConfig.isSupportUpsertByInsertOnly());
+        }
+        final JdbcBatchStatementExecutor<SeaTunnelRow> finalBufferReducedBatchStatementExecutor =
+                bufferReducedBatchStatementExecutor;
+        return new DynamicBufferedBatchStatementExecutor(
+                tablePath,
+                tableSchema,
+                dialect,
+                jdbcSinkConfig,
+                finalBufferReducedBatchStatementExecutor,
+                Function.identity());
     }
 
     private static JdbcBatchStatementExecutor<SeaTunnelRow> createSimpleBufferedExecutor(
@@ -346,7 +388,7 @@ public class JdbcOutputFormatBuilder {
                 rowConverter);
     }
 
-    static Function<SeaTunnelRow, SeaTunnelRow> createKeyExtractor(int[] pkFields) {
+    public static Function<SeaTunnelRow, SeaTunnelRow> createKeyExtractor(int[] pkFields) {
         return row -> {
             Object[] fields = new Object[pkFields.length];
             for (int i = 0; i < pkFields.length; i++) {

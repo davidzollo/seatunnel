@@ -60,7 +60,7 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
                     + "       col.scale AS scale,\n"
                     + "       col.is_nullable AS is_nullable,\n"
                     + "       def.definition AS default_value\n"
-                    + "FROM sys.tables tbl\n"
+                    + "FROM sys.objects tbl\n"
                     + "    INNER JOIN sys.columns col ON tbl.object_id = col.object_id\n"
                     + "    LEFT JOIN sys.types types ON col.system_type_id = types.user_type_id\n"
                     + "    LEFT JOIN sys.extended_properties ext ON ext.major_id = col.object_id AND ext.minor_id = col.column_id\n"
@@ -79,14 +79,14 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
 
     @Override
     protected String getDatabaseWithConditionSql(String databaseName) {
-        return String.format(getListDatabaseSql() + "  where name = '%s'", databaseName);
+        return String.format(getListDatabaseSql() + "  where name = N'%s'", databaseName);
     }
 
     @Override
     protected String getTableWithConditionSql(TablePath tablePath) {
         return String.format(
                 getListTableSql(tablePath.getDatabaseName())
-                        + "  and  TABLE_SCHEMA = '%s' and TABLE_NAME = '%s'",
+                        + "  and  TABLE_SCHEMA = N'%s' and TABLE_NAME = N'%s'",
                 tablePath.getSchemaName(),
                 tablePath.getTableName());
     }
@@ -99,7 +99,7 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
     @Override
     protected String getListTableSql(String databaseName) {
         return String.format(
-                "SELECT TABLE_SCHEMA, TABLE_NAME FROM [%s].[INFORMATION_SCHEMA].[TABLES] WHERE TABLE_TYPE = 'BASE TABLE'",
+                "SELECT TABLE_SCHEMA, TABLE_NAME FROM [%s].[INFORMATION_SCHEMA].[TABLES] WHERE TABLE_TYPE IN ('BASE TABLE', 'VIEW')",
                 databaseName);
     }
 
@@ -158,7 +158,7 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
     protected String getSelectColumnsSql(TablePath tablePath) {
         String tableSql =
                 StringUtils.isNotEmpty(tablePath.getTableName())
-                        ? "AND tbl.name = '" + tablePath.getTableName() + "'"
+                        ? "AND tbl.name = N'" + tablePath.getTableName() + "'"
                         : "";
 
         return String.format(SELECT_COLUMNS_SQL_TEMPLATE, tablePath.getSchemaName(), tableSql);
@@ -195,7 +195,7 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
 
     @Override
     protected String getDropTableSql(TablePath tablePath) {
-        return String.format("DROP TABLE %s", tablePath.getFullName());
+        return String.format("DROP TABLE %s", tablePath.getFullNameWithQuoted("[", "]"));
     }
 
     @Override

@@ -43,8 +43,7 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseI
 
 import io.debezium.connector.highgo.HighGoConnectorConfig;
 import io.debezium.connector.highgo.connection.HighGoConnection;
-import io.debezium.connector.postgresql.connection.PostgresConnection;
-import io.debezium.connector.postgresql.connection.ServerInfo;
+import io.debezium.connector.highgo.connection.ServerInfo;
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.relational.TableId;
 import io.debezium.relational.history.TableChanges;
@@ -116,10 +115,10 @@ public class HighGoDialect implements JdbcDataSourceDialect {
     @Override
     public void checkAllTablesEnabledCapture(JdbcConnection jdbcConnection, List<TableId> tableIds)
             throws SQLException {
-        PostgresConnection postgresConnection = (PostgresConnection) jdbcConnection;
+        HighGoConnection highGoConnection = (HighGoConnection) jdbcConnection;
         for (TableId tableId : tableIds) {
             ServerInfo.ReplicaIdentity replicaIdentity =
-                    postgresConnection.readReplicaIdentityInfo(tableId);
+                    highGoConnection.readReplicaIdentityInfo(tableId);
             if (!ServerInfo.ReplicaIdentity.FULL.equals(replicaIdentity)) {
                 throw new SeaTunnelException(
                         String.format(

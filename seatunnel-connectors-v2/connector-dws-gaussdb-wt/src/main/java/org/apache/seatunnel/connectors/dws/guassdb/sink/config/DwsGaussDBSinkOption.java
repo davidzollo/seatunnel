@@ -97,7 +97,10 @@ public class DwsGaussDBSinkOption implements BaseDwsGaussDBOption {
         return OptionRule.builder()
                 .required(URL, DRIVER, SCHEMA_SAVE_MODE, DATA_SAVE_MODE)
                 .optional(USER, PASSWORD, PROPERTIES, WRITE_MODE, BATCH_SIZE)
-                .optional(SinkCommonOptions.MULTI_TABLE_SINK_REPLICA, COPY_FILE_FIELD_DELIMITER)
+                .optional(
+                        SinkCommonOptions.MULTI_TABLE_SINK_REPLICA,
+                        SinkCommonOptions.MULTI_TABLE_SINK_TTL_SEC,
+                        COPY_FILE_FIELD_DELIMITER)
                 .conditional(WRITE_MODE, WriteMode.USING_TEMPORARY_TABLE, PRIMARY_KEY)
                 .conditional(DATA_SAVE_MODE, DataSaveMode.CUSTOM_PROCESSING, CUSTOM_SQL)
                 .build();

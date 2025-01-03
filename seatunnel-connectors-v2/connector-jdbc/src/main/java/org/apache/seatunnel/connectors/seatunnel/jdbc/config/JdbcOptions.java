@@ -29,6 +29,7 @@ import java.util.Map;
 
 import static org.apache.seatunnel.api.sink.SinkReplaceNameConstant.REPLACE_DATABASE_NAME_KEY;
 import static org.apache.seatunnel.api.sink.SinkReplaceNameConstant.REPLACE_TABLE_NAME_KEY;
+import static org.apache.seatunnel.api.sink.SinkReplaceNameConstant.REPLACE_TARGET_TABLE_NAME_KEY;
 
 @SuppressWarnings("checkstyle:MagicNumber")
 public interface JdbcOptions {
@@ -162,6 +163,30 @@ public interface JdbcOptions {
                     .defaultValue(true)
                     .withDescription(
                             "is the primary key updated when performing an update operation");
+
+    Option<JdbcSinkConfig.WriteMode> WRITE_MODE =
+            Options.key("write_mode")
+                    .enumType(JdbcSinkConfig.WriteMode.class)
+                    .defaultValue(JdbcSinkConfig.WriteMode.SQL)
+                    .withDescription("write mode: SQL/COPY/MERGE/AUTO");
+    Option<String> TEMP_TABLE_NAME =
+            Options.key("temp_table_name")
+                    .stringType()
+                    .defaultValue(REPLACE_TARGET_TABLE_NAME_KEY + "_tmp")
+                    .withDescription("temp table name");
+
+    Option<String> TEMP_COLUMN_BATCH_CODE =
+            Options.key("temp_column_batch_code")
+                    .stringType()
+                    .defaultValue("__st_batch_code")
+                    .withDescription("temp column batch code for merge");
+
+    Option<String> TEMP_COLUMN_ROW_KIND =
+            Options.key("temp_column_row_kind")
+                    .stringType()
+                    .defaultValue("__st_row_kind")
+                    .withDescription("temp column row kind for merge");
+
     Option<Boolean> SUPPORT_UPSERT_BY_INSERT_ONLY =
             Options.key("support_upsert_by_insert_only")
                     .booleanType()

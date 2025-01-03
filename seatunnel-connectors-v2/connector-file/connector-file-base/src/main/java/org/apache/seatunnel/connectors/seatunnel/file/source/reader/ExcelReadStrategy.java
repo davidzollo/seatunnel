@@ -38,6 +38,7 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.CellValue;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.FormulaEvaluator;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -78,16 +79,18 @@ public class ExcelReadStrategy extends AbstractReadStrategy {
         Map<String, String> partitionsMap = parsePartitionsByPath(path);
         FSDataInputStream file = hadoopFileSystemProxy.getInputStream(path);
         Workbook workbook;
+        FormulaEvaluator formulaEvaluator;
         if (path.endsWith(".xls")) {
             workbook = new HSSFWorkbook(file);
+            formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
         } else if (path.endsWith(".xlsx")) {
             workbook = new XSSFWorkbook(file);
+            formulaEvaluator = new XSSFFormulaEvaluator((XSSFWorkbook) workbook);
         } else {
             throw new FileConnectorException(
                     CommonErrorCodeDeprecated.UNSUPPORTED_OPERATION,
                     "Only support read excel file");
         }
-        FormulaEvaluator formulaEvaluator = new XSSFFormulaEvaluator((XSSFWorkbook) workbook);
         DataFormatter formatter = new DataFormatter();
         Sheet sheet =
                 pluginConfig.hasPath(BaseSourceConfigOptions.SHEET_NAME.key())
@@ -189,6 +192,9 @@ public class ExcelReadStrategy extends AbstractReadStrategy {
             case BOOLEAN:
                 return cell.getBooleanCellValue();
             case NUMERIC:
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    return cell.getLocalDateTimeCellValue();
+                }
                 return formatter.formatCellValue(cell);
             case BLANK:
                 return "";

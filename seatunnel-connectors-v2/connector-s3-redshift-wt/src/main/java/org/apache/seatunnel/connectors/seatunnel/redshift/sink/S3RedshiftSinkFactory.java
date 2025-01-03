@@ -40,6 +40,7 @@ import org.apache.commons.lang3.StringUtils;
 import com.google.auto.service.AutoService;
 
 import static org.apache.seatunnel.api.sink.SinkCommonOptions.MULTI_TABLE_SINK_REPLICA;
+import static org.apache.seatunnel.api.sink.SinkCommonOptions.MULTI_TABLE_SINK_TTL_SEC;
 import static org.apache.seatunnel.api.sink.SinkReplaceNameConstant.REPLACE_DATABASE_NAME_KEY;
 import static org.apache.seatunnel.api.sink.SinkReplaceNameConstant.REPLACE_SCHEMA_NAME_KEY;
 import static org.apache.seatunnel.api.sink.SinkReplaceNameConstant.REPLACE_TABLE_NAME_KEY;
@@ -66,7 +67,8 @@ public class S3RedshiftSinkFactory implements TableSinkFactory {
                         BaseSinkConfig.TMP_PATH,
                         S3RedshiftConfig.FILE_FORMAT_TYPE,
                         S3ConfigOptions.S3A_AWS_CREDENTIALS_PROVIDER,
-                        MULTI_TABLE_SINK_REPLICA)
+                        MULTI_TABLE_SINK_REPLICA,
+                        MULTI_TABLE_SINK_TTL_SEC)
                 .conditional(
                         S3ConfigOptions.S3A_AWS_CREDENTIALS_PROVIDER,
                         S3ConfigOptions.S3aAwsCredentialsProvider.SimpleAWSCredentialsProvider,

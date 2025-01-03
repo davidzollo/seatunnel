@@ -45,6 +45,7 @@ public class HdfsConfigOptions {
             Options.key("krb5_path")
                     .stringType()
                     .defaultValue("/etc/krb5.conf")
+                    .withFallbackKeys("kerberos_krb5_conf_path")
                     .withDescription(
                             "When use kerberos, we should set krb5 path file path such as '/seatunnel/krb5.conf' or use the default path '/etc/krb5.conf");
 
@@ -53,12 +54,6 @@ public class HdfsConfigOptions {
                     .stringType()
                     .noDefaultValue()
                     .withDescription("Kerberos keytab file path");
-
-    public static final Option<String> KERBEROS_KRB5_CONF_PATH =
-            Options.key("kerberos_krb5_conf_path")
-                    .stringType()
-                    .noDefaultValue()
-                    .withDescription("Kerberos krb5 conf file path");
 
     public static final Option<String> DEFAULT_FS =
             Options.key(FS_DEFAULT_NAME_KEY)

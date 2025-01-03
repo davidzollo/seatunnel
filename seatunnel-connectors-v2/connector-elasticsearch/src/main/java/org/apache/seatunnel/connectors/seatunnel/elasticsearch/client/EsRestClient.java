@@ -224,13 +224,16 @@ public class EsRestClient {
                 throw new ElasticsearchConnectorException(
                         ElasticsearchConnectorErrorCode.BULK_RESPONSE_ERROR,
                         String.format(
-                                "bulk es response status code=%d,request boy=%s",
-                                response.getStatusLine().getStatusCode(), requestBody));
+                                "bulk es response status=%s,request body(truncate)=%s",
+                                response,
+                                requestBody.substring(0, Math.min(1000, requestBody.length()))));
             }
         } catch (IOException e) {
             throw new ElasticsearchConnectorException(
                     ElasticsearchConnectorErrorCode.BULK_RESPONSE_ERROR,
-                    String.format("bulk es error,request boy=%s", requestBody),
+                    String.format(
+                            "bulk es error,request body(truncate)=%s",
+                            requestBody.substring(0, Math.min(1000, requestBody.length()))),
                     e);
         }
     }

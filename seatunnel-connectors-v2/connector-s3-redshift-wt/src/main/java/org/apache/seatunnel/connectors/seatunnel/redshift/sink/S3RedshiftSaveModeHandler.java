@@ -118,50 +118,67 @@ public class S3RedshiftSaveModeHandler extends DefaultSaveModeHandler {
     @SneakyThrows
     @Override
     public void dropTable() {
+        log.info("Executing Drop Table with SQL: {}", sqlGenerator.getDropTableSql());
         redshiftJdbcClient.execute(sqlGenerator.getDropTableSql());
     }
 
     @SneakyThrows
     public void dropTemporaryTable() {
+        log.info(
+                "Executing Drop Temporary Table with SQL: {}",
+                sqlGenerator.getDropTemporaryTableSql());
         redshiftJdbcClient.execute(sqlGenerator.getDropTemporaryTableSql());
     }
 
     @SneakyThrows
     @Override
     public void createTable() {
+        log.info("Executing Create Table with SQL: {}", sqlGenerator.getCreateTableSQL());
         redshiftJdbcClient.execute(sqlGenerator.getCreateTableSQL());
     }
 
     @SneakyThrows
     public void createTemporaryTable() {
+        log.info(
+                "Executing Create Temporary Table with SQL: {}",
+                sqlGenerator.getCreateTemporaryTableSQL());
         redshiftJdbcClient.execute(sqlGenerator.getCreateTemporaryTableSQL());
     }
 
     @SneakyThrows
     @Override
     public void truncateTable() {
+        log.info("Executing Truncate Table with SQL: {}", sqlGenerator.getCleanTableSql());
         redshiftJdbcClient.execute(sqlGenerator.getCleanTableSql());
     }
 
     @SneakyThrows
     public void truncateTemporaryTable() {
+        log.info(
+                "Executing Truncate Temporary Table with SQL: {}",
+                sqlGenerator.getCleanTemporaryTableSql());
         redshiftJdbcClient.execute(sqlGenerator.getCleanTemporaryTableSql());
     }
 
     @SneakyThrows
     @Override
     public boolean dataExists() {
+        log.info("Executing Data Exists with SQL: {}", sqlGenerator.getIsExistDataSql());
         return redshiftJdbcClient.existDataForSql(sqlGenerator.getIsExistDataSql());
     }
 
     @SneakyThrows
     public boolean temporaryDataExists() {
+        log.info(
+                "Executing Temporary Data Exists with SQL: {}",
+                sqlGenerator.getIsExistTemporaryDataSql());
         return redshiftJdbcClient.existDataForSql(sqlGenerator.getIsExistTemporaryDataSql());
     }
 
     @SneakyThrows
     @Override
     public void executeCustomSql() {
+        log.info("Executing custom SQL for table {} with SQL: {}", tablePath, customSql);
         redshiftJdbcClient.execute(conf.getCustomSql());
     }
 

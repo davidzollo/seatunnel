@@ -23,6 +23,7 @@ import org.apache.seatunnel.api.configuration.Option;
 import org.apache.seatunnel.api.configuration.Options;
 import org.apache.seatunnel.api.sink.DataSaveMode;
 import org.apache.seatunnel.api.sink.SchemaSaveMode;
+import org.apache.seatunnel.api.table.catalog.schema.TableSchemaOptions;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -108,6 +109,12 @@ public class Config {
                     .defaultValue(true)
                     .withDescription("Does the debezium record carry a schema.");
 
+    public static final Option<TableSchemaOptions.TableIdentifier> DEBEZIUM_RECORD_TABLE_FILTER =
+            Options.key("debezium_record_table_filter")
+                    .type(new TypeReference<TableSchemaOptions.TableIdentifier>() {})
+                    .noDefaultValue()
+                    .withDescription("Debezium record table filter.");
+
     public static final Option<String> FIELD_DELIMITER =
             Options.key("field_delimiter")
                     .stringType()
@@ -180,6 +187,12 @@ public class Config {
                     .defaultValue(KafkaSemantics.NON)
                     .withDescription(
                             "Semantics that can be chosen EXACTLY_ONCE/AT_LEAST_ONCE/NON, default NON.");
+    public static final Option<List<Map<String, Object>>> TABLE_LIST =
+            Options.key("table_list")
+                    .type(new TypeReference<List<Map<String, Object>>>() {})
+                    .noDefaultValue()
+                    .withDescription(
+                            "Topic list config. You can configure only one `table_list` or one `topic` at the same time");
 
     public static final Option<SchemaSaveMode> SCHEMA_SAVE_MODE =
             Options.key("schema_save_mode")

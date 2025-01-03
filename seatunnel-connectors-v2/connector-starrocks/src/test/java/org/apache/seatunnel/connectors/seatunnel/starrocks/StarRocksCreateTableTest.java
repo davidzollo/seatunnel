@@ -71,6 +71,9 @@ public class StarRocksCreateTableTest {
                                 + "DISTRIBUTED BY HASH ("
                                 + SaveModePlaceHolder.ROWTYPE_PRIMARY_KEY.getPlaceHolder()
                                 + ")  \n"
+                                + "COMMENT \""
+                                + SaveModePlaceHolder.COMMENT.getPlaceHolder()
+                                + "\"\n"
                                 + "PROPERTIES (                           \n"
                                 + "    \"dynamic_partition.enable\" = \"true\",                                                                                                                                                                       \n"
                                 + "    \"dynamic_partition.time_unit\" = \"DAY\",                                                                                                                                                                     \n"
@@ -82,7 +85,8 @@ public class StarRocksCreateTableTest {
                         TableSchema.builder()
                                 .primaryKey(PrimaryKey.of("", Arrays.asList("id", "age")))
                                 .columns(columns)
-                                .build());
+                                .build(),
+                        "test");
 
         System.out.println(result);
     }

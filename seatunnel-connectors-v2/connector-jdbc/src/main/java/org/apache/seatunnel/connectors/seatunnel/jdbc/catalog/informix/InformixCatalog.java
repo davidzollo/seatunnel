@@ -175,6 +175,7 @@ public class InformixCatalog extends AbstractJdbcCatalog {
                             tablePath.getDatabaseName(),
                             tablePath.getSchemaName(),
                             tablePath.getTableName());
+            constraintKeys = filterDuplicateConstraintKeys(constraintKeys, primaryKey);
             String tableComment = getTableComment(metaData, tablePath);
             try (ResultSet resultSet =
                     metaData.getColumns(

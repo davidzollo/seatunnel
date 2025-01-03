@@ -18,6 +18,7 @@
 package org.apache.seatunnel.connectors.seatunnel.file.source.reader;
 
 import org.apache.seatunnel.api.source.Collector;
+import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.common.exception.CommonErrorCode;
@@ -36,7 +37,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 @Slf4j
 public class DebeziumJsonReadStrategy extends AbstractReadStrategy {
@@ -90,13 +90,9 @@ public class DebeziumJsonReadStrategy extends AbstractReadStrategy {
                     .forEach(
                             line -> {
                                 try {
-                                    List<SeaTunnelRow> seaTunnelRows =
-                                            deserializationSchema.deserializeList(line.getBytes());
-                                    for (SeaTunnelRow seaTunnelRow : seaTunnelRows) {
-                                        seaTunnelRow.setTableId(tableId);
-                                        output.collect(seaTunnelRow);
-                                    }
-                                } catch (IOException e) {
+                                    deserializationSchema.deserializeMessage(
+                                            line.getBytes(), output, TablePath.of(tableId));
+                                } catch (Exception e) {
                                     String errorMsg =
                                             String.format(
                                                     "Read data from this file [%s] failed", path);

@@ -96,6 +96,7 @@ public class DolphinDBSaveModeHandler extends DefaultSaveModeHandler {
 
     @Override
     protected void executeCustomSql() {
+        log.info("Executing custom SQL for table {} with SQL: {}", tablePath, customSql);
         catalog.executeScript(readonlyConfig.get(DolphinDBConfig.CUSTOM_SQL));
     }
 

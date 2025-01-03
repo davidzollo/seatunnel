@@ -103,6 +103,7 @@ public interface JdbcDialect extends Serializable {
     default String quoteIdentifier(String identifier) {
         return identifier;
     }
+
     /** Quotes the identifier for database name or field name */
     default String quoteDatabaseIdentifier(String identifier) {
         return identifier;
@@ -277,6 +278,16 @@ public interface JdbcDialect extends Serializable {
             List<? extends SeaTunnelDataType<?>> columnTypeList) {
         return getUpsertStatement(
                 database, tableName, fieldNames, uniqueKeyFields, isPrimaryKeyUpdated);
+    }
+
+    default Optional<String> getMergeStatement(
+            String sourceSQL,
+            String database,
+            String tableName,
+            String[] fieldNames,
+            String[] uniqueKeyFields,
+            boolean isPrimaryKeyUpdated) {
+        return Optional.empty();
     }
 
     /**
@@ -557,6 +568,7 @@ public interface JdbcDialect extends Serializable {
         }
         return "DEFAULT " + defaultValue;
     }
+
     /**
      * whether quotes with default value
      *

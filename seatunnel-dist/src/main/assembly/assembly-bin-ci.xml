@@ -232,8 +232,8 @@
                 <!-- todo: need add connector-hive-jdbc-3.1.3-hadoop3.3.6-uber, connector-hive-jdbc-2.1.1-cdh6.3.2 -->
 <!--                <include>org.apache.seatunnel:seatunnel-hive-jdbc-2.1.1:jar</include>-->
 <!--                <include>org.apache.seatunnel:seatunnel-hive-jdbc-2.1.1-cdh6.3.2:jar</include>-->
-                <include>org.apache.seatunnel:seatunnel-hive-jdbc-3.1.3-hadoop3.3.6-uber:jar</include>
-                <include>org.apache.seatunnel:seatunnel-hive-mrs-3.1.1-hw-ei-315008-uber:jar</include>
+<!--                <include>org.apache.seatunnel:seatunnel-hive-jdbc-3.1.3-hadoop3.3.6-uber:jar</include>-->
+<!--                <include>org.apache.seatunnel:seatunnel-hive-mrs-3.1.1-hw-ei-315008-uber:jar</include>-->
                 <include>com.oceanbase:oceanbase-client:jar</include>
             </includes>
             <outputFileNameMapping>${artifact.file.name}</outputFileNameMapping>
@@ -291,6 +291,19 @@
             </includes>
             <outputFileNameMapping>${artifact.file.name}</outputFileNameMapping>
             <outputDirectory>/plugins/connector-jdbc-hive2</outputDirectory>
+            <scope>provided</scope>
+        </dependencySet>
+
+        <dependencySet>
+            <useProjectArtifact>false</useProjectArtifact>
+            <useTransitiveDependencies>true</useTransitiveDependencies>
+            <unpack>false</unpack>
+            <includes>
+                <include>org.apache.seatunnel:seatunnel-hive-jdbc-3.1.3-hadoop3.3.6-uber:jar</include>
+                <include>org.apache.seatunnel:seatunnel-hive-mrs-3.1.1-hw-ei-315008-uber:jar</include>
+            </includes>
+            <outputFileNameMapping>${artifact.file.name}</outputFileNameMapping>
+            <outputDirectory>/plugins/connector-jdbc-hive3</outputDirectory>
             <scope>provided</scope>
         </dependencySet>
 

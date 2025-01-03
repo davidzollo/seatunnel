@@ -27,6 +27,7 @@ import org.apache.seatunnel.api.sink.SchemaSaveMode;
 import java.util.Map;
 
 import static org.apache.seatunnel.api.sink.SinkCommonOptions.MULTI_TABLE_SINK_REPLICA;
+import static org.apache.seatunnel.api.sink.SinkCommonOptions.MULTI_TABLE_SINK_TTL_SEC;
 
 public interface DorisOptions {
     int DORIS_TABLET_SIZE_MIN = 1;
@@ -250,6 +251,9 @@ public interface DorisOptions {
                                     + " UNIQUE KEY ("
                                     + SaveModePlaceHolder.ROWTYPE_PRIMARY_KEY.getPlaceHolder()
                                     + ")\n"
+                                    + "COMMENT '"
+                                    + SaveModePlaceHolder.COMMENT.getPlaceHolder()
+                                    + "'\n"
                                     + "DISTRIBUTED BY HASH ("
                                     + SaveModePlaceHolder.ROWTYPE_PRIMARY_KEY.getPlaceHolder()
                                     + ")\n "
@@ -280,6 +284,7 @@ public interface DorisOptions {
                             SINK_ENABLE_2PC,
                             SINK_ENABLE_DELETE,
                             MULTI_TABLE_SINK_REPLICA,
+                            MULTI_TABLE_SINK_TTL_SEC,
                             SAVE_MODE_CREATE_TEMPLATE,
                             NEEDS_UNSUPPORTED_TYPE_CASTING)
                     .conditional(DATA_SAVE_MODE, DataSaveMode.CUSTOM_PROCESSING, CUSTOM_SQL);

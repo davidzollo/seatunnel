@@ -185,6 +185,7 @@ public abstract class AbstractJdbcCatalog implements Catalog {
             DatabaseMetaData metaData = conn.getMetaData();
             Optional<PrimaryKey> primaryKey = getPrimaryKey(metaData, tablePath);
             List<ConstraintKey> constraintKeys = getConstraintKeys(metaData, tablePath);
+            constraintKeys = filterDuplicateConstraintKeys(constraintKeys, primaryKey);
             String tableComment = getTableComment(metaData, tablePath);
             try (PreparedStatement ps = conn.prepareStatement(getSelectColumnsSql(tablePath));
                     ResultSet resultSet = ps.executeQuery()) {
@@ -252,6 +253,7 @@ public abstract class AbstractJdbcCatalog implements Catalog {
             DatabaseMetaData metaData = conn.getMetaData();
             Optional<PrimaryKey> primaryKey = getPrimaryKey(metaData, tablePath);
             List<ConstraintKey> constraintKeys = getConstraintKeys(metaData, tablePath);
+            constraintKeys = filterDuplicateConstraintKeys(constraintKeys, primaryKey);
             String tableComment = getTableComment(metaData, tablePath);
             try (PreparedStatement ps = conn.prepareStatement(getSelectColumnsSql(tablePath));
                     ResultSet resultSet = ps.executeQuery()) {
@@ -362,6 +364,23 @@ public abstract class AbstractJdbcCatalog implements Catalog {
             DatabaseMetaData metaData, String database, String schema, String table)
             throws SQLException {
         return CatalogUtils.getConstraintKeys(metaData, TablePath.of(database, schema, table));
+    }
+
+    protected List<ConstraintKey> filterDuplicateConstraintKeys(
+            List<ConstraintKey> constraintKeys, Optional<PrimaryKey> primaryKey) {
+        if (!primaryKey.isPresent() || constraintKeys == null || constraintKeys.isEmpty()) {
+            return constraintKeys;
+        }
+        return constraintKeys.stream()
+                .filter(
+                        key -> {
+                            Set<String> keyFields =
+                                    key.getColumnNames().stream()
+                                            .map(e -> e.getColumnName())
+                                            .collect(Collectors.toSet());
+                            return !primaryKey.get().getColumnNames().containsAll(keyFields);
+                        })
+                .collect(Collectors.toList());
     }
 
     protected String getTableComment(DatabaseMetaData metaData, TablePath tablePath)

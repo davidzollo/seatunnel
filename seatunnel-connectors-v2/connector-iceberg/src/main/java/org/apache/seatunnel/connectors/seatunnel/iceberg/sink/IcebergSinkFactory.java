@@ -70,7 +70,8 @@ public class IcebergSinkFactory implements TableSinkFactory {
                         SinkConfig.TABLES_DEFAULT_COMMIT_BRANCH,
                         HADOOP_CONF_PATH_PROP,
                         REMOTE_USER,
-                        SinkCommonOptions.MULTI_TABLE_SINK_REPLICA)
+                        SinkCommonOptions.MULTI_TABLE_SINK_REPLICA,
+                        SinkCommonOptions.MULTI_TABLE_SINK_TTL_SEC)
                 .conditional(
                         SinkConfig.DATA_SAVE_MODE,
                         DataSaveMode.CUSTOM_PROCESSING,

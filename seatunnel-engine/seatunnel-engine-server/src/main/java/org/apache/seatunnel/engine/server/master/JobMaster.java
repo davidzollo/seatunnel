@@ -222,26 +222,30 @@ public class JobMaster {
                         nodeEngine.getSerializationService(),
                         classLoader,
                         jobImmutableInformation.getLogicalDag());
-
-        final Tuple2<PhysicalPlan, Map<Integer, CheckpointPlan>> planTuple =
-                PlanUtils.fromLogicalDAG(
-                        logicalDag,
-                        nodeEngine,
-                        jobImmutableInformation,
-                        initializationTimestamp,
-                        executorService,
-                        flakeIdGenerator,
-                        runningJobStateIMap,
-                        runningJobStateTimestampsIMap,
-                        engineConfig.getQueueType(),
-                        engineConfig);
-        seaTunnelServer
-                .getClassLoaderService()
-                .releaseClassLoader(
-                        jobImmutableInformation.getJobId(),
-                        jobImmutableInformation.getPluginJarsUrls());
-        // revert to app class loader, it may be changed by PlanUtils.fromLogicalDAG
-        Thread.currentThread().setContextClassLoader(appClassLoader);
+        final Tuple2<PhysicalPlan, Map<Integer, CheckpointPlan>> planTuple;
+        try {
+            Thread.currentThread().setContextClassLoader(classLoader);
+            planTuple =
+                    PlanUtils.fromLogicalDAG(
+                            logicalDag,
+                            nodeEngine,
+                            jobImmutableInformation,
+                            initializationTimestamp,
+                            executorService,
+                            flakeIdGenerator,
+                            runningJobStateIMap,
+                            runningJobStateTimestampsIMap,
+                            engineConfig.getQueueType(),
+                            engineConfig);
+        } finally {
+            // revert to app class loader, it may be changed by PlanUtils.fromLogicalDAG
+            Thread.currentThread().setContextClassLoader(appClassLoader);
+            seaTunnelServer
+                    .getClassLoaderService()
+                    .releaseClassLoader(
+                            jobImmutableInformation.getJobId(),
+                            jobImmutableInformation.getPluginJarsUrls());
+        }
         this.physicalPlan = planTuple.f0();
         this.physicalPlan.setJobMaster(this);
         this.checkpointPlanMap = planTuple.f1();

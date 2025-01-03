@@ -19,6 +19,7 @@ package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.psql;
 
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectFactory;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.oushu.OushuDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.psqllow.PostgresLowDialect;
 
 import com.google.auto.service.AutoService;
@@ -41,6 +42,9 @@ public class PostgresDialectFactory implements JdbcDialectFactory {
     public JdbcDialect create(@Nonnull String compatibleMode, String fieldIde) {
         if ("postgresLow".equalsIgnoreCase(compatibleMode)) {
             return new PostgresLowDialect(fieldIde);
+        }
+        if ("oushu".equalsIgnoreCase(compatibleMode)) {
+            return new OushuDialect();
         }
         return new PostgresDialect(fieldIde);
     }

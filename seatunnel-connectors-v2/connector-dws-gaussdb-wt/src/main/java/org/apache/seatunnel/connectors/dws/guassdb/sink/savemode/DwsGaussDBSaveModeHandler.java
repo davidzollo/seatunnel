@@ -117,6 +117,7 @@ public class DwsGaussDBSaveModeHandler extends DefaultSaveModeHandler {
 
     @Override
     protected void executeCustomSql() {
+        log.info("Executing custom SQL for table {} with SQL: {}", tablePath, customSql);
         String customSql = readonlyConfig.get(CUSTOM_SQL);
         if (StringUtils.isEmpty(customSql)) {
             throw new IllegalArgumentException("The custom_sql is empty");

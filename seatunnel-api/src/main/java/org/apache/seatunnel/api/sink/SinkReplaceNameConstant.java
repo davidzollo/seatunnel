@@ -26,4 +26,6 @@ public final class SinkReplaceNameConstant {
     public static final String REPLACE_SCHEMA_NAME_KEY = "${schema_name}";
 
     public static final String REPLACE_DATABASE_NAME_KEY = "${database_name}";
+
+    public static final String REPLACE_TARGET_TABLE_NAME_KEY = "${target_table}";
 }

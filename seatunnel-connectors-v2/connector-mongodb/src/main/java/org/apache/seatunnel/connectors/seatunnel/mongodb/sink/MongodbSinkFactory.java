@@ -56,7 +56,8 @@ public class MongodbSinkFactory implements TableSinkFactory {
                         MongodbConfig.RETRY_INTERVAL,
                         MongodbConfig.UPSERT_ENABLE,
                         MongodbConfig.PRIMARY_KEY,
-                        SinkCommonOptions.MULTI_TABLE_SINK_REPLICA)
+                        SinkCommonOptions.MULTI_TABLE_SINK_REPLICA,
+                        SinkCommonOptions.MULTI_TABLE_SINK_TTL_SEC)
                 .optional(MongodbConfig.DATA_SAVE_MODE, MongodbConfig.SCHEMA_SAVE_MODE)
                 .build();
     }

@@ -113,7 +113,8 @@ public class StarRocksCreateTableTest {
                                                                                         .ColumnSortType
                                                                                         .ASC)))))
                                 .columns(columns)
-                                .build());
+                                .build(),
+                        "");
         Assertions.assertEquals(
                 "CREATE TABLE IF NOT EXISTS `test1`.`test2` (                                                                                                                                                   \n"
                         + "`id` BIGINT NULL ,`age` INT NULL   ,       \n"
@@ -225,7 +226,8 @@ public class StarRocksCreateTableTest {
                                         PrimaryKey.of(
                                                 "", Arrays.asList("L_ORDERKEY", "L_LINENUMBER")))
                                 .columns(columns)
-                                .build());
+                                .build(),
+                        "");
         String expected =
                 "CREATE TABLE IF NOT EXISTS `tpch`.`lineitem` (\n"
                         + "`L_COMMITDATE` DATE NOT NULL ,\n"
@@ -295,7 +297,8 @@ public class StarRocksCreateTableTest {
                         TableSchema.builder()
                                 .primaryKey(PrimaryKey.of("", Arrays.asList("id", "age")))
                                 .columns(columns)
-                                .build());
+                                .build(),
+                        "");
 
         Assertions.assertEquals(
                 "CREATE TABLE IF NOT EXISTS `test1`.`test2` (                                                                                                                                                   \n"
@@ -348,7 +351,8 @@ public class StarRocksCreateTableTest {
                                 .primaryKey(
                                         PrimaryKey.of("test", Arrays.asList("id", "age", "name")))
                                 .columns(columns)
-                                .build());
+                                .build(),
+                        "");
 
         Assertions.assertEquals(
                 "create table 'test1'.'test2'(\n"

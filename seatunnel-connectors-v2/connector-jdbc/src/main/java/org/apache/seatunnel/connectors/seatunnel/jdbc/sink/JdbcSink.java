@@ -22,7 +22,6 @@ import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.serialization.DefaultSerializer;
 import org.apache.seatunnel.api.serialization.Serializer;
 import org.apache.seatunnel.api.sink.DataSaveMode;
-import org.apache.seatunnel.api.sink.DefaultSaveModeHandler;
 import org.apache.seatunnel.api.sink.SaveModeHandler;
 import org.apache.seatunnel.api.sink.SchemaSaveMode;
 import org.apache.seatunnel.api.sink.SeaTunnelSink;
@@ -32,9 +31,14 @@ import org.apache.seatunnel.api.sink.SupportMultiTableSink;
 import org.apache.seatunnel.api.sink.SupportSaveMode;
 import org.apache.seatunnel.api.table.catalog.Catalog;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
+import org.apache.seatunnel.api.table.catalog.Column;
+import org.apache.seatunnel.api.table.catalog.ConstraintKey;
+import org.apache.seatunnel.api.table.catalog.PhysicalColumn;
+import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
 import org.apache.seatunnel.api.table.catalog.exception.TableNotExistException;
+import org.apache.seatunnel.api.table.type.BasicType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.utils.CatalogUtils;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions;
@@ -42,6 +46,7 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcSinkConfig;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.dialectenum.FieldIdeEnum;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.sink.savemode.JdbcSaveModeHandler;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.state.JdbcAggregatedCommitInfo;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.state.JdbcSinkState;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.state.XidInfo;
@@ -53,6 +58,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 
@@ -252,13 +259,25 @@ public class JdbcSink
                                     CatalogUtils.quoteTableIdentifier(
                                             catalogTable.getTableId().getTableName(), fieldIde));
                     catalogTable.getOptions().put("fieldIde", fieldIde);
+
+                    TablePath tempTablePath = null;
+                    CatalogTable tempCatalogTable = null;
+                    JdbcSinkConfig.WriteMode writeMode = config.get(JdbcOptions.WRITE_MODE);
+                    if (writeMode == JdbcSinkConfig.WriteMode.MERGE
+                            || writeMode == JdbcSinkConfig.WriteMode.COPY_MERGE) {
+                        tempTablePath = getTempTablePath(tablePath);
+                        tempCatalogTable = getTempCatalogTable(tempTablePath);
+                    }
+
                     return Optional.of(
-                            new DefaultSaveModeHandler(
+                            new JdbcSaveModeHandler(
                                     schemaSaveMode,
                                     dataSaveMode,
                                     catalog,
                                     tablePath,
                                     catalogTable,
+                                    tempTablePath,
+                                    tempCatalogTable,
                                     config.get(JdbcOptions.CUSTOM_SQL)));
                 } catch (Exception e) {
                     throw new JdbcConnectorException(HANDLE_SAVE_MODE_FAILED, e);
@@ -266,6 +285,53 @@ public class JdbcSink
             }
         }
         return Optional.empty();
+    }
+
+    private CatalogTable getTempCatalogTable(TablePath tempTablePath) {
+        CatalogTable tempCatalogTable;
+        String batchCodeColumnName = config.get(JdbcOptions.TEMP_COLUMN_BATCH_CODE);
+        String rowKindColumnName = config.get(JdbcOptions.TEMP_COLUMN_ROW_KIND);
+
+        List<Column> tempTableColumns = new ArrayList<>(catalogTable.getTableSchema().getColumns());
+        Column stBatchCodeColumn =
+                new PhysicalColumn(
+                        batchCodeColumnName, BasicType.STRING_TYPE, 63L, null, false, "", null);
+        Column stRowKindColumn =
+                new PhysicalColumn(
+                        rowKindColumnName, BasicType.INT_TYPE, null, null, false, 0, null);
+        tempTableColumns.add(stBatchCodeColumn);
+        tempTableColumns.add(stRowKindColumn);
+        ConstraintKey.ConstraintKeyColumn stBatchCodeColumnKey =
+                ConstraintKey.ConstraintKeyColumn.of(
+                        batchCodeColumnName, ConstraintKey.ColumnSortType.ASC);
+        ConstraintKey constraintKey =
+                ConstraintKey.of(
+                        ConstraintKey.ConstraintType.INDEX_KEY,
+                        "idx_" + tempTablePath.getTableName() + "_stbc",
+                        Collections.singletonList(stBatchCodeColumnKey));
+        TableSchema tempTableSchema =
+                new TableSchema(tempTableColumns, null, Collections.singletonList(constraintKey));
+        tempCatalogTable =
+                CatalogTable.of(
+                        TableIdentifier.of(catalogTable.getCatalogName(), tempTablePath),
+                        tempTableSchema,
+                        new HashMap<>(),
+                        new ArrayList<>(),
+                        null);
+        return tempCatalogTable;
+    }
+
+    private TablePath getTempTablePath(TablePath tablePath) {
+        TablePath tempTablePath = null;
+        JdbcSinkConfig.WriteMode writeMode = config.get(JdbcOptions.WRITE_MODE);
+        if (writeMode == JdbcSinkConfig.WriteMode.MERGE
+                || writeMode == JdbcSinkConfig.WriteMode.COPY_MERGE) {
+            String tempTableName = jdbcSinkConfig.getTempTableName();
+            tempTablePath =
+                    TablePath.of(
+                            tablePath.getDatabaseName(), tablePath.getSchemaName(), tempTableName);
+        }
+        return tempTablePath;
     }
 
     private Optional<Catalog> getCatalog() {

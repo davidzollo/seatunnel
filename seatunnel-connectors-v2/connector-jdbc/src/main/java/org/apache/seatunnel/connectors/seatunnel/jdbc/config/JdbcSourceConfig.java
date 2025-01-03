@@ -75,6 +75,7 @@ public class JdbcSourceConfig implements Serializable {
         config.getOptional(JdbcSourceOptions.WHERE_CONDITION)
                 .ifPresent(
                         whereConditionClause -> {
+                            whereConditionClause = whereConditionClause.trim();
                             if (!whereConditionClause.toLowerCase().startsWith("where")) {
                                 whereConditionClause = "where " + whereConditionClause;
                             }

@@ -27,6 +27,8 @@ import org.apache.seatunnel.api.table.factory.TableSinkFactoryContext;
 
 import com.google.auto.service.AutoService;
 
+import static org.apache.seatunnel.api.sink.SinkCommonOptions.MULTI_TABLE_SINK_REPLICA;
+import static org.apache.seatunnel.api.sink.SinkCommonOptions.MULTI_TABLE_SINK_TTL_SEC;
 import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.MaxcomputeConfig.ACCESS_ID;
 import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.MaxcomputeConfig.ACCESS_KEY;
 import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.MaxcomputeConfig.CUSTOM_SQL;
@@ -36,6 +38,7 @@ import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.Maxcom
 import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.MaxcomputeConfig.PARTITION_SPEC;
 import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.MaxcomputeConfig.PLUGIN_NAME;
 import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.MaxcomputeConfig.PROJECT;
+import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.MaxcomputeConfig.SAVE_MODE_CREATE_TEMPLATE;
 import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.MaxcomputeConfig.SCHEMA_SAVE_MODE;
 import static org.apache.seatunnel.connectors.seatunnel.maxcompute.config.MaxcomputeConfig.TABLE_NAME;
 
@@ -50,7 +53,14 @@ public class MaxcomputeSinkFactory implements TableSinkFactory {
     public OptionRule optionRule() {
         return OptionRule.builder()
                 .required(ACCESS_ID, ACCESS_KEY, ENDPOINT, PROJECT, TABLE_NAME)
-                .optional(PARTITION_SPEC, OVERWRITE, SCHEMA_SAVE_MODE, DATA_SAVE_MODE, CUSTOM_SQL)
+                .optional(
+                        PARTITION_SPEC,
+                        OVERWRITE,
+                        SCHEMA_SAVE_MODE,
+                        DATA_SAVE_MODE,
+                        SAVE_MODE_CREATE_TEMPLATE,
+                        CUSTOM_SQL)
+                .optional(MULTI_TABLE_SINK_REPLICA, MULTI_TABLE_SINK_TTL_SEC)
                 .build();
     }
 

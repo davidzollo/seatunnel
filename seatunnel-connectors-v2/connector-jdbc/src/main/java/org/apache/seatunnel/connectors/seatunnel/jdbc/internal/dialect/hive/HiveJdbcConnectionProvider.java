@@ -40,6 +40,9 @@ public class HiveJdbcConnectionProvider extends SimpleJdbcConnectionProvider {
 
     @Override
     public Connection getOrEstablishConnection() throws SQLException, ClassNotFoundException {
+        if (jdbcConfig.useKerberos) {
+            HiveJdbcUtils.doKerberosAuthentication(jdbcConfig);
+        }
         if (isConnectionValid()) {
             return super.getConnection();
         }
