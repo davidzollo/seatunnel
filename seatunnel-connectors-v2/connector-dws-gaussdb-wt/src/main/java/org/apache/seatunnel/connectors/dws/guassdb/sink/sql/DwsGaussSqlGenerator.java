@@ -98,10 +98,10 @@ public class DwsGaussSqlGenerator implements Serializable {
                         .map(column -> getIDEString(column.getName()))
                         .collect(Collectors.joining(","))
                 + ")"
-                + " FROM STDIN DELIMITER '"
+                + " FROM STDIN"
+                + " WITH(format 'text', delimiter E'"
                 + delimiter
-                + "'"
-                + " COMPATIBLE_ILLEGAL_CHARS";
+                + "', noescaping 'true', compatible_illegal_chars 'true')";
     }
 
     public String getCopyInTargetTableSql() {
@@ -115,10 +115,10 @@ public class DwsGaussSqlGenerator implements Serializable {
                         .map(column -> getIDEString(column.getName()))
                         .collect(Collectors.joining(","))
                 + ")"
-                + " FROM STDIN DELIMITER '"
+                + " FROM STDIN"
+                + " WITH(format 'text', delimiter E'"
                 + delimiter
-                + "'"
-                + " COMPATIBLE_ILLEGAL_CHARS";
+                + "', noescaping 'true', compatible_illegal_chars 'true')";
     }
 
     public String getMergeInTargetTableSql(Long snapshotId) {

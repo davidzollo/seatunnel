@@ -36,8 +36,7 @@ public class DwsGaussDBReplaceUtils {
                                 .replace("\\.", "")
                                 .replace("\\n", "")
                                 .replace("\\r", "")
-                                .replace("\\t", "")
-                                .replace("\\", "");
+                                .replace("\\t", "");
                 element.setField(i, writeField);
             }
         }
