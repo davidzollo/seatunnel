@@ -28,11 +28,11 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.SQLUtils;
 
 import org.apache.kafka.connect.source.SourceRecord;
 
+import io.debezium.connector.oracle.CustomOracleAgentValueConverter;
 import io.debezium.connector.oracle.OracleAgentConnectorConfig;
 import io.debezium.connector.oracle.OracleConnection;
 import io.debezium.connector.oracle.OracleDatabaseSchema;
 import io.debezium.connector.oracle.OracleTopicSelector;
-import io.debezium.connector.oracle.OracleValueConverters;
 import io.debezium.connector.oracle.StreamingAdapter;
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.relational.Column;
@@ -361,14 +361,14 @@ public class OracleUtils {
             OracleAgentConnectorConfig dbzOracleConfig, OracleConnection connection) {
         TopicSelector<TableId> topicSelector = OracleTopicSelector.defaultSelector(dbzOracleConfig);
         SchemaNameAdjuster schemaNameAdjuster = DebeziumSchemaNameAdjuster.create();
-        OracleValueConverters oracleValueConverters =
-                new OracleValueConverters(dbzOracleConfig, connection);
+        CustomOracleAgentValueConverter customOracleAgentValueConverter =
+                new CustomOracleAgentValueConverter(dbzOracleConfig, connection);
         StreamingAdapter.TableNameCaseSensitivity tableNameCaseSensitivity =
                 dbzOracleConfig.getAdapter().getTableNameCaseSensitivity(connection);
 
         return new OracleDatabaseSchema(
                 dbzOracleConfig,
-                oracleValueConverters,
+                customOracleAgentValueConverter,
                 schemaNameAdjuster,
                 topicSelector,
                 tableNameCaseSensitivity);
@@ -381,15 +381,15 @@ public class OracleUtils {
             boolean tableIdCaseInsensitive) {
         TopicSelector<TableId> topicSelector = OracleTopicSelector.defaultSelector(dbzOracleConfig);
         SchemaNameAdjuster schemaNameAdjuster = DebeziumSchemaNameAdjuster.create();
-        OracleValueConverters oracleValueConverters =
-                new OracleValueConverters(dbzOracleConfig, connection);
+        CustomOracleAgentValueConverter customOracleAgentValueConverter =
+                new CustomOracleAgentValueConverter(dbzOracleConfig, connection);
         StreamingAdapter.TableNameCaseSensitivity tableNameCaseSensitivity =
                 tableIdCaseInsensitive
                         ? StreamingAdapter.TableNameCaseSensitivity.SENSITIVE
                         : StreamingAdapter.TableNameCaseSensitivity.INSENSITIVE;
         return new OracleDatabaseSchema(
                 dbzOracleConfig,
-                oracleValueConverters,
+                customOracleAgentValueConverter,
                 schemaNameAdjuster,
                 topicSelector,
                 tableNameCaseSensitivity);

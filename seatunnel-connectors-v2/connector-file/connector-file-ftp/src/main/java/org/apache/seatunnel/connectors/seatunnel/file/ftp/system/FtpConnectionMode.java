@@ -21,10 +21,14 @@ package org.apache.seatunnel.connectors.seatunnel.file.ftp.system;
 public enum FtpConnectionMode {
 
     /** ACTIVE_LOCAL_DATA_CONNECTION_MODE */
+    @Deprecated
     ACTIVE_LOCAL_DATA_CONNECTION_MODE("active_local"),
+    ACTIVE_LOCAL("active_local"),
 
     /** PASSIVE_LOCAL_DATA_CONNECTION_MODE */
-    PASSIVE_LOCAL_DATA_CONNECTION_MODE("passive_local");
+    @Deprecated
+    PASSIVE_LOCAL_DATA_CONNECTION_MODE("passive_local"),
+    PASSIVE_LOCAL("passive_local");
 
     private final String mode;
 

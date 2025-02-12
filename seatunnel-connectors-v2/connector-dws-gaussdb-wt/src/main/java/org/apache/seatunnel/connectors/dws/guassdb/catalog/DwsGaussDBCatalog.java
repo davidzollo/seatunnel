@@ -182,6 +182,7 @@ public class DwsGaussDBCatalog implements Catalog, Serializable {
                 throw new CatalogException("Close connection error", e);
             }
         }
+        connectionMap.clear();
     }
 
     @Override

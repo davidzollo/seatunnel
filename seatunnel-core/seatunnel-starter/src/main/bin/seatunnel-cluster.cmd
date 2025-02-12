@@ -54,7 +54,7 @@ for %%I in (%*) do (
 set "JAVA_OPTS=%JAVA_OPTS% -Dseatunnel.config=%SEATUNNEL_CONFIG%"
 set "JAVA_OPTS=%JAVA_OPTS% -Dhazelcast.config=%HAZELCAST_CONFIG%"
 set "JAVA_OPTS=%JAVA_OPTS% -Dlog4j2.contextSelector=org.apache.logging.log4j.core.async.AsyncLoggerContextSelector"
-set "JAVA_OPTS=%JAVA_OPTS% -Dlog4j2.isThreadContextMapInheritable=true"
+set "JAVA_OPTS=%JAVA_OPTS% -Dlog4j2.isThreadContextMapInheritable=true -DAsyncLogger.ThreadNameStrategy=UNCACHED"
 
 REM Server Debug Config
 REM Usage instructions:

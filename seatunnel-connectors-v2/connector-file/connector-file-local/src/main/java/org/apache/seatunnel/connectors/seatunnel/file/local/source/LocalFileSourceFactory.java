@@ -60,13 +60,19 @@ public class LocalFileSourceFactory implements TableSourceFactory {
                         BaseSourceConfigOptions.FIELD_DELIMITER)
                 .conditional(
                         BaseSourceConfigOptions.FILE_FORMAT_TYPE,
+                        FileFormat.XML,
+                        BaseSourceConfigOptions.XML_ROW_TAG,
+                        BaseSourceConfigOptions.XML_USE_ATTR_FORMAT)
+                .conditional(
+                        BaseSourceConfigOptions.FILE_FORMAT_TYPE,
                         Arrays.asList(
                                 FileFormat.TEXT,
                                 FileFormat.JSON,
                                 FileFormat.DEBEZIUM_JSON,
                                 FileFormat.EXCEL,
                                 FileFormat.CSV,
-                                FileFormat.DBF),
+                                FileFormat.DBF,
+                                FileFormat.XML),
                         TableSchemaOptions.SCHEMA)
                 .optional(BaseSourceConfigOptions.PARSE_PARTITION_FROM_PATH)
                 .optional(BaseSourceConfigOptions.DATE_FORMAT)

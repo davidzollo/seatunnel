@@ -61,6 +61,8 @@ public class SparkExecution implements TaskExecution {
         this.sparkRuntimeEnvironment = SparkRuntimeEnvironment.getInstance(config);
         JobContext jobContext = new JobContext();
         jobContext.setJobMode(RuntimeEnvironment.getJobMode(config));
+        jobContext.setEnableCheckpoint(RuntimeEnvironment.getEnableCheckpoint(config));
+
         this.sourcePluginExecuteProcessor =
                 new SourceExecuteProcessor(
                         sparkRuntimeEnvironment,

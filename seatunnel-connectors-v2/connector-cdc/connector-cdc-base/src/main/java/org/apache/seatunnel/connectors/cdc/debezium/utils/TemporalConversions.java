@@ -213,12 +213,6 @@ public final class TemporalConversions {
                     date.getSeconds(),
                     nanosOfSecond);
         }
-        if (obj instanceof String) {
-            String str = (String) obj;
-            // TIMESTAMP type is encoded in string type
-            Instant instant = Instant.parse(str);
-            return LocalDateTime.ofInstant(instant, serverTimeZone);
-        }
         throw new IllegalArgumentException(
                 "Unable to convert to LocalDateTime from unexpected value '"
                         + obj

@@ -54,6 +54,7 @@ public class TextFormatSchemaTest {
                     + '\003'
                     + "1231"
                     + "\001"
+                    + " \001"
                     + "tyrantlucifer\001"
                     + "true\001"
                     + "1\001"
@@ -81,6 +82,7 @@ public class TextFormatSchemaTest {
                         new String[] {
                             "array_field",
                             "map_field",
+                            "empty_string_field",
                             "string_field",
                             "boolean_field",
                             "tinyint_field",
@@ -100,6 +102,7 @@ public class TextFormatSchemaTest {
                         new SeaTunnelDataType<?>[] {
                             ArrayType.INT_ARRAY_TYPE,
                             new MapType<>(BasicType.STRING_TYPE, BasicType.INT_TYPE),
+                            BasicType.STRING_TYPE,
                             BasicType.STRING_TYPE,
                             BasicType.BOOLEAN_TYPE,
                             BasicType.BYTE_TYPE,
@@ -142,8 +145,9 @@ public class TextFormatSchemaTest {
         Assertions.assertEquals(((Map<?, ?>) (seaTunnelRow.getField(1))).get("tyrantlucifer"), 18);
         Assertions.assertEquals(((Map<?, ?>) (seaTunnelRow.getField(1))).get("Kris"), 21);
         Assertions.assertArrayEquals(
-                (byte[]) seaTunnelRow.getField(12), "tyrantlucifer".getBytes());
-        Assertions.assertEquals(seaTunnelRow.getField(2), "tyrantlucifer");
+                (byte[]) seaTunnelRow.getField(13), "tyrantlucifer".getBytes());
+        Assertions.assertEquals(seaTunnelRow.getField(2), " ");
+        Assertions.assertEquals(seaTunnelRow.getField(3), "tyrantlucifer");
         Assertions.assertEquals(data, content);
     }
 

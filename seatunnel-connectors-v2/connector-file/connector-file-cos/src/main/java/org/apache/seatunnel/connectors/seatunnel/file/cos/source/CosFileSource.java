@@ -94,6 +94,7 @@ public class CosFileSource extends BaseFileSource {
                 case TEXT:
                 case JSON:
                 case EXCEL:
+                case XML:
                 case DEBEZIUM_JSON:
                 case DBF:
                     SeaTunnelRowType userDefinedSchema =

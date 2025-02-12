@@ -37,15 +37,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 @Slf4j
 public class DamengCatalog extends AbstractJdbcCatalog {
-    private static final List<String> EXCLUDED_SCHEMAS =
-            Collections.unmodifiableList(
-                    Arrays.asList("SYS", "SYSDBA", "SYSSSO", "SYSAUDITOR", "CTISYS"));
 
     private static final String SELECT_COLUMNS_SQL =
             "SELECT COLUMNS.COLUMN_NAME, COLUMNS.DATA_TYPE, COLUMNS.DATA_LENGTH, COLUMNS.DATA_PRECISION, COLUMNS.DATA_SCALE "
@@ -135,9 +130,6 @@ public class DamengCatalog extends AbstractJdbcCatalog {
 
     @Override
     protected String getTableName(ResultSet rs) throws SQLException {
-        if (EXCLUDED_SCHEMAS.contains(rs.getString(1))) {
-            return null;
-        }
         return rs.getString(1) + "." + rs.getString(2);
     }
 
@@ -190,11 +182,6 @@ public class DamengCatalog extends AbstractJdbcCatalog {
         return tablePath.getSchemaAndTableName();
     }
 
-    private List<String> listTables() {
-        List<String> databases = listDatabases();
-        return listTables(databases.get(0));
-    }
-
     @Override
     public List<String> listTables(String databaseName)
             throws CatalogException, DatabaseNotExistException {
@@ -209,9 +196,6 @@ public class DamengCatalog extends AbstractJdbcCatalog {
 
             List<String> tables = new ArrayList<>();
             while (rs.next()) {
-                if (EXCLUDED_SCHEMAS.contains(rs.getString(1))) {
-                    continue;
-                }
                 tables.add(rs.getString(1) + "." + rs.getString(2));
             }
 

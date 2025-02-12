@@ -17,7 +17,6 @@
 
 package org.apache.seatunnel.connectors.seatunnel.iceberg.source.enumerator.scan;
 
-import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.exception.IcebergConnectorErrorCode;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.exception.IcebergConnectorException;
@@ -175,8 +174,7 @@ public class IcebergScanSplitPlanner {
             List<IcebergFileScanTaskSplit> splits = new ArrayList<>();
             for (CombinedScanTask combinedScanTask : tasksIterable) {
                 for (FileScanTask fileScanTask : combinedScanTask.files()) {
-                    splits.add(
-                            new IcebergFileScanTaskSplit(TablePath.of(table.name()), fileScanTask));
+                    splits.add(new IcebergFileScanTaskSplit(context.getTablePath(), fileScanTask));
                 }
             }
             for (int i = 0; i < splits.size(); i++) {

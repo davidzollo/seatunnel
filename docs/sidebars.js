@@ -160,7 +160,8 @@ const sidebars = {
             "type": "category",
             "label": "Command",
             "items": [
-                "command/usage"
+                "command/usage",
+                "command/connector-check"
             ]
         },
         {

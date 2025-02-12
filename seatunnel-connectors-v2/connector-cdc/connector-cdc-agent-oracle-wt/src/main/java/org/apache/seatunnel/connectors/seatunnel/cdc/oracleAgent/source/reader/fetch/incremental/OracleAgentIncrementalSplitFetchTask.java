@@ -69,7 +69,8 @@ public class OracleAgentIncrementalSplitFetchTask extends OracleAgentStreamingCh
                 sourceConfig,
                 eventDispatcher,
                 errorHandler,
-                oracleDatabaseSchema);
+                oracleDatabaseSchema,
+                sourceConfig.getServerTimeZone());
         this.split = incrementalSplit;
         this.eventDispatcher = eventDispatcher;
         this.errorHandler = errorHandler;

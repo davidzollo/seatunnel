@@ -33,6 +33,8 @@
         <module>seatunnel-format-compatible-connect-json</module>
         <module>seatunnel-format-avro</module>
         <module>seatunnel-format-cdc-custom-json</module>
+        <module>seatunnel-format-csv</module>
+        <module>seatunnel-format-dbf</module>
     </modules>
 
 </project>

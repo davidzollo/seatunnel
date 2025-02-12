@@ -194,6 +194,12 @@
                 </dependency>
                 <dependency>
                     <groupId>org.apache.seatunnel</groupId>
+                    <artifactId>connector-hive1</artifactId>
+                    <version>${project.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.seatunnel</groupId>
                     <artifactId>connector-hive2</artifactId>
                     <version>${project.version}</version>
                     <scope>provided</scope>
@@ -268,6 +274,18 @@
                 <dependency>
                     <groupId>org.apache.seatunnel</groupId>
                     <artifactId>connector-jdbc-hive2</artifactId>
+                    <version>${project.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.seatunnel</groupId>
+                    <artifactId>connector-jdbc-inceptor</artifactId>
+                    <version>${project.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.seatunnel</groupId>
+                    <artifactId>connector-jdbc-phoenix</artifactId>
                     <version>${project.version}</version>
                     <scope>provided</scope>
                 </dependency>
@@ -564,6 +582,14 @@
                     <version>6.2.0</version>
                     <scope>system</scope>
                     <systemPath>${basedir}/src/main/highgo/hgjdbc-6.2.0.jar</systemPath>
+                </dependency>
+
+                <dependency>
+                    <groupId>io.transwarp.inceptor</groupId>
+                    <artifactId>inceptor-jdbc-relocation</artifactId>
+                    <version>8.31.1</version>
+                    <scope>system</scope>
+                    <systemPath>${basedir}/src/main/inceptor/inceptor-jdbc-relocation-8.31.1.jar</systemPath>
                 </dependency>
 
                 <dependency>

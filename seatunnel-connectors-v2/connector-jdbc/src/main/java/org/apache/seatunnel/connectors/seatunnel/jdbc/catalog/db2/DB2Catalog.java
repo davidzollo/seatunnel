@@ -37,21 +37,16 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class DB2Catalog extends AbstractJdbcCatalog {
-
-    protected final Map<String, Connection> connectionMap;
 
     private static final String SELECT_COLUMNS_SQL =
             "SELECT NAME AS column_name,\n"
@@ -71,7 +66,6 @@ public class DB2Catalog extends AbstractJdbcCatalog {
             JdbcUrlUtil.UrlInfo urlInfo,
             String defaultSchema) {
         super(catalogName, username, pwd, urlInfo, defaultSchema);
-        this.connectionMap = new ConcurrentHashMap<>();
     }
 
     @SneakyThrows
@@ -183,19 +177,6 @@ public class DB2Catalog extends AbstractJdbcCatalog {
         return String.format(
                 "select * from %s.%s FETCH FIRST 1 ROW ONLY;",
                 tablePath.getSchemaName(), "\"" + tablePath.getTableName() + "\"");
-    }
-
-    public Connection getConnection(String url) {
-        if (connectionMap.containsKey(url)) {
-            return connectionMap.get(url);
-        }
-        try {
-            Connection connection = DriverManager.getConnection(url, username, pwd);
-            connectionMap.put(url, connection);
-            return connection;
-        } catch (SQLException e) {
-            throw new CatalogException(String.format("Failed connecting to %s via JDBC.", url), e);
-        }
     }
 
     @Override

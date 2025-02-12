@@ -50,13 +50,15 @@ class AvroConverterTest {
 
         BigDecimal bigDecimal = new BigDecimal("61592600349703735722.724745739637773662");
         LocalDateTime localDateTime = LocalDateTime.of(2023, 1, 1, 6, 30, 40);
-
-        subSeaTunnelRow.setField(0, map);
+        Map<String, Short> mapData = new HashMap<>();
+        mapData.put("k1", Short.valueOf("1"));
+        mapData.put("k2", Short.valueOf("2"));
+        subSeaTunnelRow.setField(0, mapData);
         subSeaTunnelRow.setField(1, strArray);
         subSeaTunnelRow.setField(2, "strVal");
         subSeaTunnelRow.setField(3, true);
-        subSeaTunnelRow.setField(4, 1);
-        subSeaTunnelRow.setField(5, 2);
+        subSeaTunnelRow.setField(4, Byte.valueOf("1"));
+        subSeaTunnelRow.setField(5, Short.valueOf("2"));
         subSeaTunnelRow.setField(6, 3);
         subSeaTunnelRow.setField(7, Long.MAX_VALUE - 1);
         subSeaTunnelRow.setField(8, 33.333F);
@@ -67,12 +69,12 @@ class AvroConverterTest {
         subSeaTunnelRow.setField(13, localDateTime);
 
         SeaTunnelRow seaTunnelRow = new SeaTunnelRow(15);
-        seaTunnelRow.setField(0, map);
+        seaTunnelRow.setField(0, mapData);
         seaTunnelRow.setField(1, strArray);
         seaTunnelRow.setField(2, "strVal");
         seaTunnelRow.setField(3, true);
-        seaTunnelRow.setField(4, 1);
-        seaTunnelRow.setField(5, 2);
+        seaTunnelRow.setField(4, Byte.valueOf("1"));
+        seaTunnelRow.setField(5, Short.valueOf("2"));
         seaTunnelRow.setField(6, 3);
         seaTunnelRow.setField(7, Long.MAX_VALUE - 1);
         seaTunnelRow.setField(8, 33.333F);
@@ -103,12 +105,12 @@ class AvroConverterTest {
             "c_timestamp"
         };
         SeaTunnelDataType<?>[] subFieldTypes = {
-            new MapType<>(BasicType.STRING_TYPE, BasicType.STRING_TYPE),
+            new MapType<>(BasicType.STRING_TYPE, BasicType.SHORT_TYPE),
             ArrayType.STRING_ARRAY_TYPE,
             BasicType.STRING_TYPE,
             BasicType.BOOLEAN_TYPE,
-            BasicType.INT_TYPE,
-            BasicType.INT_TYPE,
+            BasicType.BYTE_TYPE,
+            BasicType.SHORT_TYPE,
             BasicType.INT_TYPE,
             BasicType.LONG_TYPE,
             BasicType.FLOAT_TYPE,
@@ -138,12 +140,12 @@ class AvroConverterTest {
             "c_row"
         };
         SeaTunnelDataType<?>[] fieldTypes = {
-            new MapType<>(BasicType.STRING_TYPE, BasicType.STRING_TYPE),
+            new MapType<>(BasicType.STRING_TYPE, BasicType.SHORT_TYPE),
             ArrayType.STRING_ARRAY_TYPE,
             BasicType.STRING_TYPE,
             BasicType.BOOLEAN_TYPE,
-            BasicType.INT_TYPE,
-            BasicType.INT_TYPE,
+            BasicType.BYTE_TYPE,
+            BasicType.SHORT_TYPE,
             BasicType.INT_TYPE,
             BasicType.LONG_TYPE,
             BasicType.FLOAT_TYPE,
@@ -168,7 +170,6 @@ class AvroConverterTest {
 
         AvroToRowConverter avroToRowConverter = new AvroToRowConverter(rowType);
         SeaTunnelRow converterRow = avroToRowConverter.converter(record, rowType);
-
         Assertions.assertEquals(converterRow, seaTunnelRow);
     }
 }

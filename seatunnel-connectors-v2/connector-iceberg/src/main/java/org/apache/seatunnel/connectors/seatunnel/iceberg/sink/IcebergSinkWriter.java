@@ -155,6 +155,7 @@ public class IcebergSinkWriter
             if (writer != null) {
                 writer.close();
             }
+            icebergTableLoader.close();
         } finally {
             results.clear();
         }

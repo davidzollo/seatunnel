@@ -71,7 +71,7 @@ public class HiveSink
         implements SeaTunnelSink<
                         SeaTunnelRow, FileSinkState, FileCommitInfo, FileAggregatedCommitInfo>,
                 SupportMultiTableSink {
-    private final Table tableInformation;
+    private transient Table tableInformation;
     private final CatalogTable catalogTable;
     private final ReadonlyConfig readonlyConfig;
     private final HiveHadoopConfig hiveHadoopConfig;
@@ -165,7 +165,7 @@ public class HiveSink
             createAggregatedCommitter() {
         return Optional.of(
                 new HiveSinkAggregatedCommitter(
-                        readonlyConfig, tableInformation, hiveHadoopConfig));
+                        readonlyConfig, getTableInformation(), hiveHadoopConfig));
     }
 
     @Override
@@ -200,7 +200,7 @@ public class HiveSink
     }
 
     private HiveHadoopConfig parseHiveHadoopConfig(ReadonlyConfig readonlyConfig, Table table) {
-        String hdfsLocation = tableInformation.getSd().getLocation();
+        String hdfsLocation = getTableInformation().getSd().getLocation();
         HiveHadoopConfig hiveHadoopConfig;
         try {
             URI uri = new URI(hdfsLocation);
@@ -242,5 +242,12 @@ public class HiveSink
                 WriteStrategyFactory.of(fileSinkConfig.getFileFormat(), fileSinkConfig);
         writeStrategy.setSeaTunnelRowTypeInfo(catalogTable.getSeaTunnelRowType());
         return writeStrategy;
+    }
+
+    private Table getTableInformation() {
+        if (tableInformation == null) {
+            tableInformation = HiveTableUtils.getTableInfo(readonlyConfig);
+        }
+        return tableInformation;
     }
 }

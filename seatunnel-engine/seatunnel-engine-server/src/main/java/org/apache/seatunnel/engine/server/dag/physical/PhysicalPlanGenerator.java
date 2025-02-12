@@ -21,6 +21,8 @@ import org.apache.seatunnel.api.sink.SinkAggregatedCommitter;
 import org.apache.seatunnel.engine.common.config.server.QueueType;
 import org.apache.seatunnel.engine.common.utils.IdGenerator;
 import org.apache.seatunnel.engine.common.utils.PassiveCompletableFuture;
+import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
+import org.apache.seatunnel.engine.core.classloader.ClassLoaderService;
 import org.apache.seatunnel.engine.core.dag.actions.Action;
 import org.apache.seatunnel.engine.core.dag.actions.ShuffleAction;
 import org.apache.seatunnel.engine.core.dag.actions.ShuffleConfig;
@@ -75,7 +77,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -95,6 +96,8 @@ public class PhysicalPlanGenerator {
     private final long initializationTimestamp;
 
     private final ExecutorService executorService;
+
+    private final ClassLoaderService classLoaderService;
 
     private final NodeEngine nodeEngine;
 
@@ -130,6 +133,7 @@ public class PhysicalPlanGenerator {
             @NonNull JobImmutableInformation jobImmutableInformation,
             long initializationTimestamp,
             @NonNull ExecutorService executorService,
+            @NonNull ClassLoaderService classLoaderService,
             @NonNull FlakeIdGenerator flakeIdGenerator,
             @NonNull IMap runningJobStateIMap,
             @NonNull IMap runningJobStateTimestampsIMap,
@@ -139,6 +143,7 @@ public class PhysicalPlanGenerator {
         this.jobImmutableInformation = jobImmutableInformation;
         this.initializationTimestamp = initializationTimestamp;
         this.executorService = executorService;
+        this.classLoaderService = classLoaderService;
         this.flakeIdGenerator = flakeIdGenerator;
         // the checkpoint of a pipeline
         this.pipelineTasks = new HashSet<>();
@@ -241,11 +246,23 @@ public class PhysicalPlanGenerator {
                         sinkAction -> {
                             Optional<? extends SinkAggregatedCommitter<?, ?>>
                                     sinkAggregatedCommitter;
+                            ClassLoader appClassLoader =
+                                    Thread.currentThread().getContextClassLoader();
                             try {
+                                ClassLoader classLoader =
+                                        classLoaderService.getClassLoader(
+                                                jobImmutableInformation.getJobId(),
+                                                sinkAction.getJarUrls());
+                                Thread.currentThread().setContextClassLoader(classLoader);
                                 sinkAggregatedCommitter =
                                         sinkAction.getSink().createAggregatedCommitter();
                             } catch (IOException e) {
                                 throw new RuntimeException(e);
+                            } finally {
+                                Thread.currentThread().setContextClassLoader(appClassLoader);
+                                classLoaderService.releaseClassLoader(
+                                        jobImmutableInformation.getJobId(),
+                                        sinkAction.getJarUrls());
                             }
                             // if sinkAggregatedCommitter is empty, don't create task.
                             if (sinkAggregatedCommitter.isPresent()) {

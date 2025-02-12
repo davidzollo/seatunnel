@@ -33,7 +33,7 @@ public class SeaTunnelEngineExample {
 
     public static void main(String[] args)
             throws FileNotFoundException, URISyntaxException, CommandException {
-        String configurePath = args.length > 0 ? args[0] : "/examples/test_split.conf";
+        String configurePath = args.length > 0 ? args[0] : "/examples/fake_to_console.conf";
         System.setProperty(
                 SEATUNNEL_LICENCE_HOME_KEY, getTestConfigFile("/license/whaletunnel.license"));
         String configFile = getTestConfigFile(configurePath);

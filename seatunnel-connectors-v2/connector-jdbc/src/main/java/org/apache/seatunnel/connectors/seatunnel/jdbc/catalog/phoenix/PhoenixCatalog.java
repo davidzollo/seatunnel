@@ -71,8 +71,7 @@ public class PhoenixCatalog extends AbstractJdbcCatalog {
             throws CatalogException, DatabaseNotExistException {
         List<String> tableNames = new ArrayList<>();
         String querySql = "select * from system.catalog where table_type = 'u'";
-        try (Connection connection = getConnection(baseUrl);
-                Statement statement = connection.createStatement();
+        try (Statement statement = getConnection(baseUrl).createStatement();
                 ResultSet resultSet = statement.executeQuery(querySql)) {
 
             while (resultSet.next()) {
@@ -91,6 +90,7 @@ public class PhoenixCatalog extends AbstractJdbcCatalog {
         }
     }
 
+    @Override
     protected Connection getConnection(String url) {
         if (connectionMap.containsKey(url)) {
             return connectionMap.get(url);

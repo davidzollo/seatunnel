@@ -30,7 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class OracleAgentIncrementalFetchTask implements FetchTask<SourceSplitBase> {
 
-    private OracleAgentSourceConfig oracleAgentSourceConfig;
+    private final OracleAgentSourceConfig oracleAgentSourceConfig;
     private final IncrementalSplit incrementalSplit;
     private volatile boolean taskRunning = false;
 
@@ -55,7 +55,8 @@ public class OracleAgentIncrementalFetchTask implements FetchTask<SourceSplitBas
                         sourceFetchContext.getSourceConfig(),
                         sourceFetchContext.getDispatcher(),
                         sourceFetchContext.getErrorHandler(),
-                        sourceFetchContext.getDatabaseSchema());
+                        sourceFetchContext.getDatabaseSchema(),
+                        oracleAgentSourceConfig.getServerTimeZone());
 
         Oracle9BridgeIncrementalChangeEventSourceContext changeEventSourceContext =
                 new Oracle9BridgeIncrementalChangeEventSourceContext();

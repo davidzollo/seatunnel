@@ -30,11 +30,12 @@ import org.apache.seatunnel.common.utils.DateUtils;
 import org.apache.seatunnel.common.utils.TimeUtils;
 import org.apache.seatunnel.connectors.seatunnel.file.config.BaseSourceConfigOptions;
 import org.apache.seatunnel.connectors.seatunnel.file.config.CompressFormat;
-import org.apache.seatunnel.connectors.seatunnel.file.config.FileFormat;
 import org.apache.seatunnel.connectors.seatunnel.file.exception.FileConnectorErrorCode;
 import org.apache.seatunnel.connectors.seatunnel.file.exception.FileConnectorException;
 import org.apache.seatunnel.format.text.TextDeserializationSchema;
 import org.apache.seatunnel.format.text.constant.TextFormatConstant;
+import org.apache.seatunnel.format.text.splitor.DefaultTextLineSplitor;
+import org.apache.seatunnel.format.text.splitor.TextLineSplitor;
 
 import io.airlift.compress.lzo.LzopCodec;
 import lombok.extern.slf4j.Slf4j;
@@ -58,6 +59,7 @@ public class TextReadStrategy extends AbstractReadStrategy {
     private CompressFormat compressFormat = BaseSourceConfigOptions.COMPRESS_CODEC.defaultValue();
     private int[] indexes;
     private String encoding = BaseSourceConfigOptions.ENCODING.defaultValue();
+    private TextLineSplitor textLineSplitor;
 
     @Override
     public void read(String path, String tableId, Collector<SeaTunnelRow> output)
@@ -137,7 +139,7 @@ public class TextReadStrategy extends AbstractReadStrategy {
         if (pluginConfig.hasPath(BaseSourceConfigOptions.READ_COLUMNS.key())) {
             throw new FileConnectorException(
                     SeaTunnelAPIErrorCode.CONFIG_VALIDATION_FAILED,
-                    "When reading json/text/csv files, if user has not specified schema information, "
+                    "When reading text files, if user has not specified schema information, "
                             + "SeaTunnel will not support column projection");
         }
         ReadonlyConfig readonlyConfig = ReadonlyConfig.fromConfig(pluginConfig);
@@ -147,7 +149,8 @@ public class TextReadStrategy extends AbstractReadStrategy {
                         .nullFormat(
                                 readonlyConfig
                                         .getOptional(BaseSourceConfigOptions.NULL_FORMAT)
-                                        .orElse(null));
+                                        .orElse(null))
+                        .textLineSplitor(textLineSplitor);
         ;
         if (isMergePartition) {
             deserializationSchema =
@@ -169,18 +172,7 @@ public class TextReadStrategy extends AbstractReadStrategy {
                 readonlyConfig
                         .getOptional(BaseSourceConfigOptions.ENCODING)
                         .orElse(StandardCharsets.UTF_8.name());
-        if (fieldDelimiterOptional.isPresent()) {
-            fieldDelimiter = fieldDelimiterOptional.get();
-        } else {
-            FileFormat fileFormat =
-                    FileFormat.valueOf(
-                            pluginConfig
-                                    .getString(BaseSourceConfigOptions.FILE_FORMAT_TYPE.key())
-                                    .toUpperCase());
-            if (fileFormat == FileFormat.CSV) {
-                fieldDelimiter = ",";
-            }
-        }
+        fieldDelimiterOptional.ifPresent(s -> fieldDelimiter = s);
         initFormatter();
         TextDeserializationSchema.Builder builder =
                 TextDeserializationSchema.builder()
@@ -188,7 +180,8 @@ public class TextReadStrategy extends AbstractReadStrategy {
                         .nullFormat(
                                 readonlyConfig
                                         .getOptional(BaseSourceConfigOptions.NULL_FORMAT)
-                                        .orElse(null));
+                                        .orElse(null))
+                        .textLineSplitor(textLineSplitor);
         if (isMergePartition) {
             deserializationSchema =
                     builder.seaTunnelRowType(userDefinedRowTypeWithPartition).build();
@@ -236,5 +229,6 @@ public class TextReadStrategy extends AbstractReadStrategy {
                     pluginConfig.getString(BaseSourceConfigOptions.COMPRESS_CODEC.key());
             compressFormat = CompressFormat.valueOf(compressCodec.toUpperCase());
         }
+        textLineSplitor = new DefaultTextLineSplitor();
     }
 }

@@ -25,16 +25,31 @@ import org.apache.seatunnel.api.event.EventListener;
 /** The default {@link SinkWriter.Context} implement class. */
 public class DefaultSinkWriterContext implements SinkWriter.Context {
     private final int subtask;
+    private final int numberOfParallelSubtasks;
     private final EventListener eventListener;
 
-    public DefaultSinkWriterContext(int subtask) {
+    public DefaultSinkWriterContext(int subtask, int parallelism) {
+        this(subtask, parallelism, new DefaultEventProcessor());
+    }
+
+    public DefaultSinkWriterContext(String jobId, int subtask, int parallelism) {
+        this(subtask, parallelism, new DefaultEventProcessor());
+    }
+
+    public DefaultSinkWriterContext(
+            int subtask, int numberOfParallelSubtasks, EventListener eventListener) {
         this.subtask = subtask;
-        this.eventListener = new DefaultEventProcessor();
+        this.numberOfParallelSubtasks = numberOfParallelSubtasks;
+        this.eventListener = eventListener;
     }
 
     @Override
     public int getIndexOfSubtask() {
         return subtask;
+    }
+
+    public int getNumberOfParallelSubtasks() {
+        return numberOfParallelSubtasks;
     }
 
     @Override

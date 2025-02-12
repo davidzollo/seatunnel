@@ -120,18 +120,6 @@ public class PostgresCatalog extends AbstractJdbcCatalog {
 
     private static final String QUERY_PLUGINS = "SELECT extname FROM pg_extension";
 
-    static {
-        SYS_DATABASES.add("information_schema");
-        SYS_DATABASES.add("pg_catalog");
-        SYS_DATABASES.add("root");
-        SYS_DATABASES.add("pg_toast");
-        SYS_DATABASES.add("pg_temp_1");
-        SYS_DATABASES.add("pg_toast_temp_1");
-        SYS_DATABASES.add("postgres");
-        SYS_DATABASES.add("template0");
-        SYS_DATABASES.add("template1");
-    }
-
     public PostgresCatalog(
             String catalogName,
             String username,

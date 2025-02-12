@@ -43,6 +43,7 @@ public class MultiTableTtlWriter
     @Getter private final String tableIdentifier;
     private final int index;
     private int queueIndex;
+    private int replicaNum;
     private final SinkWriter.Context context;
     private volatile SinkWriter<SeaTunnelRow, ?, ?> sinkWriter;
     private volatile Long lastWriteTime;
@@ -57,12 +58,14 @@ public class MultiTableTtlWriter
             String tableIdentifier,
             int index,
             SeaTunnelSink sink,
+            int replicaNum,
             SinkWriter.Context context,
             int multiTableWriterTtl) {
         this.sinkWriters = sinkWriters;
         this.sink = sink;
         this.tableIdentifier = tableIdentifier;
         this.index = index;
+        this.replicaNum = replicaNum;
         this.context = context;
         this.multiTableWriterTtl = multiTableWriterTtl;
         this.lastWriteTime = System.currentTimeMillis();
@@ -73,10 +76,11 @@ public class MultiTableTtlWriter
             String tableIdentifier,
             int index,
             SeaTunnelSink sink,
+            int replicaNum,
             SinkWriter.Context context,
             int multiTableWriterTtl,
             List<?> state) {
-        this(sinkWriters, tableIdentifier, index, sink, context, multiTableWriterTtl);
+        this(sinkWriters, tableIdentifier, index, sink, replicaNum, context, multiTableWriterTtl);
         this.state = state;
     }
 
@@ -85,9 +89,12 @@ public class MultiTableTtlWriter
             try {
                 log.info("Create writer for table {} with index {}", tableIdentifier, index);
                 if (state == null) {
-                    sinkWriter = sink.createWriter(new SinkContextProxy(index, context));
+                    sinkWriter =
+                            sink.createWriter(new SinkContextProxy(index, replicaNum, context));
                 } else {
-                    sinkWriter = sink.restoreWriter(new SinkContextProxy(index, context), state);
+                    sinkWriter =
+                            sink.restoreWriter(
+                                    new SinkContextProxy(index, replicaNum, context), state);
                 }
                 lastWriteTime = System.currentTimeMillis();
                 isClosed = false;

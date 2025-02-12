@@ -53,7 +53,13 @@ public class MultiTableTtlWriterTest {
             ttlWriters.put(
                     SinkIdentifier.of("test_table" + i, 0),
                     new MultiTableTtlWriter(
-                            ttlWriters, "test_table" + i, 0, testSink, null, multiTableWriterTtl));
+                            ttlWriters,
+                            "test_table" + i,
+                            0,
+                            testSink,
+                            1,
+                            null,
+                            multiTableWriterTtl));
         }
         MultiTableSinkWriter multiTableSinkWriter = new MultiTableSinkWriter(ttlWriters, 1);
 

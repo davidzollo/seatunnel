@@ -29,6 +29,7 @@ import org.apache.seatunnel.api.sink.SupportResourceShare;
 import org.apache.seatunnel.api.table.event.SchemaChangeEvent;
 import org.apache.seatunnel.api.table.type.Record;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
+import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.engine.core.checkpoint.InternalCheckpointListener;
 import org.apache.seatunnel.engine.core.dag.actions.SinkAction;
 import org.apache.seatunnel.engine.server.checkpoint.ActionStateKey;
@@ -54,7 +55,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
@@ -295,19 +295,13 @@ public class SinkFlowLifeCycle<T, CommitInfoT extends Serializable, AggregatedCo
                                                                     .deserialize(bytes)))
                             .collect(Collectors.toList());
         }
+        SinkWriter.Context writerContext =
+                new SinkWriterContext(
+                        sinkAction.getParallelism(), indexID, metricsContext, eventListener);
         if (states.isEmpty()) {
-            this.writer =
-                    sinkAction
-                            .getSink()
-                            .createWriter(
-                                    new SinkWriterContext(indexID, metricsContext, eventListener));
+            this.writer = sinkAction.getSink().createWriter(writerContext);
         } else {
-            this.writer =
-                    sinkAction
-                            .getSink()
-                            .restoreWriter(
-                                    new SinkWriterContext(indexID, metricsContext, eventListener),
-                                    states);
+            this.writer = sinkAction.getSink().restoreWriter(writerContext, states);
         }
         if (this.writer instanceof SupportResourceShare) {
             resourceManager =

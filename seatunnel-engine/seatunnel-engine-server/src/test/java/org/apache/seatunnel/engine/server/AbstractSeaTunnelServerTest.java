@@ -101,8 +101,8 @@ public abstract class AbstractSeaTunnelServerTest<T extends AbstractSeaTunnelSer
                         jobId,
                         "Test",
                         isStartWithSavePoint,
-                        nodeEngine.getSerializationService().toData(testLogicalDag),
-                        testLogicalDag.getJobConfig(),
+                        nodeEngine.getSerializationService(),
+                        testLogicalDag,
                         Collections.emptyList(),
                         Collections.emptyList());
 
