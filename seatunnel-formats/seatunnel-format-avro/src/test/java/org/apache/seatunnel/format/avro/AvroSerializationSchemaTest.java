@@ -47,9 +47,9 @@ class AvroSerializationSchemaTest {
 
     private SeaTunnelRow buildSeaTunnelRow() {
         SeaTunnelRow subSeaTunnelRow = new SeaTunnelRow(14);
-        Map<String, String> map = new HashMap<>();
-        map.put("k1", "v1");
-        map.put("k2", "v2");
+        Map<String, Short> map = new HashMap<>();
+        map.put("k1", Short.valueOf("1"));
+        map.put("k2", Short.valueOf("2"));
         String[] strArray = new String[] {"l1", "l2"};
         byte byteVal = 100;
         subSeaTunnelRow.setField(0, map);
@@ -104,7 +104,7 @@ class AvroSerializationSchemaTest {
             "c_timestamp"
         };
         SeaTunnelDataType<?>[] subFieldTypes = {
-            new MapType<>(BasicType.STRING_TYPE, BasicType.STRING_TYPE),
+            new MapType<>(BasicType.STRING_TYPE, BasicType.SHORT_TYPE),
             ArrayType.STRING_ARRAY_TYPE,
             BasicType.STRING_TYPE,
             BasicType.BOOLEAN_TYPE,
@@ -138,7 +138,7 @@ class AvroSerializationSchemaTest {
             "c_row"
         };
         SeaTunnelDataType<?>[] fieldTypes = {
-            new MapType<>(BasicType.STRING_TYPE, BasicType.STRING_TYPE),
+            new MapType<>(BasicType.STRING_TYPE, BasicType.SHORT_TYPE),
             ArrayType.STRING_ARRAY_TYPE,
             BasicType.STRING_TYPE,
             BasicType.BOOLEAN_TYPE,

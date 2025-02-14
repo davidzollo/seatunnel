@@ -33,21 +33,25 @@ import org.apache.seatunnel.api.table.factory.TableSourceFactoryContext;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.catalog.IcebergCatalog;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.catalog.IcebergCatalogFactory;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.config.CommonConfig;
-import org.apache.seatunnel.connectors.seatunnel.iceberg.config.SinkConfig;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.config.SourceConfig;
 
 import com.google.auto.service.AutoService;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.Serializable;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.CommonConfig.HADOOP_CONF_PATH_PROP;
+import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.CommonConfig.HADOOP_PROPS;
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.CommonConfig.KERBEROS_KEYTAB_PATH;
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.CommonConfig.KERBEROS_KRB5_CONF_PATH;
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.CommonConfig.KERBEROS_PRINCIPAL;
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.CommonConfig.KEY_CASE_SENSITIVE;
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.CommonConfig.REMOTE_USER;
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.SourceConfig.KEY_END_SNAPSHOT_ID;
+import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.SourceConfig.KEY_INCREMENT_SCAN_INTERVAL;
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.SourceConfig.KEY_START_SNAPSHOT_ID;
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.SourceConfig.KEY_START_SNAPSHOT_TIMESTAMP;
 import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.SourceConfig.KEY_STREAM_SCAN_STRATEGY;
@@ -68,9 +72,9 @@ public class IcebergSourceFactory implements TableSourceFactory {
         return OptionRule.builder()
                 .required(
                         CommonConfig.KEY_CATALOG_NAME,
-                        SinkConfig.KEY_NAMESPACE,
-                        SinkConfig.KEY_TABLE,
-                        SinkConfig.CATALOG_PROPS)
+                        CommonConfig.KEY_NAMESPACE,
+                        CommonConfig.CATALOG_PROPS)
+                .exclusive(CommonConfig.KEY_TABLE, SourceConfig.KEY_TABLE_LIST)
                 .optional(
                         TableSchemaOptions.SCHEMA,
                         KEY_CASE_SENSITIVE,
@@ -80,11 +84,13 @@ public class IcebergSourceFactory implements TableSourceFactory {
                         KEY_USE_SNAPSHOT_ID,
                         KEY_USE_SNAPSHOT_TIMESTAMP,
                         KEY_STREAM_SCAN_STRATEGY,
+                        HADOOP_PROPS,
                         HADOOP_CONF_PATH_PROP,
                         KERBEROS_KRB5_CONF_PATH,
                         KERBEROS_PRINCIPAL,
                         KERBEROS_KEYTAB_PATH,
-                        REMOTE_USER)
+                        REMOTE_USER,
+                        KEY_INCREMENT_SCAN_INTERVAL)
                 .build();
     }
 
@@ -93,24 +99,37 @@ public class IcebergSourceFactory implements TableSourceFactory {
             TableSource<T, SplitT, StateT> createSource(TableSourceFactoryContext context) {
         ReadonlyConfig options = context.getOptions();
         SourceConfig config = new SourceConfig(options);
-        TablePath tablePath = TablePath.of(config.getNamespace(), config.getTable());
         CatalogTable catalogTable;
         if (options.get(TableSchemaOptions.SCHEMA) != null) {
+            TablePath tablePath = config.getTableList().get(0).getTablePath();
             catalogTable = CatalogTableUtil.buildWithConfig(factoryIdentifier(), options);
             TableIdentifier tableIdentifier =
                     TableIdentifier.of(catalogTable.getCatalogName(), tablePath);
             CatalogTable table = CatalogTable.of(tableIdentifier, catalogTable);
-            return () -> (SeaTunnelSource<T, SplitT, StateT>) new IcebergSource(options, table);
-        } else {
-            // build iceberg catalog
-            IcebergCatalogFactory icebergCatalogFactory = new IcebergCatalogFactory();
-            IcebergCatalog catalog =
-                    (IcebergCatalog)
-                            icebergCatalogFactory.createCatalog(factoryIdentifier(), options);
-            catalog.open();
-            catalogTable = catalog.getTable(tablePath);
             return () ->
-                    (SeaTunnelSource<T, SplitT, StateT>) new IcebergSource(options, catalogTable);
+                    (SeaTunnelSource<T, SplitT, StateT>)
+                            new IcebergSource(config, Collections.singletonList(table));
+        }
+
+        try (IcebergCatalog catalog =
+                (IcebergCatalog)
+                        new IcebergCatalogFactory().createCatalog(factoryIdentifier(), options)) {
+            catalog.open();
+
+            if (config.getTable() != null) {
+                TablePath tablePath = config.getTableList().get(0).getTablePath();
+                catalogTable = catalog.getTable(tablePath);
+                return () ->
+                        (SeaTunnelSource<T, SplitT, StateT>)
+                                new IcebergSource(config, Collections.singletonList(catalogTable));
+            }
+
+            List<CatalogTable> catalogTables =
+                    config.getTableList().stream()
+                            .map(tableConfig -> catalog.getTable(tableConfig.getTablePath()))
+                            .collect(Collectors.toList());
+            return () ->
+                    (SeaTunnelSource<T, SplitT, StateT>) new IcebergSource(config, catalogTables);
         }
     }
 

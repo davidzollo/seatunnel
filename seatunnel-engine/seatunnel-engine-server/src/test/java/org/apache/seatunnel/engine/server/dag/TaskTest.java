@@ -74,8 +74,8 @@ public class TaskTest extends AbstractSeaTunnelServerTest {
                 new JobImmutableInformation(
                         1,
                         "Test",
-                        nodeEngine.getSerializationService().toData(testLogicalDag),
-                        config,
+                        nodeEngine.getSerializationService(),
+                        testLogicalDag,
                         Collections.emptyList(),
                         Collections.emptyList());
 
@@ -128,22 +128,29 @@ public class TaskTest extends AbstractSeaTunnelServerTest {
 
         LogicalEdge edge = new LogicalEdge(fakeVertex, consoleVertex);
 
-        LogicalDag logicalDag = new LogicalDag();
+        JobConfig config = new JobConfig();
+        config.setName("test");
+        LogicalDag logicalDag = new LogicalDag(config, idGenerator);
         logicalDag.addLogicalVertex(fakeVertex);
         logicalDag.addLogicalVertex(consoleVertex);
         logicalDag.addEdge(edge);
-
-        JobConfig config = new JobConfig();
-        config.setName("test");
 
         JobImmutableInformation jobImmutableInformation =
                 new JobImmutableInformation(
                         1,
                         "Test",
-                        nodeEngine.getSerializationService().toData(logicalDag),
-                        config,
+                        nodeEngine.getSerializationService(),
+                        logicalDag,
                         Collections.emptyList(),
                         Collections.emptyList());
+
+        Assertions.assertEquals(2, jobImmutableInformation.getLogicalVertexJarsList().size());
+        Assertions.assertIterableEquals(
+                Sets.newHashSet(new URL("file:///fake.jar")),
+                jobImmutableInformation.getLogicalVertexJarsList().get(0));
+        Assertions.assertIterableEquals(
+                Sets.newHashSet(new URL("file:///console.jar")),
+                jobImmutableInformation.getLogicalVertexJarsList().get(1));
 
         IMap<Object, Object> runningJobState =
                 nodeEngine.getHazelcastInstance().getMap("testRunningJobState");
@@ -157,6 +164,7 @@ public class TaskTest extends AbstractSeaTunnelServerTest {
                                 jobImmutableInformation,
                                 System.currentTimeMillis(),
                                 Executors.newCachedThreadPool(),
+                                server.getClassLoaderService(),
                                 instance.getFlakeIdGenerator(Constant.SEATUNNEL_ID_GENERATOR_NAME),
                                 runningJobState,
                                 runningJobStateTimestamp,

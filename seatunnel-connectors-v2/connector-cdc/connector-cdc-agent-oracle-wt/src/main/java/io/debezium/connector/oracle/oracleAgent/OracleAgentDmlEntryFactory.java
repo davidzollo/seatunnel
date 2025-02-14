@@ -27,14 +27,19 @@ import org.whaleops.whaletunnel.oracleagent.sdk.model.OracleOperation;
 import org.whaleops.whaletunnel.oracleagent.sdk.model.OracleQmiOperation;
 import org.whaleops.whaletunnel.oracleagent.sdk.model.OracleUpdateOperation;
 
-import io.debezium.connector.oracle.OracleValueConverters;
+import io.debezium.connector.oracle.CustomOracleAgentValueConverter;
 import io.debezium.relational.Column;
 import io.debezium.relational.Table;
 import io.debezium.relational.ValueConverter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
@@ -54,6 +59,9 @@ public class OracleAgentDmlEntryFactory {
                     .appendPattern(".")
                     .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, false)
                     .optionalEnd()
+                    .optionalStart()
+                    .appendOffset("+HH:MM", "+00:00")
+                    .optionalEnd()
                     .toFormatter();
 
     private static final DateTimeFormatter DATE_FORMATTER =
@@ -70,41 +78,58 @@ public class OracleAgentDmlEntryFactory {
                     .appendOffset("+HH:MM", "")
                     .toFormatter();
 
-    public static List<OracleAgentDmlEntry> transformOperation(
-            OracleValueConverters oracleValueConverters, OracleOperation operation, Table table) {
+    private static final DateTimeFormatter ZONED_FORMATTER = DateTimeFormatter.ISO_ZONED_DATE_TIME;
+
+    private final ZoneId serverTimeZone;
+
+    public OracleAgentDmlEntryFactory(ZoneId serverTimeZone) {
+        this.serverTimeZone = serverTimeZone;
+    }
+
+    public List<OracleAgentDmlEntry> transformOperation(
+            CustomOracleAgentValueConverter customOracleAgentValueConverter,
+            OracleOperation operation,
+            Table table) {
         switch (operation.getType()) {
             case OracleInsertOperation.TYPE:
                 return Collections.singletonList(
                         transformInsert(
-                                oracleValueConverters, (OracleInsertOperation) operation, table));
+                                customOracleAgentValueConverter,
+                                (OracleInsertOperation) operation,
+                                table));
             case OracleUpdateOperation.TYPE:
                 return Collections.singletonList(
                         transformUpdate(
-                                oracleValueConverters, (OracleUpdateOperation) operation, table));
+                                customOracleAgentValueConverter,
+                                (OracleUpdateOperation) operation,
+                                table));
             case OracleDeleteOperation.TYPE:
                 return Collections.singletonList(
                         transformDelete(
-                                oracleValueConverters, (OracleDeleteOperation) operation, table));
+                                customOracleAgentValueConverter,
+                                (OracleDeleteOperation) operation,
+                                table));
             case OracleQmiOperation.TYPE:
                 return transformBatchInsert(
-                        oracleValueConverters, (OracleQmiOperation) operation, table);
+                        customOracleAgentValueConverter, (OracleQmiOperation) operation, table);
             default:
                 throw new IllegalArgumentException(
                         "Unknown supported operation type: " + operation.getType());
         }
     }
 
-    public static OracleAgentDmlEntry transformInsert(
-            OracleValueConverters oracleValueConverters,
+    public OracleAgentDmlEntry transformInsert(
+            CustomOracleAgentValueConverter customOracleAgentValueConverter,
             OracleInsertOperation insertOperation,
             Table table) {
         Object[] newValues =
-                getWholeColumnValues(oracleValueConverters, insertOperation.getInsertRow(), table);
+                getWholeColumnValues(
+                        customOracleAgentValueConverter, insertOperation.getInsertRow(), table);
         return OracleAgentDmlEntryImpl.forInsert(newValues);
     }
 
-    public static OracleAgentDmlEntry transformUpdate(
-            OracleValueConverters oracleValueConverters,
+    public OracleAgentDmlEntry transformUpdate(
+            CustomOracleAgentValueConverter customOracleAgentValueConverter,
             OracleUpdateOperation updateOperation,
             Table table) {
         try {
@@ -112,14 +137,17 @@ public class OracleAgentDmlEntryFactory {
             Map<String, String> newRow = updateOperation.getUpdatedRow();
             Map<String, String> oldRow = updateOperation.getUpdateCondition();
 
-            Object[] oldValues = getWholeColumnValues(oracleValueConverters, oldRow, table);
+            Object[] oldValues =
+                    getWholeColumnValues(customOracleAgentValueConverter, oldRow, table);
             Object[] newValues = new Object[columns.size()];
             for (int i = 0; i < columns.size(); i++) {
                 Column column = columns.get(i);
                 if (newRow.containsKey(column.name())) {
                     newValues[i] =
                             transformToOracleType(
-                                    oracleValueConverters, newRow.get(column.name()), column);
+                                    customOracleAgentValueConverter,
+                                    newRow.get(column.name()),
+                                    column);
                 } else {
                     newValues[i] = oldValues[i];
                 }
@@ -135,17 +163,18 @@ public class OracleAgentDmlEntryFactory {
         }
     }
 
-    public static OracleAgentDmlEntry transformDelete(
-            OracleValueConverters oracleValueConverters,
+    public OracleAgentDmlEntry transformDelete(
+            CustomOracleAgentValueConverter customOracleAgentValueConverter,
             OracleDeleteOperation deleteOperation,
             Table table) {
         Object[] oldValues =
-                getWholeColumnValues(oracleValueConverters, deleteOperation.getDeletedRow(), table);
+                getWholeColumnValues(
+                        customOracleAgentValueConverter, deleteOperation.getDeletedRow(), table);
         return OracleAgentDmlEntryImpl.forDelete(oldValues);
     }
 
-    public static List<OracleAgentDmlEntry> transformBatchInsert(
-            OracleValueConverters oracleValueConverters,
+    public List<OracleAgentDmlEntry> transformBatchInsert(
+            CustomOracleAgentValueConverter customOracleAgentValueConverter,
             OracleQmiOperation oracleQmiOperation,
             Table table) {
         return oracleQmiOperation.getInsertRows().stream()
@@ -153,12 +182,12 @@ public class OracleAgentDmlEntryFactory {
                         insertRow ->
                                 OracleAgentDmlEntryImpl.forInsert(
                                         getWholeColumnValues(
-                                                oracleValueConverters, insertRow, table)))
+                                                customOracleAgentValueConverter, insertRow, table)))
                 .collect(Collectors.toList());
     }
 
-    private static Object[] getWholeColumnValues(
-            OracleValueConverters oracleValueConverters,
+    private Object[] getWholeColumnValues(
+            CustomOracleAgentValueConverter customOracleAgentValueConverter,
             Map<String, String> columnValues,
             Table table) {
         try {
@@ -168,7 +197,9 @@ public class OracleAgentDmlEntryFactory {
                 Column column = columns.get(i);
                 objects[i] =
                         transformToOracleType(
-                                oracleValueConverters, columnValues.get(column.name()), column);
+                                customOracleAgentValueConverter,
+                                columnValues.get(column.name()),
+                                column);
             }
             return objects;
         } catch (Exception ex) {
@@ -181,8 +212,10 @@ public class OracleAgentDmlEntryFactory {
         }
     }
 
-    private static Object transformToOracleType(
-            OracleValueConverters oracleValueConverters, String value, Column column) {
+    private Object transformToOracleType(
+            CustomOracleAgentValueConverter customOracleAgentValueConverter,
+            String value,
+            Column column) {
         Object oracleValue = value;
 
         // Oracle agent doesn't distinguish between null and empty string
@@ -191,24 +224,40 @@ public class OracleAgentDmlEntryFactory {
         }
 
         try {
-            if (column.typeName().equals("DATE")) {
+            if ("DATE".equals(column.typeName())) {
                 oracleValue = LocalDate.from(DATE_FORMATTER.parse(value));
             }
         } catch (Exception ex) {
             // this is a tmp solution
-            oracleValue = LocalDate.from(TIMESTAMP_FORMATTER.parse(value));
+            oracleValue = LocalDateTime.from(TIMESTAMP_FORMATTER.parse(value));
         }
 
         if (column.typeName().startsWith("TIMESTAMP")) {
-            oracleValue = LocalDateTime.from(TIMESTAMP_FORMATTER.parse(value));
+            if (column.typeName().contains("WITH TIME ZONE")) {
+                //  TIMESTAMP WITH TIME ZONE
+                if (value.contains("[")) {
+                    oracleValue = ZonedDateTime.parse(value, ZONED_FORMATTER);
+                } else {
+                    oracleValue = OffsetDateTime.parse(value, TIMESTAMP_FORMATTER);
+                }
+            } else if (column.typeName().contains("WITH LOCAL TIME ZONE")) {
+                //  TIMESTAMP WITH LOCAL TIME ZONE
+                LocalDateTime localDateTime = LocalDateTime.parse(value, TIMESTAMP_FORMATTER);
+                ZoneOffset zoneOffset = serverTimeZone.getRules().getOffset(Instant.now());
+                oracleValue = localDateTime.atOffset(zoneOffset);
+            } else {
+                oracleValue = LocalDateTime.from(TIMESTAMP_FORMATTER.parse(value));
+            }
         }
-        SchemaBuilder schemaBuilder = oracleValueConverters.schemaBuilder(column);
+
+        SchemaBuilder schemaBuilder = customOracleAgentValueConverter.schemaBuilder(column);
         if (schemaBuilder == null) {
             return oracleValue;
         }
         Schema schema = schemaBuilder.build();
         Field field = new Field(column.name(), 1, schema);
-        final ValueConverter valueConverter = oracleValueConverters.converter(column, field);
+        final ValueConverter valueConverter =
+                customOracleAgentValueConverter.converter(column, field);
         return valueConverter.convert(oracleValue);
     }
 }

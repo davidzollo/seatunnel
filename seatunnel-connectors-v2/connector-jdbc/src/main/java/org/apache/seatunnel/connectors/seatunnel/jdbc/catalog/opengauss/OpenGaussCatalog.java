@@ -23,13 +23,6 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.psql.PostgresCatal
 
 public class OpenGaussCatalog extends PostgresCatalog {
 
-    static {
-        SYS_DATABASES.clear();
-        SYS_DATABASES.add("omm");
-        SYS_DATABASES.add("template0");
-        SYS_DATABASES.add("template1");
-    }
-
     public OpenGaussCatalog(
             String catalogName,
             String username,

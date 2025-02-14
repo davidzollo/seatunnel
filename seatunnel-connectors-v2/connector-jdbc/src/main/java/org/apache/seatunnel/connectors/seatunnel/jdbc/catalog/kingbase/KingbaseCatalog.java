@@ -36,17 +36,13 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Sets;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class KingbaseCatalog extends AbstractJdbcCatalog {
 
@@ -111,7 +107,6 @@ public class KingbaseCatalog extends AbstractJdbcCatalog {
                     + "    AND a.attnum > 0\n"
                     + "ORDER BY \n"
                     + "    a.attnum;";
-    protected final Map<String, Connection> connectionMap;
 
     public KingbaseCatalog(
             String catalogName,
@@ -120,7 +115,6 @@ public class KingbaseCatalog extends AbstractJdbcCatalog {
             JdbcUrlUtil.UrlInfo urlInfo,
             String defaultSchema) {
         super(catalogName, username, pwd, urlInfo, defaultSchema);
-        this.connectionMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -175,9 +169,9 @@ public class KingbaseCatalog extends AbstractJdbcCatalog {
     @Override
     public List<String> listDatabases() throws CatalogException {
         List<String> dbNames = new ArrayList<>();
-        try (Connection connection = DriverManager.getConnection(defaultUrl, username, pwd);
-                PreparedStatement statement =
-                        connection.prepareStatement("select datname from sys_database;");
+        try (PreparedStatement statement =
+                        getConnection(defaultUrl)
+                                .prepareStatement("select datname from sys_database;");
                 ResultSet re = statement.executeQuery()) {
             while (re.next()) {
                 String dbName = re.getString("datname");
@@ -197,8 +191,7 @@ public class KingbaseCatalog extends AbstractJdbcCatalog {
         List<String> tableNames = new ArrayList<>();
         String query = "SELECT table_schema, table_name FROM information_schema.tables";
         String dbUrl = getUrlFromDatabaseName(databaseName);
-        try (Connection connection = DriverManager.getConnection(dbUrl, username, pwd);
-                Statement statement = connection.createStatement();
+        try (Statement statement = getConnection(dbUrl).createStatement();
                 ResultSet resultSet = statement.executeQuery(query)) {
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("table_schema");
@@ -250,19 +243,6 @@ public class KingbaseCatalog extends AbstractJdbcCatalog {
                         .comment(columnComment)
                         .build();
         return KingbaseTypeConverter.INSTANCE.convert(typeDefine);
-    }
-
-    public Connection getConnection(String url) {
-        if (connectionMap.containsKey(url)) {
-            return connectionMap.get(url);
-        }
-        try {
-            Connection connection = DriverManager.getConnection(url, username, pwd);
-            connectionMap.put(url, connection);
-            return connection;
-        } catch (SQLException e) {
-            throw new CatalogException(String.format("Failed connecting to %s via JDBC.", url), e);
-        }
     }
 
     @Override

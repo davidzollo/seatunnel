@@ -47,22 +47,19 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class SqliteCatalog extends AbstractJdbcCatalog {
 
     protected static final Set<String> SYS_DATABASES = new HashSet<>(4);
 
-    protected final Map<String, Connection> connectionMap;
-
     public SqliteCatalog(
             String catalogName, String username, String pwd, JdbcUrlUtil.UrlInfo urlInfo) {
         // because sqlite no need username
         super(catalogName, "username", pwd, urlInfo, null);
-        this.connectionMap = new ConcurrentHashMap<>();
     }
 
+    @Override
     public Connection getConnection(String url) {
         if (connectionMap.containsKey(url)) {
             return connectionMap.get(url);
@@ -74,19 +71,6 @@ public class SqliteCatalog extends AbstractJdbcCatalog {
         } catch (SQLException e) {
             throw new CatalogException(String.format("Failed connecting to %s via JDBC.", url), e);
         }
-    }
-
-    @Override
-    public void close() throws CatalogException {
-        for (Map.Entry<String, Connection> entry : connectionMap.entrySet()) {
-            try {
-                entry.getValue().close();
-            } catch (SQLException e) {
-                throw new CatalogException(
-                        String.format("Failed to close %s via JDBC.", entry.getKey()), e);
-            }
-        }
-        super.close();
     }
 
     @Override

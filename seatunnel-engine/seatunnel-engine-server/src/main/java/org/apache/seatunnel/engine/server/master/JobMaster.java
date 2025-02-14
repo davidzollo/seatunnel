@@ -32,6 +32,7 @@ import org.apache.seatunnel.engine.common.config.server.CheckpointStorageConfig;
 import org.apache.seatunnel.engine.common.exception.SeaTunnelEngineException;
 import org.apache.seatunnel.engine.common.utils.ExceptionUtil;
 import org.apache.seatunnel.engine.common.utils.PassiveCompletableFuture;
+import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.engine.core.dag.logical.LogicalDag;
 import org.apache.seatunnel.engine.core.job.ConnectorJarIdentifier;
 import org.apache.seatunnel.engine.core.job.JobDAGInfo;
@@ -66,7 +67,6 @@ import com.hazelcast.core.OperationTimeoutException;
 import com.hazelcast.flakeidgen.FlakeIdGenerator;
 import com.hazelcast.internal.serialization.Data;
 import com.hazelcast.jet.datamodel.Tuple2;
-import com.hazelcast.jet.impl.execution.init.CustomClassLoadedObject;
 import com.hazelcast.logging.ILogger;
 import com.hazelcast.logging.Logger;
 import com.hazelcast.map.IMap;
@@ -74,13 +74,14 @@ import com.hazelcast.spi.impl.NodeEngine;
 import lombok.Getter;
 import lombok.NonNull;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -211,20 +212,23 @@ public class JobMaster {
                         jobImmutableInformation.getJobId(),
                         jobImmutableInformation.getPluginJarsUrls()));
         ClassLoader appClassLoader = Thread.currentThread().getContextClassLoader();
-        ClassLoader classLoader =
-                seaTunnelServer
-                        .getClassLoaderService()
-                        .getClassLoader(
-                                jobImmutableInformation.getJobId(),
-                                jobImmutableInformation.getPluginJarsUrls());
+
+        List<Set<URL>> logicalVertexJarsList = jobImmutableInformation.getLogicalVertexJarsList();
+        List<ClassLoader> logicalVertexClassLoaders = new ArrayList<>();
+        for (Set<URL> urls : logicalVertexJarsList) {
+            logicalVertexClassLoaders.add(
+                    seaTunnelServer
+                            .getClassLoaderService()
+                            .getClassLoader(jobImmutableInformation.getJobId(), urls));
+        }
         logicalDag =
-                CustomClassLoadedObject.deserializeWithCustomClassLoader(
+                DAGUtils.restoreLogicalDag(
+                        jobImmutableInformation,
                         nodeEngine.getSerializationService(),
-                        classLoader,
-                        jobImmutableInformation.getLogicalDag());
+                        logicalVertexClassLoaders);
+
         final Tuple2<PhysicalPlan, Map<Integer, CheckpointPlan>> planTuple;
         try {
-            Thread.currentThread().setContextClassLoader(classLoader);
             planTuple =
                     PlanUtils.fromLogicalDAG(
                             logicalDag,
@@ -232,6 +236,7 @@ public class JobMaster {
                             jobImmutableInformation,
                             initializationTimestamp,
                             executorService,
+                            seaTunnelServer.getClassLoaderService(),
                             flakeIdGenerator,
                             runningJobStateIMap,
                             runningJobStateTimestampsIMap,
@@ -240,11 +245,11 @@ public class JobMaster {
         } finally {
             // revert to app class loader, it may be changed by PlanUtils.fromLogicalDAG
             Thread.currentThread().setContextClassLoader(appClassLoader);
-            seaTunnelServer
-                    .getClassLoaderService()
-                    .releaseClassLoader(
-                            jobImmutableInformation.getJobId(),
-                            jobImmutableInformation.getPluginJarsUrls());
+            for (Set<URL> urls : logicalVertexJarsList) {
+                seaTunnelServer
+                        .getClassLoaderService()
+                        .releaseClassLoader(jobImmutableInformation.getJobId(), urls);
+            }
         }
         this.physicalPlan = planTuple.f0();
         this.physicalPlan.setJobMaster(this);

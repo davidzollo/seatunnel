@@ -158,8 +158,8 @@ public class ClientJobExecutionEnvironment extends AbstractJobEnvironment {
                         Long.parseLong(jobConfig.getJobContext().getJobId()),
                         jobConfig.getName(),
                         isStartWithSavePoint,
-                        seaTunnelHazelcastClient.getSerializationService().toData(getLogicalDag()),
-                        jobConfig,
+                        seaTunnelHazelcastClient.getSerializationService(),
+                        getLogicalDag(),
                         new ArrayList<>(jarUrls),
                         new ArrayList<>(connectorJarIdentifiers));
 

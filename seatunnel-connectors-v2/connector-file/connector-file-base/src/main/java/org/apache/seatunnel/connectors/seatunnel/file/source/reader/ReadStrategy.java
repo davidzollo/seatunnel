@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.seatunnel.file.source.reader;
 import org.apache.seatunnel.shade.com.typesafe.config.Config;
 
 import org.apache.seatunnel.api.source.Collector;
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
@@ -57,6 +58,8 @@ public interface ReadStrategy extends Serializable {
 
     // todo: use CatalogTable
     void setSeaTunnelRowTypeInfo(SeaTunnelRowType seaTunnelRowType);
+
+    void setCatalogTable(CatalogTable catalogTable);
 
     List<String> getFileNamesByPath(String path) throws IOException;
 

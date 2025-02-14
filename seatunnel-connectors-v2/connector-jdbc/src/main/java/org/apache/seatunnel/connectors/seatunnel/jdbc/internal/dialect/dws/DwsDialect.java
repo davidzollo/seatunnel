@@ -22,6 +22,10 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseI
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectTypeMapper;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.psql.PostgresDialect;
 
+import java.util.Arrays;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 public class DwsDialect extends PostgresDialect {
     private static final long serialVersionUID = -5834746193472465210L;
 
@@ -38,5 +42,32 @@ public class DwsDialect extends PostgresDialect {
     @Override
     public JdbcDialectTypeMapper getJdbcDialectTypeMapper() {
         return new DwsTypeMapper();
+    }
+
+    @Override
+    public Optional<String> getUpsertStatement(
+            String database,
+            String tableName,
+            String[] fieldNames,
+            String[] uniqueKeyFields,
+            boolean isPrimaryKeyUpdated) {
+        String updateClause =
+                Arrays.stream(fieldNames)
+                        .filter(
+                                fieldName ->
+                                        isPrimaryKeyUpdated
+                                                || !Arrays.asList(uniqueKeyFields)
+                                                        .contains(fieldName))
+                        .map(
+                                fieldName ->
+                                        quoteIdentifier(fieldName)
+                                                + "=EXCLUDED."
+                                                + quoteIdentifier(fieldName))
+                        .collect(Collectors.joining(", "));
+        String upsertSQL =
+                String.format(
+                        "%s ON DUPLICATE KEY UPDATE %s",
+                        getInsertIntoStatement(database, tableName, fieldNames), updateClause);
+        return Optional.of(upsertSQL);
     }
 }

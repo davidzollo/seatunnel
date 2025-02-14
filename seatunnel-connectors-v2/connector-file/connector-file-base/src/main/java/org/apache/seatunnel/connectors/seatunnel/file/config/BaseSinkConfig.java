@@ -50,7 +50,7 @@ public class BaseSinkConfig {
     public static final Option<CompressFormat> COMPRESS_CODEC =
             Options.key("compress_codec")
                     .enumType(CompressFormat.class)
-                    .defaultValue(CompressFormat.SNAPPY)
+                    .defaultValue(CompressFormat.NONE)
                     .withDescription("Compression codec");
 
     public static final Option<CompressFormat> TXT_COMPRESS =
@@ -179,6 +179,20 @@ public class BaseSinkConfig {
                                     + "like `test_${uuid}_${now}`,`${now}` represents the current time, "
                                     + "and its format can be defined by specifying the option `filename_time_format`.");
 
+    public static final Option<Boolean> SINGLE_FILE_MODE =
+            Options.key("single_file_mode")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether to write all data to a single file in each parallelism task");
+
+    public static final Option<Boolean> CREATE_EMPTY_FILE_WHEN_NO_DATA =
+            Options.key("create_empty_file_when_no_data")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether to generate an empty file when there is no data to write");
+
     public static final Option<String> FILENAME_TIME_FORMAT =
             Options.key("filename_time_format")
                     .stringType()
@@ -228,6 +242,27 @@ public class BaseSinkConfig {
                     .noDefaultValue()
                     .withDescription("To be written sheet name,only valid for excel files");
 
+    public static final Option<String> XML_ROOT_TAG =
+            Options.key("xml_root_tag")
+                    .stringType()
+                    .defaultValue("RECORDS")
+                    .withDescription(
+                            "Specifies the tag name of the root element within the XML file, only valid for xml files, default value is 'RECORDS'");
+
+    public static final Option<String> XML_ROW_TAG =
+            Options.key("xml_row_tag")
+                    .stringType()
+                    .defaultValue("RECORD")
+                    .withDescription(
+                            "Specifies the tag name of the data rows within the XML file, only valid for xml files, default value is 'RECORD'");
+
+    public static final Option<Boolean> XML_USE_ATTR_FORMAT =
+            Options.key("xml_use_attr_format")
+                    .booleanType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Specifies whether to process data using the tag attribute format, only valid for XML files.");
+
     public static final Option<Boolean> ENABLE_HEADER_WRITE =
             Options.key("enable_header_write")
                     .booleanType()
@@ -270,4 +305,10 @@ public class BaseSinkConfig {
                     .defaultValue(128 * 1024 * 1024L)
                     .withDescription(
                             "When the data in the buff reaches a certain value, it will be written");
+
+    public static final Option<DbfVersion> DBF_VERSION =
+            Options.key("dbf_version")
+                    .enumType(DbfVersion.class)
+                    .defaultValue(DbfVersion.DEFAULT)
+                    .withDescription("Dbf version");
 }

@@ -38,6 +38,7 @@ import io.debezium.time.MicroTimestamp;
 import io.debezium.time.NanoTime;
 import io.debezium.time.NanoTimestamp;
 import io.debezium.time.Timestamp;
+import io.debezium.time.ZonedTimestamp;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -47,6 +48,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -368,6 +370,15 @@ public class SeaTunnelRowDebeziumDeserializationConverters implements Serializab
                             return toLocalDateTime(nano / 1000_000, (int) (nano % 1000_000));
                         default:
                     }
+                }
+                if (dbzObj instanceof String) {
+                    String data = (String) dbzObj;
+                    if (schema.name().equals(ZonedTimestamp.SCHEMA_NAME)) {
+                        return ZonedDateTime.parse(data)
+                                .withZoneSameInstant(ZoneId.systemDefault())
+                                .toLocalDateTime();
+                    }
+                    return LocalDateTime.ofInstant(Instant.parse(data), serverTimeZone);
                 }
                 return TemporalConversions.toLocalDateTime(dbzObj, serverTimeZone);
             }

@@ -18,16 +18,24 @@
 package org.apache.seatunnel.connectors.seatunnel.maxcompute.source;
 
 import org.apache.seatunnel.api.source.SourceSplit;
+import org.apache.seatunnel.api.table.catalog.TablePath;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
+@Getter
+@EqualsAndHashCode
 public class MaxcomputeSourceSplit implements SourceSplit {
-    @Getter private int splitId;
-    @Getter private long rowNum;
+    private final int splitId;
+    private final long rowStart;
+    private final long rowNum;
+    private final TablePath tablePath;
 
-    public MaxcomputeSourceSplit(int splitId, long rowNum) {
+    public MaxcomputeSourceSplit(int splitId, long rowStart, long rowNum, TablePath tablePath) {
         this.splitId = splitId;
+        this.rowStart = rowStart;
         this.rowNum = rowNum;
+        this.tablePath = tablePath;
     }
 
     @Override

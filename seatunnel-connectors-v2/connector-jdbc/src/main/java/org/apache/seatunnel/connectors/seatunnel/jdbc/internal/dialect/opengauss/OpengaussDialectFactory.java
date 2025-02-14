@@ -43,6 +43,6 @@ public class OpengaussDialectFactory implements JdbcDialectFactory {
         if ("postgresLow".equalsIgnoreCase(compatibleMode)) {
             return new PostgresLowDialect(fieldIde);
         }
-        return new PostgresDialect(fieldIde);
+        return new OpengaussDialect();
     }
 }

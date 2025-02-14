@@ -127,6 +127,33 @@
                     </artifactSet>
                 </configuration>
             </plugin>
+
+            <!-- unpack i18n files from whaletunnel-app -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>unpack-i18n</id>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <phase>prepare-package</phase>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.whaleops.whaletunnel</groupId>
+                                    <artifactId>whaletunnel-app</artifactId>
+                                    <version>2.6-WS-test-SNAPSHOT</version>
+                                    <type>jar</type>
+                                    <includes>**/i18n*.config</includes>
+                                    <outputDirectory>${project.build.directory}/classes</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 

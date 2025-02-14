@@ -23,6 +23,7 @@ import org.apache.seatunnel.connectors.seatunnel.file.sink.writer.AbstractWriteS
 
 import lombok.NonNull;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 
@@ -45,6 +46,11 @@ public class S3RedshiftChangelogWriteStrategy extends AbstractWriteStrategy {
     @Override
     public void write(@NonNull SeaTunnelRow seaTunnelRow) {
         throw new UnsupportedOperationException("Non-batch writes are not supported for changelog");
+    }
+
+    @Override
+    public Object getOrCreateOutputStream(String path) throws IOException {
+        throw new UnsupportedOperationException();
     }
 
     public synchronized void write(Collection<SeaTunnelRow> batch) {
