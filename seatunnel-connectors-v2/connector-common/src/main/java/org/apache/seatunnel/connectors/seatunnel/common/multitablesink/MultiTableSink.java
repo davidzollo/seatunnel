@@ -71,7 +71,7 @@ public class MultiTableSink
                 if (multiTableWriterTtl < 0) {
                     writers.put(
                             SinkIdentifier.of(tableIdentifier, index),
-                            sink.createWriter(new SinkContextProxy(index, replicaNum, context)));
+                            sink.createWriter(new SinkContextProxy(index, context)));
                 } else {
                     writers.put(
                             SinkIdentifier.of(tableIdentifier, index),
@@ -80,7 +80,6 @@ public class MultiTableSink
                                     tableIdentifier,
                                     index,
                                     sink,
-                                    replicaNum,
                                     context,
                                     multiTableWriterTtl));
                 }
@@ -110,13 +109,11 @@ public class MultiTableSink
                     if (state.isEmpty()) {
                         writers.put(
                                 sinkIdentifier,
-                                sink.createWriter(
-                                        new SinkContextProxy(index, replicaNum, context)));
+                                sink.createWriter(new SinkContextProxy(index, context)));
                     } else {
                         writers.put(
                                 sinkIdentifier,
-                                sink.restoreWriter(
-                                        new SinkContextProxy(index, replicaNum, context), state));
+                                sink.restoreWriter(new SinkContextProxy(index, context), state));
                     }
                 } else {
                     if (state.isEmpty()) {
@@ -127,7 +124,6 @@ public class MultiTableSink
                                         tableIdentifier,
                                         index,
                                         sink,
-                                        replicaNum,
                                         context,
                                         multiTableWriterTtl));
                     } else {
@@ -138,7 +134,6 @@ public class MultiTableSink
                                         tableIdentifier,
                                         index,
                                         sink,
-                                        replicaNum,
                                         context,
                                         multiTableWriterTtl,
                                         state));

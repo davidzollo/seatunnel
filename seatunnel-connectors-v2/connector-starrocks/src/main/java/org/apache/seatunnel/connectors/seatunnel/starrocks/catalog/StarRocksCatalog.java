@@ -62,9 +62,11 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.apache.seatunnel.shade.com.google.common.base.Preconditions.checkArgument;
 
@@ -81,7 +83,13 @@ public class StarRocksCatalog implements Catalog {
     private final String template;
     private Connection conn;
 
+    private static final Set<String> SYS_DATABASES = new HashSet<>();
     private static final Logger LOG = LoggerFactory.getLogger(StarRocksCatalog.class);
+
+    static {
+        SYS_DATABASES.add("information_schema");
+        SYS_DATABASES.add("_statistics_");
+    }
 
     public StarRocksCatalog(
             String catalogName, String username, String pwd, String defaultUrl, String template) {
@@ -107,8 +115,10 @@ public class StarRocksCatalog implements Catalog {
             List<String> databases = new ArrayList<>();
 
             while (rs.next()) {
-
-                databases.add(rs.getString(1));
+                String databaseName = rs.getString(1);
+                if (!SYS_DATABASES.contains(databaseName)) {
+                    databases.add(rs.getString(1));
+                }
             }
 
             return databases;

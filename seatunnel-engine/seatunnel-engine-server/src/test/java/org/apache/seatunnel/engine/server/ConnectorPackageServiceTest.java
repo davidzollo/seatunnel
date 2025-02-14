@@ -275,8 +275,8 @@ public class ConnectorPackageServiceTest {
                 new JobImmutableInformation(
                         jobId,
                         "Test",
-                        instance1.getSerializationService(),
-                        logicalDag,
+                        instance1.getSerializationService().toData(logicalDag),
+                        logicalDag.getJobConfig(),
                         jarUrls,
                         connectorJarIdentifiers);
 

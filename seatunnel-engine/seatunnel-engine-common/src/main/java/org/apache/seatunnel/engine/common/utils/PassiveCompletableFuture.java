@@ -16,16 +16,12 @@
 
 package org.apache.seatunnel.engine.common.utils;
 
-import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
+import java.util.concurrent.CompletableFuture;
 
 /** A future which prevents completion by outside caller */
 public class PassiveCompletableFuture<T> extends CompletableFuture<T> {
 
     public PassiveCompletableFuture() {}
-
-    public PassiveCompletableFuture(java.util.concurrent.CompletableFuture<T> chainedFuture) {
-        this(new CompletableFuture<>(chainedFuture));
-    }
 
     public PassiveCompletableFuture(CompletableFuture<T> chainedFuture) {
         if (chainedFuture != null) {

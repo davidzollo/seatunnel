@@ -18,10 +18,9 @@
 package org.apache.seatunnel.api.tracing;
 
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class MDCFunction<T, R> implements Function<T, R> {
-    private final Supplier<MDCContext> contextSupplier;
+    private final MDCContext context;
     protected final Function<T, R> delegate;
 
     public MDCFunction(Function<T, R> delegate) {
@@ -29,18 +28,17 @@ public class MDCFunction<T, R> implements Function<T, R> {
     }
 
     public MDCFunction(MDCContext context, Function<T, R> delegate) {
-        this(() -> context, delegate);
-    }
-
-    public MDCFunction(Supplier<MDCContext> contextSupplier, Function<T, R> delegate) {
-        this.contextSupplier = contextSupplier;
+        this.context = context;
         this.delegate = delegate;
     }
 
     @Override
     public R apply(T t) {
-        try (MDCContext ignored = contextSupplier.get().activate()) {
+        try {
+            context.put();
             return delegate.apply(t);
+        } finally {
+            context.clear();
         }
     }
 }

@@ -41,7 +41,6 @@ import io.debezium.util.Clock;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigInteger;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -54,14 +53,13 @@ public class OracleAgentStreamingChangeEventSource
     private static final Long NO_DATA_AVAILABLE_SLEEP_MS = 5_000L;
 
     private final OracleAgentConnectorConfig oracle9BridgeConnectorConfig;
-    private final CustomOracleAgentValueConverter customOracleAgentValueConverter;
+    private final OracleValueConverters oracleValueConverters;
     private final OracleAgentSourceConfig sourceConfig;
     private final JdbcSourceEventDispatcher eventDispatcher;
     private ChangeEventSourceContext context;
     private final OracleDatabaseSchema oracleDatabaseSchema;
     private final ErrorHandler errorHandler;
     private final Clock clock;
-    private final OracleAgentDmlEntryFactory dmlEntryFactory;
     // todo: we don't support multiple database now, since the oracle9bridge event doesn't contains
     // the database field,
     // one oracle9bridge should only bind to one database instance.
@@ -77,10 +75,8 @@ public class OracleAgentStreamingChangeEventSource
             OracleAgentSourceConfig sourceConfig,
             JdbcSourceEventDispatcher eventDispatcher,
             ErrorHandler errorHandler,
-            OracleDatabaseSchema oracleDatabaseSchema,
-            String serverTimeZone) {
-        this.customOracleAgentValueConverter =
-                new CustomOracleAgentValueConverter(connectorConfig, oracleConnection);
+            OracleDatabaseSchema oracleDatabaseSchema) {
+        this.oracleValueConverters = new OracleValueConverters(connectorConfig, oracleConnection);
         this.oracle9BridgeConnectorConfig = connectorConfig;
         this.sourceConfig = sourceConfig;
         this.eventDispatcher = eventDispatcher;
@@ -91,7 +87,6 @@ public class OracleAgentStreamingChangeEventSource
                 tableIds.stream().collect(Collectors.toMap(TableId::table, Function.identity()));
         this.tables = tableIds.stream().map(TableId::table).collect(Collectors.toList());
         this.tableOwners = tableIds.stream().map(TableId::schema).collect(Collectors.toList());
-        this.dmlEntryFactory = new OracleAgentDmlEntryFactory(ZoneId.of(serverTimeZone));
     }
 
     @Override
@@ -196,8 +191,8 @@ public class OracleAgentStreamingChangeEventSource
                 continue;
             }
             List<OracleAgentDmlEntry> dmlEntries =
-                    dmlEntryFactory.transformOperation(
-                            customOracleAgentValueConverter, oracleOperation, table);
+                    OracleAgentDmlEntryFactory.transformOperation(
+                            oracleValueConverters, oracleOperation, table);
             for (OracleAgentDmlEntry dmlEntry : dmlEntries) {
                 offsetContext.event(tableId, DateUtils.toInstant(oracleOperation.getScntime()));
                 offsetContext.setScn(scn);

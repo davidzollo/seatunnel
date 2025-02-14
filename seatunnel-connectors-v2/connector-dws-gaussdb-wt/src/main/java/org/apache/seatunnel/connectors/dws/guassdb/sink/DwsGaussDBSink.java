@@ -168,11 +168,6 @@ public class DwsGaussDBSink
 
     @Override
     public Optional<SaveModeHandler> getSaveModeHandler() {
-        try {
-            Class.forName("com.huawei.gauss200.jdbc.Driver");
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException(e);
-        }
         DwsGaussDBCatalog dwsGaussDBCatalog =
                 new DwsGaussDBCatalogFactory()
                         .createCatalog(catalogTable.getCatalogName(), readonlyConfig);

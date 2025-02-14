@@ -18,10 +18,9 @@
 package org.apache.seatunnel.api.tracing;
 
 import java.util.Comparator;
-import java.util.function.Supplier;
 
 public class MDCComparator<T> implements Comparator<T> {
-    private final Supplier<MDCContext> contextSupplier;
+    private final MDCContext context;
     private final Comparator<T> delegate;
 
     public MDCComparator(Comparator<T> delegate) {
@@ -29,18 +28,17 @@ public class MDCComparator<T> implements Comparator<T> {
     }
 
     public MDCComparator(MDCContext context, Comparator<T> delegate) {
-        this(() -> context, delegate);
-    }
-
-    public MDCComparator(Supplier<MDCContext> contextSupplier, Comparator<T> delegate) {
-        this.contextSupplier = contextSupplier;
+        this.context = context;
         this.delegate = delegate;
     }
 
     @Override
     public int compare(T o1, T o2) {
-        try (MDCContext ignored = contextSupplier.get().activate()) {
+        try {
+            context.put();
             return delegate.compare(o1, o2);
+        } finally {
+            context.clear();
         }
     }
 }

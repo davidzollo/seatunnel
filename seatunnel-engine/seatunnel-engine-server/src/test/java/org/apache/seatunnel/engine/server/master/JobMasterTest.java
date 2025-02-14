@@ -298,8 +298,8 @@ public class JobMasterTest extends AbstractSeaTunnelServerTest {
                         jobId,
                         "Test",
                         restore,
-                        nodeEngine.getSerializationService(),
-                        testLogicalDag,
+                        nodeEngine.getSerializationService().toData(testLogicalDag),
+                        testLogicalDag.getJobConfig(),
                         Collections.emptyList(),
                         Collections.emptyList());
 

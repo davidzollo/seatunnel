@@ -39,7 +39,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class JsonWriteStrategy extends AbstractWriteStrategy<FSDataOutputStream> {
+public class JsonWriteStrategy extends AbstractWriteStrategy {
     private final byte[] rowDelimiter;
     protected SerializationSchema serializationSchema;
     private final LinkedHashMap<String, FSDataOutputStream> beingWrittenOutputStream;
@@ -109,8 +109,7 @@ public class JsonWriteStrategy extends AbstractWriteStrategy<FSDataOutputStream>
         isFirstWrite.clear();
     }
 
-    @Override
-    public FSDataOutputStream getOrCreateOutputStream(@NonNull String filePath) {
+    protected FSDataOutputStream getOrCreateOutputStream(@NonNull String filePath) {
         FSDataOutputStream fsDataOutputStream = beingWrittenOutputStream.get(filePath);
         if (fsDataOutputStream == null) {
             try {

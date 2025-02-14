@@ -17,126 +17,79 @@
 
 package org.apache.seatunnel.connectors.seatunnel.iceberg.source.enumerator;
 
+import org.apache.seatunnel.api.source.SourceSplitEnumerator;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
-import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.config.SourceConfig;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.source.enumerator.scan.IcebergScanContext;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.source.enumerator.scan.IcebergScanSplitPlanner;
 import org.apache.seatunnel.connectors.seatunnel.iceberg.source.split.IcebergFileScanTaskSplit;
 
-import org.apache.commons.lang3.tuple.Pair;
-import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 public class IcebergStreamSplitEnumerator extends AbstractSplitEnumerator {
 
-    private final ConcurrentMap<TablePath, IcebergEnumeratorPosition> tableOffsets;
-    private volatile boolean initialized = false;
+    private final IcebergScanContext icebergScanContext;
+    private final AtomicReference<IcebergEnumeratorPosition> enumeratorPosition;
 
     public IcebergStreamSplitEnumerator(
-            Context<IcebergFileScanTaskSplit> context,
-            SourceConfig sourceConfig,
-            Map<TablePath, CatalogTable> catalogTables,
-            Map<TablePath, Pair<Schema, Schema>> tableSchemaProjections) {
-        this(context, sourceConfig, catalogTables, tableSchemaProjections, null);
-    }
-
-    public IcebergStreamSplitEnumerator(
-            Context<IcebergFileScanTaskSplit> context,
-            SourceConfig sourceConfig,
-            Map<TablePath, CatalogTable> catalogTables,
-            Map<TablePath, Pair<Schema, Schema>> tableSchemaProjections,
-            IcebergSplitEnumeratorState state) {
-        super(context, sourceConfig, catalogTables, tableSchemaProjections, state);
-        this.tableOffsets = new ConcurrentHashMap<>();
-        if (state != null) {
-            if (state.getLastEnumeratedPosition() != null) {
-                // TODO: Waiting for old version migration to complete before remove
-                state.setPendingTable(
-                        catalogTables.values().stream().findFirst().get().getTablePath());
-            }
-            this.tableOffsets.putAll(state.getTableOffsets());
-        }
-    }
-
-    @Override
-    public void run() throws Exception {
-        Set<Integer> readers = context.registeredReaders();
-        while (true) {
-            for (TablePath tablePath : pendingTables) {
-                checkThrowInterruptedException();
-
-                synchronized (stateLock) {
-                    log.info("Scan table {}.", tablePath);
-
-                    Collection<IcebergFileScanTaskSplit> splits = loadSplits(tablePath);
-                    log.info("Scan table {} into {} splits.", tablePath, splits.size());
-
-                    addPendingSplits(splits);
-                    assignPendingSplits(readers);
-                }
-            }
-
-            if (Boolean.FALSE.equals(initialized)) {
-                initialized = true;
-            }
-
-            stateLock.wait(sourceConfig.getIncrementScanInterval());
+            @NonNull SourceSplitEnumerator.Context<IcebergFileScanTaskSplit> context,
+            @NonNull IcebergScanContext icebergScanContext,
+            @NonNull SourceConfig sourceConfig,
+            IcebergSplitEnumeratorState restoreState,
+            CatalogTable catalogTable) {
+        super(
+                context,
+                sourceConfig,
+                restoreState != null ? restoreState.getPendingSplits() : Collections.emptyMap(),
+                catalogTable);
+        this.icebergScanContext = icebergScanContext;
+        this.enumeratorPosition = new AtomicReference<>();
+        if (restoreState != null) {
+            enumeratorPosition.set(restoreState.getLastEnumeratedPosition());
         }
     }
 
     @Override
     public IcebergSplitEnumeratorState snapshotState(long checkpointId) throws Exception {
-        synchronized (stateLock) {
-            return new IcebergSplitEnumeratorState(
-                    new ArrayList<>(pendingTables),
-                    new HashMap<>(pendingSplits),
-                    new HashMap<>(tableOffsets));
-        }
+        return new IcebergSplitEnumeratorState(enumeratorPosition.get(), pendingSplits);
     }
 
     @Override
     public void handleSplitRequest(int subtaskId) {
-        if (initialized) {
-            stateLock.notifyAll();
+        if (isOpen()) {
+            synchronized (this) {
+                if (pendingSplits.isEmpty() || pendingSplits.get(subtaskId) == null) {
+                    refreshPendingSplits();
+                }
+                assignPendingSplits(Collections.singleton(subtaskId));
+            }
         }
     }
 
-    private List<IcebergFileScanTaskSplit> loadSplits(TablePath tablePath) {
-        Table table = loadTable(tablePath);
-        IcebergEnumeratorPosition offset = tableOffsets.get(tablePath);
-        Pair<Schema, Schema> tableSchemaProjection = tableSchemaProjections.get(tablePath);
-        IcebergScanContext scanContext =
-                IcebergScanContext.streamScanContext(
-                        sourceConfig,
-                        sourceConfig.getTableConfig(tablePath),
-                        tableSchemaProjection.getRight());
+    @Override
+    protected List<IcebergFileScanTaskSplit> loadNewSplits(Table table) {
         IcebergEnumerationResult result =
-                IcebergScanSplitPlanner.planStreamSplits(table, scanContext, offset);
-        if (!Objects.equals(result.getFromPosition(), offset)) {
+                IcebergScanSplitPlanner.planStreamSplits(
+                        table, icebergScanContext, enumeratorPosition.get());
+        if (!Objects.equals(result.getFromPosition(), enumeratorPosition.get())) {
             log.info(
                     "Skip {} loaded splits because the scan starting position doesn't match "
                             + "the current enumerator position: enumerator position = {}, scan starting position = {}",
                     result.getSplits().size(),
-                    tableOffsets.get(tablePath),
+                    enumeratorPosition.get(),
                     result.getFromPosition());
             return Collections.emptyList();
         } else {
-            tableOffsets.put(tablePath, result.getToPosition());
+            enumeratorPosition.set(result.getToPosition());
             log.debug("Update enumerator position to {}", result.getToPosition());
             return result.getSplits();
         }

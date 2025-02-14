@@ -124,21 +124,13 @@ public class SeaTunnelFTPFileSystem extends FileSystem {
      * @throws IOException IOException
      */
     private FTPClient connect() throws IOException {
-        FTPClient client = new FTPClient();
+        FTPClient client = null;
         Configuration conf = getConf();
-        // Get the connection mode from configuration, default to passive_local mode
-        String connectionMode =
-                conf.get(
-                        FS_FTP_CONNECTION_MODE,
-                        FtpConnectionMode.ACTIVE_LOCAL_DATA_CONNECTION_MODE.getMode());
-
-        // Retrieve host, port, user, and password from configuration
         String host = conf.get(FS_FTP_HOST);
         int port = conf.getInt(FS_FTP_HOST_PORT, FTP.DEFAULT_PORT);
         String user = conf.get(FS_FTP_USER_PREFIX + host);
         String password = conf.get(FS_FTP_PASSWORD_PREFIX + host);
-
-        // Connect to the FTP server
+        client = new FTPClient();
         client.connect(host, port);
         int reply = client.getReplyCode();
         if (!FTPReply.isPositiveCompletion(reply)) {
@@ -148,29 +140,26 @@ public class SeaTunnelFTPFileSystem extends FileSystem {
                     NetUtils.UNKNOWN_HOST,
                     0,
                     new ConnectException("Server response " + reply));
-        }
-
-        // Log in to the FTP server
-        if (!client.login(user, password)) {
+        } else if (client.login(user, password)) {
+            client.setFileTransferMode(FTP.BLOCK_TRANSFER_MODE);
+            client.setFileType(FTP.BINARY_FILE_TYPE);
+            client.setBufferSize(DEFAULT_BUFFER_SIZE);
+        } else {
             throw new IOException(
-                    String.format(
-                            "Login failed on server - %s, port - %d as user '%s', reply code: %d",
-                            host, port, user, client.getReplyCode()));
+                    "Login failed on server - "
+                            + host
+                            + ", port - "
+                            + port
+                            + " as user '"
+                            + user
+                            + "'");
         }
 
-        // Set the file type to binary and buffer size
-        client.setFileType(FTP.BINARY_FILE_TYPE);
-        client.setBufferSize(DEFAULT_BUFFER_SIZE);
-        client.setFileTransferMode(FTP.BLOCK_TRANSFER_MODE);
-
-        // Set the connection mode
-        setFsFtpConnectionMode(client, connectionMode);
-
-        // Log successful connection information
-        LOG.info(
-                String.format(
-                        "Successfully connected to FTP server %s:%d in %s",
-                        host, port, connectionMode));
+        setFsFtpConnectionMode(
+                client,
+                conf.get(
+                        FS_FTP_CONNECTION_MODE,
+                        FtpConnectionMode.ACTIVE_LOCAL_DATA_CONNECTION_MODE.getMode()));
 
         return client;
     }
@@ -181,46 +170,16 @@ public class SeaTunnelFTPFileSystem extends FileSystem {
      * @param client FTPClient
      * @param mode mode
      */
-    private void setFsFtpConnectionMode(FTPClient client, String mode) throws IOException {
-        FtpConnectionMode connectionMode = FtpConnectionMode.fromMode(mode);
-        switch (connectionMode) {
-            case PASSIVE_LOCAL_DATA_CONNECTION_MODE:
-            case PASSIVE_LOCAL:
-                client.enterLocalPassiveMode();
-                LOG.info("Using passive mode for FTP connection");
-                break;
+    private void setFsFtpConnectionMode(FTPClient client, String mode) {
+        switch (FtpConnectionMode.fromMode(mode)) {
             case ACTIVE_LOCAL_DATA_CONNECTION_MODE:
-                // Create a test directory to check if active mode is working
-                String pathName = "/.ftptest" + System.currentTimeMillis();
-                try {
-                    client.enterLocalActiveMode();
-                    // test active mode is working or not
-                    boolean created = client.makeDirectory(pathName);
-                    if (!created) {
-                        LOG.warn("Active mode failed, switching to passive mode");
-                        throw new IOException("FTP connection active mode test failed");
-                    }
-
-                    LOG.info("Using active mode for FTP connection");
-                } catch (IOException e) {
-                    // if active mode failed, switch to passive mode
-                    client.enterLocalPassiveMode();
-                    // update the connection mode to passive mode
-                    getConf()
-                            .set(
-                                    FS_FTP_CONNECTION_MODE,
-                                    FtpConnectionMode.PASSIVE_LOCAL_DATA_CONNECTION_MODE.getMode());
-                } finally {
-                    // delete the test directory if it was created
-                    FTPFile[] files = client.listFiles(pathName);
-                    if (files != null && files.length > 0) {
-                        client.deleteFile(pathName);
-                    }
-                }
+                client.enterLocalActiveMode();
+                break;
+            case PASSIVE_LOCAL_DATA_CONNECTION_MODE:
+                client.enterLocalPassiveMode();
                 break;
             default:
-                LOG.warn(String.format("Unknown connection mode: %s, using passive mode", mode));
-                client.enterLocalPassiveMode();
+                break;
         }
     }
 
@@ -584,53 +543,30 @@ public class SeaTunnelFTPFileSystem extends FileSystem {
      */
     private boolean mkdirs(FTPClient client, Path file, FsPermission permission)
             throws IOException {
+        boolean created = true;
         Path workDir = new Path(client.printWorkingDirectory());
         Path absolute = makeAbsolute(workDir, file);
-
-        // If directory already exists, return true
-        if (exists(client, absolute)) {
-            if (isFile(client, absolute)) {
-                throw new ParentNotDirectoryException(
-                        String.format(
-                                "Can't make directory for path %s since it is a file.", absolute));
-            }
-            return true;
-        }
-
-        // Create parent directories if they don't exist
-        Path parent = absolute.getParent();
-        if (parent != null && !exists(client, parent)) {
-            mkdirs(client, parent, FsPermission.getDirDefault());
-        }
-
-        // Create the directory
         String pathName = absolute.getName();
-        String parentDir = parent != null ? parent.toUri().getPath() : "/";
-
-        // Change to parent directory
-        if (!client.changeWorkingDirectory(parentDir)) {
-            throw new IOException(
-                    String.format(
-                            "Failed to change working directory to %s, FTP reply code: %d, reply string: %s",
-                            parentDir, client.getReplyCode(), client.getReplyString()));
-        }
-
-        // Create directory
-        boolean created = client.makeDirectory(pathName);
-        if (!created) {
-            // Double check if directory was actually created (some FTP servers don't return true)
-            if (!exists(client, absolute)) {
-                throw new IOException(
-                        String.format(
-                                "Failed to create directory %s in %s, FTP reply code: %d, reply string: %s",
-                                pathName,
-                                parentDir,
-                                client.getReplyCode(),
-                                client.getReplyString()));
+        if (!exists(client, absolute)) {
+            Path parent = absolute.getParent();
+            created = parent == null || mkdirs(client, parent, FsPermission.getDirDefault());
+            if (created) {
+                String parentDir = parent.toUri().getPath();
+                client.changeWorkingDirectory(parentDir);
+                LOG.debug("Creating directory " + pathName);
+                created = client.makeDirectory(pathName);
             }
+        } else if (isFile(client, absolute)) {
+            throw new ParentNotDirectoryException(
+                    String.format(
+                            "Can't make directory for path %s since it is a file.", absolute));
+        } else {
+            LOG.debug("Skipping creation of existing directory " + file);
         }
-
-        return true;
+        if (!created) {
+            LOG.debug("Failed to create " + file);
+        }
+        return created;
     }
 
     /**

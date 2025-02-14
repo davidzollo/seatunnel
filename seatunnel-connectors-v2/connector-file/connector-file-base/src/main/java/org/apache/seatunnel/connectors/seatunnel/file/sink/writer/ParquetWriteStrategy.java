@@ -74,7 +74,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class ParquetWriteStrategy extends AbstractWriteStrategy<ParquetWriter<GenericRecord>> {
+public class ParquetWriteStrategy extends AbstractWriteStrategy {
     private final LinkedHashMap<String, ParquetWriter<GenericRecord>> beingWrittenWriter;
     private AvroSchemaConverter schemaConverter;
     private Schema schema;
@@ -143,7 +143,7 @@ public class ParquetWriteStrategy extends AbstractWriteStrategy<ParquetWriter<Ge
     public void write(@NonNull SeaTunnelRow seaTunnelRow) {
         super.write(seaTunnelRow);
         String filePath = getOrCreateFilePathBeingWritten(seaTunnelRow);
-        ParquetWriter<GenericRecord> writer = getOrCreateOutputStream(filePath);
+        ParquetWriter<GenericRecord> writer = getOrCreateWriter(filePath);
         GenericRecordBuilder recordBuilder = new GenericRecordBuilder(schema);
         for (Integer integer : sinkColumnsIndexInRow) {
             String fieldName = seaTunnelRowType.getFieldName(integer);
@@ -183,8 +183,7 @@ public class ParquetWriteStrategy extends AbstractWriteStrategy<ParquetWriter<Ge
         this.beingWrittenWriter.clear();
     }
 
-    @Override
-    public ParquetWriter<GenericRecord> getOrCreateOutputStream(@NonNull String filePath) {
+    private ParquetWriter<GenericRecord> getOrCreateWriter(@NonNull String filePath) {
         if (schema == null) {
             schema = buildAvroSchemaWithRowType(seaTunnelRowType, sinkColumnsIndexInRow);
         }

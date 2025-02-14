@@ -59,18 +59,19 @@ public class CheckpointPlanTest extends AbstractSeaTunnelServerTest {
     @Test
     public void testGenerateCheckpointPlan() {
         final IdGenerator idGenerator = new IdGenerator();
-        JobConfig config = new JobConfig();
-        config.setName("test");
-        final LogicalDag logicalDag = new LogicalDag(config, idGenerator);
+        final LogicalDag logicalDag = new LogicalDag();
         fillVirtualVertex(idGenerator, logicalDag, 2);
         fillVirtualVertex(idGenerator, logicalDag, 3);
+
+        JobConfig config = new JobConfig();
+        config.setName("test");
 
         JobImmutableInformation jobInfo =
                 new JobImmutableInformation(
                         1,
                         "Test",
-                        nodeEngine.getSerializationService(),
-                        logicalDag,
+                        nodeEngine.getSerializationService().toData(logicalDag),
+                        config,
                         Collections.emptyList(),
                         Collections.emptyList());
 
@@ -86,7 +87,6 @@ public class CheckpointPlanTest extends AbstractSeaTunnelServerTest {
                                 jobInfo,
                                 System.currentTimeMillis(),
                                 Executors.newCachedThreadPool(),
-                                server.getClassLoaderService(),
                                 instance.getFlakeIdGenerator(Constant.SEATUNNEL_ID_GENERATOR_NAME),
                                 runningJobState,
                                 runningJobStateTimestamp,

@@ -18,7 +18,6 @@
 package org.apache.seatunnel.engine.server.resourcemanager;
 
 import org.apache.seatunnel.engine.common.runtime.ExecutionMode;
-import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.engine.server.resourcemanager.opeartion.ReleaseSlotOperation;
 import org.apache.seatunnel.engine.server.resourcemanager.opeartion.ResetResourceOperation;
 import org.apache.seatunnel.engine.server.resourcemanager.opeartion.SyncWorkerProfileOperation;
@@ -38,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
@@ -162,8 +162,7 @@ public abstract class AbstractResourceManager implements ResourceManager {
     }
 
     protected <E> CompletableFuture<E> sendToMember(Operation operation, Address address) {
-        return new CompletableFuture<>(
-                NodeEngineUtil.sendOperationToMemberNode(nodeEngine, operation, address));
+        return NodeEngineUtil.sendOperationToMemberNode(nodeEngine, operation, address);
     }
 
     @Override

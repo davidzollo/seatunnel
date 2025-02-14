@@ -40,7 +40,7 @@ import java.util.Map;
  * The debezium json write strategy is same with the json write strategy. The json will only contain
  * topic, key, value field.
  */
-public class DebeziumJsonWriteStrategy extends AbstractWriteStrategy<FSDataOutputStream> {
+public class DebeziumJsonWriteStrategy extends AbstractWriteStrategy {
     private final byte[] rowDelimiter;
     protected CompatibleDebeziumJsonSerializationSchema serializationSchema;
     private final LinkedHashMap<String, FSDataOutputStream> beingWrittenOutputStream;
@@ -113,8 +113,7 @@ public class DebeziumJsonWriteStrategy extends AbstractWriteStrategy<FSDataOutpu
         beingWrittenOutputStream.clear();
     }
 
-    @Override
-    public FSDataOutputStream getOrCreateOutputStream(@NonNull String filePath) {
+    protected FSDataOutputStream getOrCreateOutputStream(@NonNull String filePath) {
         FSDataOutputStream fsDataOutputStream = beingWrittenOutputStream.get(filePath);
         if (fsDataOutputStream == null) {
             try {

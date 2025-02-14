@@ -42,7 +42,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import lombok.NonNull;
-import lombok.SneakyThrows;
 
 import java.io.File;
 import java.io.IOException;
@@ -59,7 +58,7 @@ import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public abstract class AbstractWriteStrategy<T> implements WriteStrategy<T> {
+public abstract class AbstractWriteStrategy implements WriteStrategy {
     protected final Logger log = LoggerFactory.getLogger(this.getClass());
     protected final FileSinkConfig fileSinkConfig;
     protected final CompressFormat compressFormat;
@@ -82,14 +81,12 @@ public abstract class AbstractWriteStrategy<T> implements WriteStrategy<T> {
     protected Long checkpointId = 0L;
     protected int partId = 0;
     protected int batchSize;
-    protected boolean singleFileMode;
     protected int currentBatchSize = 0;
 
     public AbstractWriteStrategy(FileSinkConfig fileSinkConfig) {
         this.fileSinkConfig = fileSinkConfig;
         this.batchSize = fileSinkConfig.getBatchSize();
         this.compressFormat = fileSinkConfig.getCompressFormat();
-        this.singleFileMode = fileSinkConfig.isSingleFileMode();
     }
 
     /**
@@ -108,7 +105,7 @@ public abstract class AbstractWriteStrategy<T> implements WriteStrategy<T> {
 
     @Override
     public void write(SeaTunnelRow seaTunnelRow) throws FileConnectorException {
-        if (currentBatchSize >= batchSize && !singleFileMode) {
+        if (currentBatchSize >= batchSize) {
             newFilePart();
             currentBatchSize = 0;
         }
@@ -233,7 +230,7 @@ public abstract class AbstractWriteStrategy<T> implements WriteStrategy<T> {
      * @return file name
      */
     @Override
-    public final String generateFileName(String transactionId) {
+    public String generateFileName(String transactionId) {
         String fileNameExpression = fileSinkConfig.getFileNameExpression();
         FileFormat fileFormat = fileSinkConfig.getFileFormat();
         String suffix = fileFormat.getSuffix();
@@ -249,10 +246,8 @@ public abstract class AbstractWriteStrategy<T> implements WriteStrategy<T> {
         valuesMap.put(Constants.NOW, formattedDate);
         valuesMap.put(timeFormat, formattedDate);
         valuesMap.put(BaseSinkConfig.TRANSACTION_EXPRESSION, transactionId);
-        String substitute = VariablesSubstitute.substitute(fileNameExpression, valuesMap);
-        if (!singleFileMode) {
-            substitute += "_" + partId;
-        }
+        String substitute =
+                VariablesSubstitute.substitute(fileNameExpression, valuesMap) + "_" + partId;
         return substitute + suffix;
     }
 
@@ -261,13 +256,8 @@ public abstract class AbstractWriteStrategy<T> implements WriteStrategy<T> {
      *
      * @return the file commit information
      */
-    @SneakyThrows
     @Override
     public Optional<FileCommitInfo> prepareCommit() {
-        if (this.needMoveFiles.isEmpty() && fileSinkConfig.isCreateEmptyFileWhenNoData()) {
-            String filePath = createFilePathWithoutPartition();
-            this.getOrCreateOutputStream(filePath);
-        }
         this.finishAndCloseFile();
         LinkedHashMap<String, String> commitMap = new LinkedHashMap<>(this.needMoveFiles);
         LinkedHashMap<String, List<String>> copyMap =
@@ -379,25 +369,10 @@ public abstract class AbstractWriteStrategy<T> implements WriteStrategy<T> {
         return String.join(File.separator, strings);
     }
 
-    public String createFilePathWithoutPartition() {
-        return getPathWithPartitionInfo(null, true);
-    }
-
     public String getOrCreateFilePathBeingWritten(@NonNull SeaTunnelRow seaTunnelRow) {
         LinkedHashMap<String, List<String>> dataPartitionDirAndValuesMap =
                 generatorPartitionDir(seaTunnelRow);
-        boolean noPartition =
-                BaseSinkConfig.NON_PARTITION.equals(
-                        dataPartitionDirAndValuesMap.keySet().toArray()[0].toString());
-        return getPathWithPartitionInfo(dataPartitionDirAndValuesMap, noPartition);
-    }
-
-    private String getPathWithPartitionInfo(
-            LinkedHashMap<String, List<String>> dataPartitionDirAndValuesMap, boolean noPartition) {
-        String beingWrittenFileKey =
-                noPartition
-                        ? BaseSinkConfig.NON_PARTITION
-                        : dataPartitionDirAndValuesMap.keySet().toArray()[0].toString();
+        String beingWrittenFileKey = dataPartitionDirAndValuesMap.keySet().toArray()[0].toString();
         // get filePath from beingWrittenFile
         String beingWrittenFilePath = beingWrittenFile.get(beingWrittenFileKey);
         if (beingWrittenFilePath != null) {
@@ -409,7 +384,8 @@ public abstract class AbstractWriteStrategy<T> implements WriteStrategy<T> {
                     };
             String newBeingWrittenFilePath = String.join(File.separator, pathSegments);
             beingWrittenFile.put(beingWrittenFileKey, newBeingWrittenFilePath);
-            if (!noPartition) {
+            if (!BaseSinkConfig.NON_PARTITION.equals(
+                    dataPartitionDirAndValuesMap.keySet().toArray()[0].toString())) {
                 partitionDirAndValuesMap.putAll(dataPartitionDirAndValuesMap);
             }
             return newBeingWrittenFilePath;

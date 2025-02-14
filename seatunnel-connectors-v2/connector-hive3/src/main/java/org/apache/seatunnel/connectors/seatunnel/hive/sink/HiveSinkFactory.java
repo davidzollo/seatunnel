@@ -25,7 +25,6 @@ import org.apache.seatunnel.api.table.factory.Factory;
 import org.apache.seatunnel.api.table.factory.TableSinkFactory;
 import org.apache.seatunnel.api.table.factory.TableSinkFactoryContext;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
-import org.apache.seatunnel.connectors.seatunnel.file.config.BaseSinkConfig;
 import org.apache.seatunnel.connectors.seatunnel.file.sink.commit.FileAggregatedCommitInfo;
 import org.apache.seatunnel.connectors.seatunnel.file.sink.commit.FileCommitInfo;
 import org.apache.seatunnel.connectors.seatunnel.file.sink.state.FileSinkState;
@@ -45,9 +44,6 @@ public class HiveSinkFactory
                 .required(HiveSinkOptions.METASTORE_URI)
                 .optional(HiveSinkOptions.HIVE_SITE_PATH)
                 .optional(HiveSinkOptions.ABORT_DROP_PARTITION_METADATA)
-                .optional(BaseSinkConfig.PARQUET_AVRO_WRITE_TIMESTAMP_AS_INT96)
-                .optional(BaseSinkConfig.HAVE_PARTITION)
-                .conditional(BaseSinkConfig.HAVE_PARTITION, true, BaseSinkConfig.PARTITION_BY)
                 .build();
     }
 

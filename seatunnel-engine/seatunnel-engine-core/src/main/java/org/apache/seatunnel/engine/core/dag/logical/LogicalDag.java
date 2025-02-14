@@ -33,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -58,7 +59,7 @@ public class LogicalDag implements IdentifiedDataSerializable {
 
     @Getter private JobConfig jobConfig;
     private final Set<LogicalEdge> edges = new LinkedHashSet<>();
-    private final LinkedHashMap<Long, LogicalVertex> logicalVertexMap = new LinkedHashMap<>();
+    private final Map<Long, LogicalVertex> logicalVertexMap = new LinkedHashMap<>();
     private IdGenerator idGenerator;
 
     public LogicalDag() {}
@@ -80,7 +81,7 @@ public class LogicalDag implements IdentifiedDataSerializable {
         return this.edges;
     }
 
-    public LinkedHashMap<Long, LogicalVertex> getLogicalVertexMap() {
+    public Map<Long, LogicalVertex> getLogicalVertexMap() {
         return logicalVertexMap;
     }
 
@@ -106,18 +107,8 @@ public class LogicalDag implements IdentifiedDataSerializable {
                 .forEach(
                         e -> {
                             JsonObject edge = new JsonObject();
-                            edge.add(
-                                    "inputVertex",
-                                    logicalVertexMap
-                                            .get(e.getInputVertexId())
-                                            .getAction()
-                                            .getName());
-                            edge.add(
-                                    "targetVertex",
-                                    logicalVertexMap
-                                            .get(e.getTargetVertexId())
-                                            .getAction()
-                                            .getName());
+                            edge.add("inputVertex", e.getInputVertex().getAction().getName());
+                            edge.add("targetVertex", e.getTargetVertex().getAction().getName());
                             edges.add(edge);
                         });
 
@@ -137,6 +128,13 @@ public class LogicalDag implements IdentifiedDataSerializable {
 
     @Override
     public void writeData(ObjectDataOutput out) throws IOException {
+        out.writeInt(logicalVertexMap.size());
+
+        for (Map.Entry<Long, LogicalVertex> entry : logicalVertexMap.entrySet()) {
+            out.writeLong(entry.getKey());
+            out.writeObject(entry.getValue());
+        }
+
         out.writeInt(edges.size());
 
         for (LogicalEdge edge : edges) {
@@ -149,11 +147,19 @@ public class LogicalDag implements IdentifiedDataSerializable {
 
     @Override
     public void readData(ObjectDataInput in) throws IOException {
+        int vertexCount = in.readInt();
+
+        for (int i = 0; i < vertexCount; i++) {
+            Long key = in.readLong();
+            LogicalVertex value = in.readObject();
+            logicalVertexMap.put(key, value);
+        }
 
         int edgeCount = in.readInt();
 
         for (int i = 0; i < edgeCount; i++) {
             LogicalEdge edge = in.readObject();
+            edge.recoveryFromVertexMap(logicalVertexMap);
             edges.add(edge);
         }
 

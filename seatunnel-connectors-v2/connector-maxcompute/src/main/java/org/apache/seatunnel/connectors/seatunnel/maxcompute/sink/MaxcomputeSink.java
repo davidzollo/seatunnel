@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.seatunnel.maxcompute.sink;
 import org.apache.seatunnel.api.common.SeaTunnelAPIErrorCode;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.sink.DataSaveMode;
+import org.apache.seatunnel.api.sink.DefaultSaveModeHandler;
 import org.apache.seatunnel.api.sink.SaveModeHandler;
 import org.apache.seatunnel.api.sink.SinkWriter;
 import org.apache.seatunnel.api.sink.SupportMultiTableSink;
@@ -94,12 +95,11 @@ public class MaxcomputeSink extends AbstractSimpleSink<SeaTunnelRow, Void>
         }
 
         return Optional.of(
-                new MaxComputeSaveModeHandler(
+                new DefaultSaveModeHandler(
                         readonlyConfig.get(MaxcomputeConfig.SCHEMA_SAVE_MODE),
                         dataSaveMode,
                         catalog,
                         catalogTable,
-                        readonlyConfig.get(MaxcomputeConfig.CUSTOM_SQL),
-                        readonlyConfig));
+                        readonlyConfig.get(MaxcomputeConfig.CUSTOM_SQL)));
     }
 }

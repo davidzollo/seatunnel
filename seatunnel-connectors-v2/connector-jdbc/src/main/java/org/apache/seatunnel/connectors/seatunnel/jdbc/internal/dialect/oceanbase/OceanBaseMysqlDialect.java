@@ -18,8 +18,6 @@
 package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.oceanbase;
 
 import org.apache.seatunnel.api.table.catalog.TablePath;
-import org.apache.seatunnel.api.table.converter.BasicTypeDefine;
-import org.apache.seatunnel.api.table.converter.TypeConverter;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.converter.JdbcRowConverter;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
@@ -67,11 +65,6 @@ public class OceanBaseMysqlDialect implements JdbcDialect {
     @Override
     public String dialectName() {
         return DatabaseIdentifier.OCENABASE;
-    }
-
-    @Override
-    public TypeConverter<BasicTypeDefine> typeConverter() {
-        return (TypeConverter) OceanBaseMySqlTypeConverter.DEFAULT_INSTANCE;
     }
 
     @Override

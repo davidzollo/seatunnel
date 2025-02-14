@@ -34,7 +34,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 
-public class BinaryWriteStrategy extends AbstractWriteStrategy<FSDataOutputStream> {
+public class BinaryWriteStrategy extends AbstractWriteStrategy {
 
     private final LinkedHashMap<String, FSDataOutputStream> beingWrittenOutputStream;
     private final LinkedHashMap<String, Long> partIndexMap;
@@ -43,11 +43,6 @@ public class BinaryWriteStrategy extends AbstractWriteStrategy<FSDataOutputStrea
         super(fileSinkConfig);
         this.beingWrittenOutputStream = new LinkedHashMap<>();
         this.partIndexMap = new LinkedHashMap<>();
-        if (fileSinkConfig.isCreateEmptyFileWhenNoData()) {
-            throw new FileConnectorException(
-                    FileConnectorErrorCode.FORMAT_NOT_SUPPORT,
-                    "BinaryWriteStrategy does not support generating empty files when no data is written.");
-        }
     }
 
     @Override
@@ -93,8 +88,7 @@ public class BinaryWriteStrategy extends AbstractWriteStrategy<FSDataOutputStrea
         }
     }
 
-    @Override
-    public FSDataOutputStream getOrCreateOutputStream(@NonNull String filePath) {
+    private FSDataOutputStream getOrCreateOutputStream(@NonNull String filePath) {
         FSDataOutputStream fsDataOutputStream = beingWrittenOutputStream.get(filePath);
         if (fsDataOutputStream == null) {
             try {

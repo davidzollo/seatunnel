@@ -181,12 +181,7 @@ public class DorisCatalogUtil {
                         SaveModePlaceHolder.ROWTYPE_FIELDS.getReplacePlaceHolder(), rowTypeFields)
                 .replaceAll(
                         SaveModePlaceHolder.COMMENT.getReplacePlaceHolder(),
-                        Objects.isNull(catalogTable.getComment())
-                                ? ""
-                                : catalogTable
-                                        .getComment()
-                                        .replace("'", "''")
-                                        .replace("\\", "\\\\"));
+                        Objects.isNull(catalogTable.getComment()) ? "" : catalogTable.getComment());
     }
 
     private static String mergeColumnInTemplate(
@@ -240,8 +235,6 @@ public class DorisCatalogUtil {
                 column.isNullable() ? "NULL" : "NOT NULL",
                 StringUtils.isEmpty(column.getComment())
                         ? ""
-                        : "COMMENT '"
-                                + column.getComment().replace("'", "''").replace("\\", "\\\\")
-                                + "'");
+                        : "COMMENT '" + column.getComment() + "'");
     }
 }

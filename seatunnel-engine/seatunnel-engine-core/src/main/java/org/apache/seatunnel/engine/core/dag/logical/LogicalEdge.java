@@ -23,8 +23,12 @@ import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
 import com.hazelcast.nio.serialization.IdentifiedDataSerializable;
 import lombok.Data;
+import lombok.NonNull;
 
 import java.io.IOException;
+import java.util.Map;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 @Data
 public class LogicalEdge implements IdentifiedDataSerializable {
@@ -41,14 +45,19 @@ public class LogicalEdge implements IdentifiedDataSerializable {
 
     public LogicalEdge() {}
 
-    public LogicalEdge(Long inputVertexId, Long targetVertexId) {
-        this.inputVertexId = inputVertexId;
-        this.targetVertexId = targetVertexId;
-    }
-
     public LogicalEdge(LogicalVertex inputVertex, LogicalVertex targetVertex) {
+        this.inputVertex = inputVertex;
+        this.targetVertex = targetVertex;
         this.inputVertexId = inputVertex.getVertexId();
         this.targetVertexId = targetVertex.getVertexId();
+    }
+
+    public void recoveryFromVertexMap(@NonNull Map<Long, LogicalVertex> vertexMap) {
+        inputVertex = vertexMap.get(inputVertexId);
+        targetVertex = vertexMap.get(targetVertexId);
+
+        checkNotNull(inputVertex);
+        checkNotNull(targetVertex);
     }
 
     @Override

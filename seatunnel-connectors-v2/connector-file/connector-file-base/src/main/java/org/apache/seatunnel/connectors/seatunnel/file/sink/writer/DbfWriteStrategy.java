@@ -29,7 +29,6 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 
 import com.linuxense.javadbf.DBFDataType;
 import com.linuxense.javadbf.DBFField;
-import com.linuxense.javadbf.DBFFileFormat;
 import com.linuxense.javadbf.DBFWriter;
 import lombok.NonNull;
 
@@ -40,7 +39,7 @@ import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.LinkedHashMap;
 
-public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
+public class DbfWriteStrategy extends AbstractWriteStrategy {
     private final LinkedHashMap<String, DBFWriter> beingWrittenWriter;
 
     private DbfSerializer dbfSerializer;
@@ -54,16 +53,14 @@ public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
     public void setSeaTunnelRowTypeInfo(SeaTunnelRowType seaTunnelRowType) {
         super.setSeaTunnelRowTypeInfo(seaTunnelRowType);
         this.dbfSerializer =
-                new DbfSerializer(
-                        buildSchemaWithRowType(seaTunnelRowType, sinkColumnsIndexInRow),
-                        fileSinkConfig);
+                new DbfSerializer(buildSchemaWithRowType(seaTunnelRowType, sinkColumnsIndexInRow));
     }
 
     @Override
     public void write(SeaTunnelRow seaTunnelRow) {
         super.write(seaTunnelRow);
         String filePath = getOrCreateFilePathBeingWritten(seaTunnelRow);
-        DBFWriter dbfWriter = getOrCreateOutputStream(filePath);
+        DBFWriter dbfWriter = getOrCreateDBFWriter(filePath);
         Object[] dbfRow = dbfSerializer.serializeToDbfRow(seaTunnelRow);
         dbfWriter.addRecord(dbfRow);
     }
@@ -77,28 +74,14 @@ public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
                 });
     }
 
-    @Override
-    public DBFWriter getOrCreateOutputStream(@NonNull String filePath) {
+    private DBFWriter getOrCreateDBFWriter(@NonNull String filePath) {
         DBFWriter dbfWriter = beingWrittenWriter.get(filePath);
         if (dbfWriter != null) {
             return dbfWriter;
         }
         try {
-
             FSDataOutputStream outputStream = hadoopFileSystemProxy.getOutputStream(filePath);
-            DBFWriter newWriter = null;
-            switch (fileSinkConfig.getDbfVersion()) {
-                case DEFAULT:
-                    newWriter =
-                            new DBFWriter(
-                                    outputStream, StandardCharsets.UTF_8, DBFFileFormat.COMPATIBLE);
-                    break;
-                case DB7:
-                    newWriter =
-                            new DBFWriter(
-                                    outputStream, StandardCharsets.UTF_8, DBFFileFormat.ADVANCED);
-                    break;
-            }
+            DBFWriter newWriter = new DBFWriter(outputStream, StandardCharsets.UTF_8);
             newWriter.setFields(dbfSerializer.getDbfFields());
             beingWrittenWriter.put(filePath, newWriter);
             return newWriter;
@@ -112,7 +95,7 @@ public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
         private final DBFField[] dbfFields;
         private final SeaTunnelRowType seaTunnelRowType;
 
-        public DbfSerializer(SeaTunnelRowType seaTunnelRowType, FileSinkConfig fileSinkConfig) {
+        public DbfSerializer(SeaTunnelRowType seaTunnelRowType) {
             this.seaTunnelRowType = seaTunnelRowType;
             this.dbfFields = new DBFField[seaTunnelRowType.getTotalFields()];
 
@@ -121,34 +104,8 @@ public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
                 dbfFields[i] = new DBFField();
                 dbfFields[i].setName(fieldName);
                 dbfFields[i].setType(convertToDbfType(seaTunnelRowType.getFieldType(i)));
-                // TODO: Configure according to user configuration
-                switch (dbfFields[i].getType()) {
-                    case CHARACTER:
-                        switch (fileSinkConfig.getDbfVersion()) {
-                            case DEFAULT:
-                                dbfFields[i].setLength(255);
-                                break;
-                            case DB7:
-                                dbfFields[i].setLength(DBFDataType.CHARACTER.getMaxSize());
-                                break;
-                        }
-                        break;
-                    case NUMERIC:
-                        dbfFields[i].setLength(DBFDataType.NUMERIC.getMaxSize());
-                        break;
-                    case CURRENCY:
-                        dbfFields[i].setLength(DBFDataType.CURRENCY.getMaxSize());
-                        break;
-                    case DATE:
-                        dbfFields[i].setLength(DBFDataType.DATE.getMaxSize());
-                        break;
-                    case VARCHAR:
-                        dbfFields[i].setLength(DBFDataType.VARCHAR.getMaxSize());
-                        break;
-                    case LOGICAL:
-                        dbfFields[i].setLength(DBFDataType.LOGICAL.getMaxSize());
-                    default:
-                }
+                // TODO: set length
+                // dbfFields[i].setLength(20);
             }
         }
 

@@ -17,8 +17,9 @@
 
 package org.apache.seatunnel.engine.server.resourcemanager.thirdparty;
 
-import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.engine.server.resourcemanager.resource.ResourceProfile;
+
+import java.util.concurrent.CompletableFuture;
 
 public interface ThirdPartyResourceManager {
 

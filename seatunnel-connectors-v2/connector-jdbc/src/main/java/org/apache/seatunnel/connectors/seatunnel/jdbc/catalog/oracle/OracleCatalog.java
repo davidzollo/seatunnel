@@ -39,11 +39,36 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 @Slf4j
 public class OracleCatalog extends AbstractJdbcCatalog {
+
+    protected static List<String> EXCLUDED_SCHEMAS_ALL =
+            Collections.unmodifiableList(
+                    Arrays.asList(
+                            "APPQOSSYS",
+                            "AUDSYS",
+                            "CTXSYS",
+                            "DVSYS",
+                            "DBSFWUSER",
+                            "DBSNMP",
+                            "GSMADMIN_INTERNAL",
+                            "LBACSYS",
+                            "MDSYS",
+                            "OJVMSYS",
+                            "OLAPSYS",
+                            "ORDDATA",
+                            "ORDSYS",
+                            "OUTLN",
+                            "SYS",
+                            "SYSTEM",
+                            "WMSYS",
+                            "XDB",
+                            "EXFSYS",
+                            "SYSMAN"));
 
     private static final String SELECT_COLUMNS_SQL_TEMPLATE =
             "SELECT\n"
@@ -76,6 +101,10 @@ public class OracleCatalog extends AbstractJdbcCatalog {
                     + "ORDER BY \n"
                     + "    cols.column_id \n";
 
+    static {
+        EXCLUDED_SCHEMAS.addAll(EXCLUDED_SCHEMAS_ALL);
+    }
+
     private boolean decimalTypeNarrowing;
 
     public OracleCatalog(
@@ -105,6 +134,11 @@ public class OracleCatalog extends AbstractJdbcCatalog {
     }
 
     @Override
+    protected String getDatabaseWithConditionSql(String databaseName) {
+        return String.format(getListDatabaseSql() + " where name = '%s'", databaseName);
+    }
+
+    @Override
     protected String getTableWithConditionSql(TablePath tablePath) {
         return getListTableSql(tablePath.getDatabaseName())
                 + "  and  OWNER = '"
@@ -115,13 +149,24 @@ public class OracleCatalog extends AbstractJdbcCatalog {
     }
 
     @Override
-    public boolean databaseExists(String databaseName) throws CatalogException {
-        return true;
+    protected String getListDatabaseSql() {
+        return "SELECT name FROM v$database";
     }
 
     @Override
     public List<String> listDatabases() throws CatalogException {
-        return new ArrayList<>(Collections.singletonList("default"));
+        try {
+            return queryString(
+                    defaultUrl,
+                    getListDatabaseSql(),
+                    rs -> {
+                        String s = rs.getString(1).trim();
+                        return SYS_DATABASES.contains(s) ? null : s;
+                    });
+        } catch (Exception e) {
+            log.info("Failed listing database in catalog oracle", e);
+            return Collections.singletonList(defaultDatabase);
+        }
     }
 
     @Override
@@ -149,6 +194,9 @@ public class OracleCatalog extends AbstractJdbcCatalog {
 
     @Override
     protected String getTableName(ResultSet rs) throws SQLException {
+        if (EXCLUDED_SCHEMAS.contains(rs.getString(1))) {
+            return null;
+        }
         return rs.getString(1) + "." + rs.getString(2);
     }
 
@@ -195,6 +243,11 @@ public class OracleCatalog extends AbstractJdbcCatalog {
     @Override
     protected String getOptionTableName(TablePath tablePath) {
         return tablePath.getSchemaAndTableName();
+    }
+
+    private List<String> listTables() {
+        List<String> databases = listDatabases();
+        return listTables(databases.get(0));
     }
 
     @Override

@@ -59,7 +59,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class OrcWriteStrategy extends AbstractWriteStrategy<Writer> {
+public class OrcWriteStrategy extends AbstractWriteStrategy {
     private final LinkedHashMap<String, Writer> beingWrittenWriter;
 
     public OrcWriteStrategy(FileSinkConfig fileSinkConfig) {
@@ -71,7 +71,7 @@ public class OrcWriteStrategy extends AbstractWriteStrategy<Writer> {
     public void write(@NonNull SeaTunnelRow seaTunnelRow) {
         super.write(seaTunnelRow);
         String filePath = getOrCreateFilePathBeingWritten(seaTunnelRow);
-        Writer writer = getOrCreateOutputStream(filePath);
+        Writer writer = getOrCreateWriter(filePath);
         TypeDescription schema = buildSchemaWithRowType();
         VectorizedRowBatch rowBatch = schema.createRowBatch();
         int i = 0;
@@ -109,8 +109,7 @@ public class OrcWriteStrategy extends AbstractWriteStrategy<Writer> {
         this.beingWrittenWriter.clear();
     }
 
-    @Override
-    public Writer getOrCreateOutputStream(@NonNull String filePath) {
+    private Writer getOrCreateWriter(@NonNull String filePath) {
         Writer writer = this.beingWrittenWriter.get(filePath);
         if (writer == null) {
             TypeDescription schema = buildSchemaWithRowType();

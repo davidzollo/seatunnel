@@ -29,7 +29,7 @@ import lombok.NonNull;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 
-public class ExcelWriteStrategy extends AbstractWriteStrategy<ExcelGenerator> {
+public class ExcelWriteStrategy extends AbstractWriteStrategy {
     private final LinkedHashMap<String, ExcelGenerator> beingWrittenWriter;
 
     public ExcelWriteStrategy(FileSinkConfig fileSinkConfig) {
@@ -41,7 +41,7 @@ public class ExcelWriteStrategy extends AbstractWriteStrategy<ExcelGenerator> {
     public void write(SeaTunnelRow seaTunnelRow) {
         super.write(seaTunnelRow);
         String filePath = getOrCreateFilePathBeingWritten(seaTunnelRow);
-        ExcelGenerator excelGenerator = getOrCreateOutputStream(filePath);
+        ExcelGenerator excelGenerator = getOrCreateExcelGenerator(filePath);
         excelGenerator.writeData(seaTunnelRow);
     }
 
@@ -63,8 +63,7 @@ public class ExcelWriteStrategy extends AbstractWriteStrategy<ExcelGenerator> {
         beingWrittenWriter.clear();
     }
 
-    @Override
-    public ExcelGenerator getOrCreateOutputStream(@NonNull String filePath) {
+    private ExcelGenerator getOrCreateExcelGenerator(@NonNull String filePath) {
         ExcelGenerator excelGenerator = this.beingWrittenWriter.get(filePath);
         if (excelGenerator == null) {
             excelGenerator =

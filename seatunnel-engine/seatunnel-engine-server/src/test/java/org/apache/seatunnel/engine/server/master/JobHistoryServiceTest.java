@@ -135,8 +135,8 @@ class JobHistoryServiceTest extends AbstractSeaTunnelServerTest {
                 new JobImmutableInformation(
                         jobid,
                         "Test",
-                        nodeEngine.getSerializationService(),
-                        testLogicalDag,
+                        nodeEngine.getSerializationService().toData(testLogicalDag),
+                        testLogicalDag.getJobConfig(),
                         Collections.emptyList(),
                         Collections.emptyList());
 

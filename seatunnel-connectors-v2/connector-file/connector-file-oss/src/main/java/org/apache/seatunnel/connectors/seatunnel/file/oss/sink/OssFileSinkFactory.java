@@ -89,12 +89,6 @@ public class OssFileSinkFactory extends BaseMultipleTableFinkSinkFactory {
                         // TODO 等待 http://172.28.230.21:18056/browse/ST-1912 修复
                         //                        BaseSinkConfig.PARQUET_AVRO_WRITE_FIXED_AS_INT96,
                         BaseSinkConfig.PARQUET_AVRO_WRITE_TIMESTAMP_AS_INT96)
-                .conditional(
-                        BaseSinkConfig.FILE_FORMAT_TYPE,
-                        FileFormat.XML,
-                        BaseSinkConfig.XML_USE_ATTR_FORMAT)
-                .conditional(
-                        BaseSinkConfig.FILE_FORMAT_TYPE, FileFormat.DBF, BaseSinkConfig.DBF_VERSION)
                 .optional(BaseSinkConfig.CUSTOM_FILENAME)
                 .conditional(
                         BaseSinkConfig.CUSTOM_FILENAME,
@@ -113,8 +107,6 @@ public class OssFileSinkFactory extends BaseMultipleTableFinkSinkFactory {
                 .optional(BaseSinkConfig.DATE_FORMAT)
                 .optional(BaseSinkConfig.DATETIME_FORMAT)
                 .optional(BaseSinkConfig.TIME_FORMAT)
-                .optional(BaseSinkConfig.SINGLE_FILE_MODE)
-                .optional(BaseSinkConfig.CREATE_EMPTY_FILE_WHEN_NO_DATA)
                 .build();
     }
 }

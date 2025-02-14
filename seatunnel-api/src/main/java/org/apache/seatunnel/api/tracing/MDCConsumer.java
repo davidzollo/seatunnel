@@ -18,10 +18,9 @@
 package org.apache.seatunnel.api.tracing;
 
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 public class MDCConsumer<T> implements Consumer<T> {
-    private final Supplier<MDCContext> contextSupplier;
+    private final MDCContext context;
     private final Consumer<T> delegate;
 
     public MDCConsumer(Consumer<T> delegate) {
@@ -29,18 +28,17 @@ public class MDCConsumer<T> implements Consumer<T> {
     }
 
     public MDCConsumer(MDCContext context, Consumer<T> delegate) {
-        this(() -> context, delegate);
-    }
-
-    public MDCConsumer(Supplier<MDCContext> contextSupplier, Consumer<T> delegate) {
-        this.contextSupplier = contextSupplier;
+        this.context = context;
         this.delegate = delegate;
     }
 
     @Override
     public void accept(T t) {
-        try (MDCContext ignored = contextSupplier.get().activate()) {
+        try {
+            context.put();
             delegate.accept(t);
+        } finally {
+            context.clear();
         }
     }
 }

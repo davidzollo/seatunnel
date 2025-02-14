@@ -38,8 +38,12 @@ public abstract class TracingOperation extends Operation {
 
     @Override
     public final void run() throws Exception {
-        try (MDCContext ignored = context.activate()) {
+        try {
+            context.put();
+
             runInternal();
+        } finally {
+            context.clear();
         }
     }
 

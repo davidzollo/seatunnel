@@ -50,7 +50,6 @@ import static org.apache.seatunnel.connectors.cdc.base.source.split.wartermark.W
 import static org.apache.seatunnel.connectors.cdc.base.utils.SourceRecordUtils.getFetchTimestamp;
 import static org.apache.seatunnel.connectors.cdc.base.utils.SourceRecordUtils.getMessageTimestamp;
 import static org.apache.seatunnel.connectors.cdc.base.utils.SourceRecordUtils.isDataChangeRecord;
-import static org.apache.seatunnel.connectors.cdc.base.utils.SourceRecordUtils.isHeartbeatRecord;
 import static org.apache.seatunnel.connectors.cdc.base.utils.SourceRecordUtils.isSchemaChangeEvent;
 
 /**
@@ -149,7 +148,7 @@ public class IncrementalSourceRecordEmitter<T>
             Offset position = getOffsetPosition(element);
             splitState.asIncrementalSplitState().setStartupOffset(position);
             emitElement(element, output);
-        } else if (isDataChangeRecord(element) || isHeartbeatRecord(element)) {
+        } else if (isDataChangeRecord(element)) {
             if (splitState.isIncrementalSplitState()) {
                 Offset position = getOffsetPosition(element);
                 splitState.asIncrementalSplitState().setStartupOffset(position);
