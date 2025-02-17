@@ -190,6 +190,7 @@ public class SeaTunnelFTPFileSystem extends FileSystem {
                 LOG.info("Using passive mode for FTP connection");
                 break;
             case ACTIVE_LOCAL_DATA_CONNECTION_MODE:
+            case ACTIVE_LOCAL:
                 // Create a test directory to check if active mode is working
                 String pathName = "/.ftptest" + System.currentTimeMillis();
                 try {
