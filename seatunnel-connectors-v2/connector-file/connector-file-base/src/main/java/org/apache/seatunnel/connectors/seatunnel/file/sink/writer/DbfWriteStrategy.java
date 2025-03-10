@@ -22,6 +22,7 @@ import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.api.table.type.SqlType;
 import org.apache.seatunnel.common.exception.CommonErrorCode;
+import org.apache.seatunnel.common.utils.EncodingUtils;
 import org.apache.seatunnel.connectors.seatunnel.file.exception.FileConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.file.sink.config.FileSinkConfig;
 
@@ -34,7 +35,7 @@ import com.linuxense.javadbf.DBFWriter;
 import lombok.NonNull;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Date;
@@ -44,10 +45,12 @@ public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
     private final LinkedHashMap<String, DBFWriter> beingWrittenWriter;
 
     private DbfSerializer dbfSerializer;
+    private final Charset charset;
 
     public DbfWriteStrategy(FileSinkConfig fileSinkConfig) {
         super(fileSinkConfig);
         this.beingWrittenWriter = new LinkedHashMap<>();
+        this.charset = EncodingUtils.tryParseCharset(fileSinkConfig.getEncoding());
     }
 
     @Override
@@ -89,14 +92,10 @@ public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
             DBFWriter newWriter = null;
             switch (fileSinkConfig.getDbfVersion()) {
                 case DEFAULT:
-                    newWriter =
-                            new DBFWriter(
-                                    outputStream, StandardCharsets.UTF_8, DBFFileFormat.COMPATIBLE);
+                    newWriter = new DBFWriter(outputStream, charset, DBFFileFormat.COMPATIBLE);
                     break;
                 case DB7:
-                    newWriter =
-                            new DBFWriter(
-                                    outputStream, StandardCharsets.UTF_8, DBFFileFormat.ADVANCED);
+                    newWriter = new DBFWriter(outputStream, charset, DBFFileFormat.ADVANCED);
                     break;
             }
             newWriter.setFields(dbfSerializer.getDbfFields());

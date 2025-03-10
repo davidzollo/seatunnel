@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.seatunnel.connectors.seatunnel.file.source.reader;
 
+import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.source.Collector;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
@@ -24,6 +24,7 @@ import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.api.table.type.SqlType;
 import org.apache.seatunnel.common.exception.CommonErrorCode;
 import org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated;
+import org.apache.seatunnel.common.utils.EncodingUtils;
 import org.apache.seatunnel.connectors.seatunnel.file.config.BaseSourceConfigOptions;
 import org.apache.seatunnel.connectors.seatunnel.file.exception.FileConnectorException;
 import org.apache.seatunnel.format.json.exception.SeaTunnelJsonFormatException;
@@ -38,6 +39,7 @@ import lombok.NoArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -51,13 +53,16 @@ import java.util.Map;
 @Slf4j
 @NoArgsConstructor
 public class DbfReadStrategy extends AbstractReadStrategy {
+
+    private String encoding;
+
     @SneakyThrows
     @Override
     public void read(String path, String tableId, Collector<SeaTunnelRow> output) {
         Map<String, String> partitionsMap =
                 isMergePartition ? parsePartitionsByPath(path) : Collections.emptyMap();
         try (FSDataInputStream file = openFile(path);
-                DBFReader reader = new DBFReader(file)) {
+                DBFReader reader = new DBFReader(file, EncodingUtils.tryParseCharset(encoding))) {
             if (skipHeaderNumber > Integer.MAX_VALUE
                     || skipHeaderNumber < Integer.MIN_VALUE
                     || skipHeaderNumber > reader.getRecordCount()) {
@@ -93,6 +98,11 @@ public class DbfReadStrategy extends AbstractReadStrategy {
         }
         SeaTunnelRowType userDefinedRowTypeWithPartition =
                 mergePartitionTypes(fileNames.get(0), seaTunnelRowType);
+        ReadonlyConfig readonlyConfig = ReadonlyConfig.fromConfig(pluginConfig);
+        this.encoding =
+                readonlyConfig
+                        .getOptional(BaseSourceConfigOptions.ENCODING)
+                        .orElse(StandardCharsets.UTF_8.name());
         // column projection
         if (pluginConfig.hasPath(BaseSourceConfigOptions.READ_COLUMNS.key())) {
             // get the read column index from user-defined row type
