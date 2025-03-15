@@ -55,6 +55,7 @@
                                 <descriptor>src/main/assembly/assembly-bin-ci.xml</descriptor>
                             </descriptors>
                             <appendAssemblyId>true</appendAssemblyId>
+                            <attach>false</attach>
                         </configuration>
                     </execution>
                     <execution>
@@ -68,6 +69,7 @@
                                 <descriptor>src/main/assembly/assembly-src.xml</descriptor>
                             </descriptors>
                             <appendAssemblyId>true</appendAssemblyId>
+                            <attach>false</attach>
                         </configuration>
                     </execution>
 
