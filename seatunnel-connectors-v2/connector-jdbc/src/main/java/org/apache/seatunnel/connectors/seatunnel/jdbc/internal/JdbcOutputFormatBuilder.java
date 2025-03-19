@@ -62,10 +62,7 @@ public class JdbcOutputFormatBuilder {
         JdbcOutputFormat.StatementExecutorFactory statementExecutorFactory;
 
         final String database = jdbcSinkConfig.getDatabase();
-        final String table =
-                dialect.extractTableName(
-                        TablePath.of(
-                                jdbcSinkConfig.getDatabase() + "." + jdbcSinkConfig.getTable()));
+        final String table = jdbcSinkConfig.getTable();
         final List<String> primaryKeys = jdbcSinkConfig.getPrimaryKeys();
 
         if ((JdbcSinkConfig.WriteMode.COPY.equals(jdbcSinkConfig.getWriteMode())
