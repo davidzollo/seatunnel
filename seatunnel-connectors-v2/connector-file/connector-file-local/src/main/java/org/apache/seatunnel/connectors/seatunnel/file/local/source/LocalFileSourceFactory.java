@@ -80,6 +80,7 @@ public class LocalFileSourceFactory implements TableSourceFactory {
                 .optional(BaseSourceConfigOptions.TIME_FORMAT)
                 .optional(BaseSourceConfigOptions.FILE_FILTER_PATTERN)
                 .optional(BaseSourceConfigOptions.NULL_FORMAT)
+                .optional(BaseSourceConfigOptions.FILENAME_EXTENSION)
                 .build();
     }
 

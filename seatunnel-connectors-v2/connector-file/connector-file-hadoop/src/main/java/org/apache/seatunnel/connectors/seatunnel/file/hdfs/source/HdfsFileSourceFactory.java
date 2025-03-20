@@ -84,6 +84,7 @@ public class HdfsFileSourceFactory implements TableSourceFactory {
                 .optional(HdfsConfigOptions.REMOTE_USER)
                 .optional(BaseSourceConfigOptions.ENCODING)
                 .optional(BaseSourceConfigOptions.NULL_FORMAT)
+                .optional(BaseSourceConfigOptions.FILENAME_EXTENSION)
                 .build();
     }
 

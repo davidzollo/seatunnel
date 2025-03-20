@@ -80,6 +80,7 @@ public class FtpFileSourceFactory implements TableSourceFactory {
                 .optional(FtpConfigOptions.FTP_CONNECTION_MODE)
                 .optional(BaseSourceConfigOptions.ENCODING)
                 .optional(BaseSourceConfigOptions.NULL_FORMAT)
+                .optional(BaseSourceConfigOptions.FILENAME_EXTENSION)
                 .build();
     }
 

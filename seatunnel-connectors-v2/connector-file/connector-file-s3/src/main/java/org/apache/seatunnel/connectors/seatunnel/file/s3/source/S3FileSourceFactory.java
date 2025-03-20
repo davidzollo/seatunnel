@@ -90,6 +90,7 @@ public class S3FileSourceFactory implements TableSourceFactory {
                 .optional(BaseSourceConfigOptions.COMPRESS_CODEC)
                 .optional(BaseSourceConfigOptions.ENCODING)
                 .optional(BaseSourceConfigOptions.NULL_FORMAT)
+                .optional(BaseSourceConfigOptions.FILENAME_EXTENSION)
                 .build();
     }
 
