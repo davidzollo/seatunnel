@@ -23,6 +23,8 @@ public class RestConstant {
 
     public static final String JOB_NAME = "jobName";
 
+    public static final String CRYPTO_MODE = "cryptoMode";
+
     public static final String IS_START_WITH_SAVE_POINT = "isStartWithSavePoint";
 
     public static final String IS_STOP_WITH_SAVE_POINT = "isStopWithSavePoint";

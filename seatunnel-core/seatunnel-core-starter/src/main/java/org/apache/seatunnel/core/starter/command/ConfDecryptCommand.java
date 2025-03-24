@@ -22,6 +22,7 @@ import org.apache.seatunnel.shade.com.typesafe.config.ConfigFactory;
 import org.apache.seatunnel.shade.com.typesafe.config.ConfigRenderOptions;
 import org.apache.seatunnel.shade.com.typesafe.config.ConfigResolveOptions;
 
+import org.apache.seatunnel.core.starter.enums.CryptoMode;
 import org.apache.seatunnel.core.starter.exception.CommandExecuteException;
 import org.apache.seatunnel.core.starter.exception.ConfigCheckException;
 import org.apache.seatunnel.core.starter.utils.ConfigShadeUtils;
@@ -45,6 +46,7 @@ public class ConfDecryptCommand implements Command<AbstractCommandArgs> {
     @Override
     public void execute() throws CommandExecuteException, ConfigCheckException {
         String decryptConfigFile = abstractCommandArgs.getConfigFile();
+        CryptoMode cryptoMode = abstractCommandArgs.getCryptoMode();
         Path configPath = Paths.get(decryptConfigFile);
         checkConfigExist(configPath);
         Config config =
@@ -53,7 +55,7 @@ public class ConfDecryptCommand implements Command<AbstractCommandArgs> {
                         .resolveWith(
                                 ConfigFactory.systemProperties(),
                                 ConfigResolveOptions.defaults().setAllowUnresolved(true));
-        Config encryptConfig = ConfigShadeUtils.decryptConfig(config);
+        Config encryptConfig = ConfigShadeUtils.decryptConfig(config, cryptoMode);
         log.info(
                 "Encrypt config: \n{}",
                 encryptConfig

@@ -36,6 +36,9 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 
+import static org.apache.seatunnel.api.table.type.BasicType.INT_TYPE;
+import static org.apache.seatunnel.api.table.type.BasicType.STRING_TYPE;
+
 public class TextFormatSchemaTest {
     public String content =
             String.join("\u0002", Arrays.asList("1", "2", "3", "4", "5", "6"))
@@ -190,5 +193,23 @@ public class TextFormatSchemaTest {
         Assertions.assertEquals(
                 "ErrorCode:[COMMON-07], ErrorDescription:[Unsupported data type] - SeaTunnel can not parse this date format [2022-09-24-22:45:00] of field [timestamp_field]",
                 exception2.getMessage());
+    }
+
+    @Test
+    public void testSerializationWithRequireEscapeCharacters() throws Exception {
+        SeaTunnelRowType rowType =
+                new SeaTunnelRowType(
+                        new String[] {"id", "name"},
+                        new SeaTunnelDataType[] {INT_TYPE, STRING_TYPE});
+        TextDeserializationSchema deserializationSchema =
+                TextDeserializationSchema.builder()
+                        .seaTunnelRowType(rowType)
+                        .delimiter("|")
+                        .build();
+
+        String content = "1|tyrantlucifer";
+        SeaTunnelRow seaTunnelRow = deserializationSchema.deserialize(content.getBytes());
+        Assertions.assertEquals(1, seaTunnelRow.getField(0));
+        Assertions.assertEquals("tyrantlucifer", seaTunnelRow.getField(1));
     }
 }

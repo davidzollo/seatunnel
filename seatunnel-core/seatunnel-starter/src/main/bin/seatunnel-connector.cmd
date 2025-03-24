@@ -30,6 +30,6 @@ if "%~1" == "" (
     set "args=%*"
 )
 
-set "CLASS_PATH=%APP_DIR%\connectors\*;%APP_DIR%\plugins\connector-dolphindb\*;%APP_JAR%;%APP_DIR%\lib\seatunnel-transforms-v2.jar"
+set "CLASS_PATH=%APP_DIR%\connectors\*;%APP_DIR%\plugins\connector-dolphindb-wt\*;%APP_JAR%;%APP_DIR%\lib\seatunnel-transforms-v2.jar"
 
 java -cp "%CLASS_PATH%" %LOAD_CLASS% %args% | findstr /v /c:"org.apache.seatunnel.plugin.discovery.AbstractPluginDiscovery"

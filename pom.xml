@@ -834,7 +834,7 @@
                                     <mkdir dir="src/main/resources/connector-console" />
                                     <mkdir dir="src/main/resources/connector-datahub" />
                                     <mkdir dir="src/main/resources/connector-dingtalk" />
-                                    <mkdir dir="src/main/resources/connector-dolphindb" />
+                                    <mkdir dir="src/main/resources/connector-dolphindb-wt" />
                                     <mkdir dir="src/main/resources/connector-doris" />
                                     <mkdir dir="src/main/resources/connector-dws-gaussdb" />
                                     <mkdir dir="src/main/resources/connector-elasticsearch" />

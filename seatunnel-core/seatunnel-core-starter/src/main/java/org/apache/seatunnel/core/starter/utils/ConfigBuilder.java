@@ -23,6 +23,7 @@ import org.apache.seatunnel.shade.com.typesafe.config.ConfigRenderOptions;
 import org.apache.seatunnel.shade.com.typesafe.config.ConfigResolveOptions;
 
 import org.apache.seatunnel.api.configuration.ConfigAdapter;
+import org.apache.seatunnel.core.starter.enums.CryptoMode;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -43,14 +44,14 @@ public class ConfigBuilder {
         // utility class and cannot be instantiated
     }
 
-    private static Config ofInner(@NonNull Path filePath) {
+    private static Config ofInner(@NonNull Path filePath, CryptoMode cryptoMode) {
         Config config =
                 ConfigFactory.parseFile(filePath.toFile())
                         .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true))
                         .resolveWith(
                                 ConfigFactory.systemProperties(),
                                 ConfigResolveOptions.defaults().setAllowUnresolved(true));
-        return ConfigShadeUtils.decryptConfig(config);
+        return ConfigShadeUtils.decryptConfig(config, cryptoMode);
     }
 
     public static Config of(@NonNull String filePath) {
@@ -58,14 +59,23 @@ public class ConfigBuilder {
         return of(path);
     }
 
-    public static Config of(@NonNull Path filePath) {
+    public static Config of(@NonNull String filePath, CryptoMode cryptoMode) {
+        Path path = Paths.get(filePath);
+        return of(path, cryptoMode);
+    }
+
+    public static Config of(@NonNull Path filePath, CryptoMode cryptoMode) {
         log.info("Loading config file from path: {}", filePath);
         Optional<ConfigAdapter> adapterSupplier = ConfigAdapterUtils.selectAdapter(filePath);
         Config config =
                 adapterSupplier
-                        .map(adapter -> of(adapter, filePath))
-                        .orElseGet(() -> ofInner(filePath));
+                        .map(adapter -> of(adapter, filePath, cryptoMode))
+                        .orElseGet(() -> ofInner(filePath, cryptoMode));
         return config;
+    }
+
+    public static Config of(@NonNull Path filePath) {
+        return of(filePath, CryptoMode.DEFAULT);
     }
 
     public static Config of(@NonNull Map<String, Object> objectMap) {
@@ -73,6 +83,11 @@ public class ConfigBuilder {
     }
 
     public static Config of(@NonNull Map<String, Object> objectMap, boolean isEncrypt) {
+        return of(objectMap, isEncrypt, CryptoMode.DEFAULT);
+    }
+
+    public static Config of(
+            @NonNull Map<String, Object> objectMap, boolean isEncrypt, CryptoMode cryptoMode) {
         log.info("Loading config file from objectMap");
         Config config =
                 ConfigFactory.parseMap(objectMap)
@@ -81,22 +96,27 @@ public class ConfigBuilder {
                                 ConfigFactory.systemProperties(),
                                 ConfigResolveOptions.defaults().setAllowUnresolved(true));
         if (!isEncrypt) {
-            config = ConfigShadeUtils.decryptConfig(config);
+            config = ConfigShadeUtils.decryptConfig(config, cryptoMode);
         }
         return config;
     }
 
     public static Config of(@NonNull ConfigAdapter configAdapter, @NonNull Path filePath) {
+        return of(configAdapter, filePath, CryptoMode.DEFAULT);
+    }
+
+    public static Config of(
+            @NonNull ConfigAdapter configAdapter, @NonNull Path filePath, CryptoMode cryptoMode) {
         log.info("With config adapter spi {}", configAdapter.getClass().getName());
         try {
             Map<String, Object> flattenedMap = configAdapter.loadConfig(filePath);
             Config config = ConfigFactory.parseMap(flattenedMap);
-            return ConfigShadeUtils.decryptConfig(config);
+            return ConfigShadeUtils.decryptConfig(config, cryptoMode);
         } catch (Exception warn) {
             log.warn(
                     "Loading config failed with spi {}, fallback to HOCON loader.",
                     configAdapter.getClass().getName());
-            return ofInner(filePath);
+            return ofInner(filePath, cryptoMode);
         }
     }
 }

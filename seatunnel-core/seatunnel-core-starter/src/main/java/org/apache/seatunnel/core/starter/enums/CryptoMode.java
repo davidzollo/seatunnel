@@ -15,15 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.seatunnel.format.text.splitor;
+package org.apache.seatunnel.core.starter.enums;
 
-import java.io.Serializable;
-import java.util.regex.Pattern;
+public enum CryptoMode {
+    DEFAULT("default"),
+    LEGACY("legacy");
 
-public class DefaultTextLineSplitor implements TextLineSplitor, Serializable {
+    private final String value;
 
-    @Override
-    public String[] spliteLine(String line, String seperator) {
-        return line.split(Pattern.quote(seperator), -1);
+    CryptoMode(String value) {
+        this.value = value;
+    }
+
+    public static CryptoMode fromValue(String value) {
+        for (CryptoMode mode : values()) {
+            if (mode.value.equalsIgnoreCase(value)) {
+                return mode;
+            }
+        }
+        throw new IllegalArgumentException("Invalid encryption mode value: " + value);
     }
 }

@@ -635,7 +635,7 @@
                 <include>com.dolphindb:jdbc:jar</include>
             </includes>
             <outputFileNameMapping>${artifact.file.name}</outputFileNameMapping>
-            <outputDirectory>/plugins/connector-dolphindb</outputDirectory>
+            <outputDirectory>/plugins/connector-dolphindb-wt</outputDirectory>
             <scope>provided</scope>
         </dependencySet>
 

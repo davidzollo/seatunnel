@@ -27,6 +27,7 @@ import org.apache.seatunnel.api.configuration.ConfigShade;
 import org.apache.seatunnel.common.Constants;
 import org.apache.seatunnel.common.config.TypesafeConfigUtils;
 import org.apache.seatunnel.common.utils.JsonUtils;
+import org.apache.seatunnel.core.starter.enums.CryptoMode;
 
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -39,10 +40,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.Set;
 import java.util.function.BiFunction;
 
 /** Config shade utilities */
@@ -114,7 +117,18 @@ public final class ConfigShadeUtils {
                                 : ConfigFactory.empty(),
                         SHADE_IDENTIFIER_OPTION,
                         DEFAULT_SHADE.getIdentifier());
-        return decryptConfig(identifier, config);
+        return decryptConfig(identifier, config, CryptoMode.DEFAULT);
+    }
+
+    public static Config decryptConfig(Config config, CryptoMode cryptoMode) {
+        String identifier =
+                TypesafeConfigUtils.getConfig(
+                        config.hasPath(Constants.ENV)
+                                ? config.getConfig(Constants.ENV)
+                                : ConfigFactory.empty(),
+                        SHADE_IDENTIFIER_OPTION,
+                        DEFAULT_SHADE.getIdentifier());
+        return decryptConfig(identifier, config, cryptoMode);
     }
 
     public static Config encryptConfig(Config config) {
@@ -125,22 +139,39 @@ public final class ConfigShadeUtils {
                                 : ConfigFactory.empty(),
                         SHADE_IDENTIFIER_OPTION,
                         DEFAULT_SHADE.getIdentifier());
-        return encryptConfig(identifier, config);
+        return encryptConfig(identifier, config, CryptoMode.DEFAULT);
     }
 
-    public static Config decryptConfig(String identifier, Config config) {
-        return processConfig(identifier, config, true);
+    public static Config encryptConfig(Config config, CryptoMode cryptoMode) {
+        String identifier =
+                TypesafeConfigUtils.getConfig(
+                        config.hasPath(Constants.ENV)
+                                ? config.getConfig(Constants.ENV)
+                                : ConfigFactory.empty(),
+                        SHADE_IDENTIFIER_OPTION,
+                        DEFAULT_SHADE.getIdentifier());
+        return encryptConfig(identifier, config, cryptoMode);
     }
 
-    public static Config encryptConfig(String identifier, Config config) {
-        return processConfig(identifier, config, false);
+    public static Config decryptConfig(String identifier, Config config, CryptoMode cryptoMode) {
+        return processConfig(identifier, config, true, cryptoMode);
+    }
+
+    public static Config encryptConfig(String identifier, Config config, CryptoMode cryptoMode) {
+        return processConfig(identifier, config, false, cryptoMode);
     }
 
     @SuppressWarnings("unchecked")
-    private static Config processConfig(String identifier, Config config, boolean isDecrypted) {
+    private static Config processConfig(
+            String identifier, Config config, boolean isDecrypted, CryptoMode cryptoMode) {
         ConfigShade configShade = CONFIG_SHADES.getOrDefault(identifier, DEFAULT_SHADE);
         List<String> sensitiveOptions = new ArrayList<>(Arrays.asList(DEFAULT_SENSITIVE_OPTIONS));
         sensitiveOptions.addAll(Arrays.asList(configShade.sensitiveOptions()));
+        if (cryptoMode == CryptoMode.DEFAULT) {
+            Set<String> uniqueKeys = new HashSet<>(sensitiveOptions);
+            sensitiveOptions.clear();
+            sensitiveOptions.addAll(uniqueKeys);
+        }
         BiFunction<String, Object, String> processFunction =
                 (key, value) -> {
                     if (isDecrypted) {

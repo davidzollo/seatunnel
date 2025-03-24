@@ -24,6 +24,7 @@ import org.apache.seatunnel.shade.com.typesafe.config.ConfigRenderOptions;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.env.EnvCommonOptions;
 import org.apache.seatunnel.common.utils.JsonUtils;
+import org.apache.seatunnel.core.starter.enums.CryptoMode;
 import org.apache.seatunnel.core.starter.utils.ConfigShadeUtils;
 import org.apache.seatunnel.engine.common.Constant;
 import org.apache.seatunnel.engine.common.config.JobConfig;
@@ -83,7 +84,7 @@ public class RestHttpPostCommandProcessor extends HttpCommandProcessor<HttpPostC
             } else if (uri.startsWith(STOP_JOB_URL)) {
                 handleStopJob(httpPostCommand, uri);
             } else if (uri.startsWith(ENCRYPT_CONFIG)) {
-                handleEncrypt(httpPostCommand);
+                handleEncrypt(httpPostCommand, uri);
             } else {
                 original.handle(httpPostCommand);
             }
@@ -197,9 +198,14 @@ public class RestHttpPostCommandProcessor extends HttpCommandProcessor<HttpPostC
                 new JsonObject().add(RestConstant.JOB_ID, map.get(RestConstant.JOB_ID).toString()));
     }
 
-    private void handleEncrypt(HttpPostCommand httpPostCommand) {
+    private void handleEncrypt(HttpPostCommand httpPostCommand, String uri) {
+        Map<String, String> requestParams = new HashMap<>();
+        RestUtil.buildRequestParams(requestParams, uri);
+        String enc = requestParams.get(RestConstant.CRYPTO_MODE);
+        CryptoMode cryptoMode =
+                StringUtils.isNotEmpty(enc) ? CryptoMode.fromValue(enc) : CryptoMode.DEFAULT;
         Config config = RestUtil.buildConfig(requestHandle(httpPostCommand), true);
-        Config encryptConfig = ConfigShadeUtils.encryptConfig(config);
+        Config encryptConfig = ConfigShadeUtils.encryptConfig(config, cryptoMode);
         String encryptString =
                 encryptConfig.root().render(ConfigRenderOptions.concise().setJson(true));
         JsonObject jsonObject = Json.parse(encryptString).asObject();
