@@ -1,13 +1,39 @@
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
-                      http://maven.apache.org/xsd/settings-1.0.0.xsd">
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0
+                      http://maven.apache.org/xsd/settings-1.2.0.xsd">
+
+    <servers>
+        <server>
+            <id>whaleops</id>
+            <username>admin</username>
+            <password>QWer12#$</password>
+        </server>
+        <server>
+            <id>github</id>
+            <username>${env.GH_USERNAME}</username>
+            <password>${env.GH_TOKEN}</password>
+        </server>
+    </servers>
+
     <profiles>
         <profile>
+            <id>whaleops</id>
+            <repositories>
+                <repository>
+                    <id>whaleops</id>
+                    <url>http://1.92.205.70:8081/repository/maven-public/</url>
+                    <releases>
+                        <enabled>true</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </repository>
+            </repositories>
+        </profile>
+        <profile>
             <id>github</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
             <repositories>
                 <repository>
                     <id>github</id>
@@ -20,11 +46,17 @@
         </profile>
     </profiles>
 
-    <servers>
-        <server>
-            <id>github</id>
-            <username>${env.GH_USERNAME}</username>
-            <password>${env.GH_TOKEN}</password>
-        </server>
-    </servers>
+    <mirrors>
+        <mirror>
+            <id>allow-http</id>
+            <mirrorOf>external:http:*</mirrorOf>
+            <url>http://1.92.205.70:8081/repository/maven-public/</url>
+            <layout>default</layout>
+        </mirror>
+    </mirrors>
+
+    <activeProfiles>
+        <activeProfile>whaleops</activeProfile>
+        <activeProfile>github</activeProfile>
+    </activeProfiles>
 </settings>

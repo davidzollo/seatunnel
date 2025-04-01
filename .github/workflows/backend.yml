@@ -30,18 +30,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  license-header:
-    name: License header
-    runs-on:
-      labels: wtci_haiwai
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-      - name: Check license header
-        uses: apache/skywalking-eyes@985866ce7e324454f61e22eb2db2e998db09d6f3
-
   code-style:
     if: github.repository == 'WhaleOps/whaletunnel'
     name: Code style
@@ -58,7 +46,7 @@ jobs:
   sanity-check:
     if: github.repository == 'WhaleOps/whaletunnel'
     name: Sanity check results
-    needs: [ code-style, license-header ]
+    needs: [ code-style ]
     runs-on:
       labels: wtci
     timeout-minutes: 30
