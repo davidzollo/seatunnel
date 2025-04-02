@@ -151,7 +151,7 @@ public class MultiTableSink
 
     @Override
     public Optional<Serializer<MultiTableState>> getWriterStateSerializer() {
-        return Optional.of(new DefaultSerializer<>());
+        return Optional.of(new SerializerAdapter<>());
     }
 
     @Override
