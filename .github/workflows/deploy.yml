@@ -49,5 +49,5 @@ jobs:
         shell: bash
         run: |
           ./mvnw -T 4C --batch-mode --settings maven-settings.xml clean deploy \
-                -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/whaleops/whaletunnel \
+                -DaltDeploymentRepository=whaleops::default::http://1.92.205.70:8081/repository/whalestudio-snapshot \
                 -Dmaven.test.skip -Dcheckstyle.skip -DretryFailedDeploymentCount=5
