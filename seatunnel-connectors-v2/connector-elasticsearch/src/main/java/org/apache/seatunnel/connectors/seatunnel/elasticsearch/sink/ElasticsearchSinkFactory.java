@@ -17,7 +17,9 @@
 
 package org.apache.seatunnel.connectors.seatunnel.elasticsearch.sink;
 
+import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.configuration.util.OptionRule;
+import org.apache.seatunnel.api.sink.SinkCommonOptions;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.connector.TableSink;
@@ -68,13 +70,16 @@ public class ElasticsearchSinkFactory implements TableSinkFactory {
                         TLS_KEY_STORE_PATH,
                         TLS_KEY_STORE_PASSWORD,
                         TLS_TRUST_STORE_PATH,
-                        TLS_TRUST_STORE_PASSWORD)
+                        TLS_TRUST_STORE_PASSWORD,
+                        SinkCommonOptions.MULTI_TABLE_SINK_REPLICA,
+                        SinkCommonOptions.MULTI_TABLE_SINK_TTL_SEC)
                 .build();
     }
 
     @Override
     public TableSink createSink(TableSinkFactoryContext context) {
-        String original = context.getOptions().get(INDEX);
+        ReadonlyConfig readonlyConfig = context.getOptions();
+        String original = readonlyConfig.get(INDEX);
         CatalogTable newTable =
                 CatalogTable.of(
                         TableIdentifier.of(
@@ -82,6 +87,6 @@ public class ElasticsearchSinkFactory implements TableSinkFactory {
                                 context.getCatalogTable().getTablePath().getDatabaseName(),
                                 original),
                         context.getCatalogTable());
-        return () -> new ElasticsearchSink(context.getOptions(), newTable);
+        return () -> new ElasticsearchSink(readonlyConfig, newTable);
     }
 }

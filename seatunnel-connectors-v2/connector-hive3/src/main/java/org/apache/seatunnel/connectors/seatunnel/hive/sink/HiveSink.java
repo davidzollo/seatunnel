@@ -40,6 +40,7 @@ import org.apache.seatunnel.connectors.seatunnel.file.sink.state.FileSinkState;
 import org.apache.seatunnel.connectors.seatunnel.file.sink.writer.WriteStrategy;
 import org.apache.seatunnel.connectors.seatunnel.file.sink.writer.WriteStrategyFactory;
 import org.apache.seatunnel.connectors.seatunnel.hive.commit.HiveSinkAggregatedCommitter;
+import org.apache.seatunnel.connectors.seatunnel.hive.config.BaseHiveOptions;
 import org.apache.seatunnel.connectors.seatunnel.hive.config.HiveConstants;
 import org.apache.seatunnel.connectors.seatunnel.hive.config.HiveHadoopConfig;
 import org.apache.seatunnel.connectors.seatunnel.hive.exception.HiveConnectorErrorCode;
@@ -222,6 +223,9 @@ public class HiveSink
         readonlyConfig
                 .getOptional(HdfsConfigOptions.HDFS_SITE_PATH)
                 .ifPresent(hiveHadoopConfig::setHdfsSitePath);
+        readonlyConfig
+                .getOptional(BaseHiveOptions.HADOOP_CONF_PATH)
+                .ifPresent(hiveHadoopConfig::setHadoopConfPath);
         readonlyConfig
                 .getOptional(HdfsConfigOptions.KRB5_PATH)
                 .ifPresent(hiveHadoopConfig::setKrb5Path);

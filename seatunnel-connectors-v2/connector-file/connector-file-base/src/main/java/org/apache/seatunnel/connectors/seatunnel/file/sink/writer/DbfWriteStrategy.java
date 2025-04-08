@@ -36,6 +36,8 @@ import lombok.NonNull;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Date;
@@ -171,6 +173,8 @@ public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
             SqlType sqlType = seaTunnelDataType.getSqlType();
             switch (sqlType) {
                 case STRING:
+                case DECIMAL:
+                case BYTES:
                     return DBFDataType.CHARACTER;
                 case BOOLEAN:
                     return DBFDataType.LOGICAL;
@@ -181,14 +185,11 @@ public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
                 case BIGINT:
                 case FLOAT:
                     return DBFDataType.NUMERIC;
-                case DECIMAL:
-                    return DBFDataType.CURRENCY;
-                case BYTES:
-                    return DBFDataType.VARCHAR;
                 case DATE:
                 case TIME:
-                case TIMESTAMP:
                     return DBFDataType.DATE;
+                case TIMESTAMP:
+                    return DBFDataType.TIMESTAMP;
                 default:
                     throw new UnsupportedOperationException(
                             sqlType + " type is not supported in DBF");
@@ -208,14 +209,21 @@ public class DbfWriteStrategy extends AbstractWriteStrategy<DBFWriter> {
                 case BIGINT:
                 case FLOAT:
                 case DOUBLE:
-                case DECIMAL:
                 case BYTES:
                     return seatunnelObject;
+                case DECIMAL:
+                    return seatunnelObject.toString();
+                case DATE:
+                    if (seatunnelObject == null) {
+                        return null;
+                    }
+                    LocalDate localDate = (LocalDate) seatunnelObject;
+                    return Date.from(localDate.atStartOfDay(ZoneOffset.UTC).toInstant());
                 case TIMESTAMP:
                     if (seatunnelObject == null) {
                         return null;
                     }
-                    return new Date(
+                    return new Timestamp(
                             ((LocalDateTime) seatunnelObject)
                                     .toInstant(ZoneOffset.UTC)
                                     .toEpochMilli());

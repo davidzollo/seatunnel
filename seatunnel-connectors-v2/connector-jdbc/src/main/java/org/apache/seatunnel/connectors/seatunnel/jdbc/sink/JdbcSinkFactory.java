@@ -243,6 +243,7 @@ public class JdbcSinkFactory implements TableSinkFactory {
                 JdbcDialectLoader.load(
                         sinkConfig.getJdbcConnectionConfig().getUrl(),
                         sinkConfig.getJdbcConnectionConfig().getCompatibleMode(),
+                        sinkConfig.getJdbcConnectionConfig().getDialect(),
                         fieldIdeEnum == null ? null : fieldIdeEnum.getValue(),
                         config);
         dialect.connectionUrlParse(

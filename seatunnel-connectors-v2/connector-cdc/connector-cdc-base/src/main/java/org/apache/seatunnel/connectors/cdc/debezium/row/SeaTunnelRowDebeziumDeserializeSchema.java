@@ -19,9 +19,9 @@ package org.apache.seatunnel.connectors.cdc.debezium.row;
 
 import org.apache.seatunnel.api.source.Collector;
 import org.apache.seatunnel.api.table.catalog.TablePath;
-import org.apache.seatunnel.api.table.event.SchemaChangeEvent;
-import org.apache.seatunnel.api.table.event.handler.DataTypeChangeEventDispatcher;
-import org.apache.seatunnel.api.table.event.handler.DataTypeChangeEventHandler;
+import org.apache.seatunnel.api.table.schema.event.SchemaChangeEvent;
+import org.apache.seatunnel.api.table.schema.handler.DataTypeChangeEventDispatcher;
+import org.apache.seatunnel.api.table.schema.handler.DataTypeChangeEventHandler;
 import org.apache.seatunnel.api.table.type.MultipleRowType;
 import org.apache.seatunnel.api.table.type.RowKind;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;

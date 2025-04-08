@@ -21,6 +21,8 @@ import org.apache.seatunnel.api.source.SourceSplit;
 
 import lombok.Getter;
 
+import java.util.Objects;
+
 public class HiveSourceSplit implements SourceSplit {
 
     private static final long serialVersionUID = 1L;
@@ -36,5 +38,22 @@ public class HiveSourceSplit implements SourceSplit {
     @Override
     public String splitId() {
         return tableId + "_" + filePath;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        HiveSourceSplit that = (HiveSourceSplit) o;
+        return Objects.equals(tableId, that.tableId) && Objects.equals(filePath, that.filePath);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(tableId, filePath);
     }
 }

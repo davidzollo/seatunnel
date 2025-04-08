@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.kingbase8;
 
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectFactory;
 
@@ -25,6 +26,11 @@ import com.google.auto.service.AutoService;
 /** Factory for {@link KingbaseDialect}. */
 @AutoService(JdbcDialectFactory.class)
 public class KingbaseDialectFactory implements JdbcDialectFactory {
+
+    @Override
+    public String dialectFactoryName() {
+        return DatabaseIdentifier.KINGBASE8;
+    }
 
     @Override
     public boolean acceptsURL(String url) {

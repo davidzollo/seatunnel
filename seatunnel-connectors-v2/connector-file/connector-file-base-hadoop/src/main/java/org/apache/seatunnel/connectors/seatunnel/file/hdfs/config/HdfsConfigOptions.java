@@ -29,6 +29,13 @@ public class HdfsConfigOptions {
                     .noDefaultValue()
                     .withDescription("The path of hdfs-site.xml");
 
+    public static final Option<String> HADOOP_CONF_PATH =
+            Options.key("hadoop.conf-path")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The specified loading path for the 'core-site.xml', 'hdfs-site.xml' files");
+
     public static final Option<String> REMOTE_USER =
             Options.key("remote_user")
                     .stringType()

@@ -42,7 +42,7 @@ public class InceptorJdbcConnectionProvider extends SimpleJdbcConnectionProvider
 
     @Override
     public Connection getOrEstablishConnection() throws SQLException, ClassNotFoundException {
-        if (jdbcConfig.useKerberos) {
+        if (jdbcConfig.isUseKerberos()) {
             InceptorJdbcUtils.doKerberosAuthentication(jdbcConfig);
         }
         if (isConnectionValid()) {
@@ -53,7 +53,7 @@ public class InceptorJdbcConnectionProvider extends SimpleJdbcConnectionProvider
         InceptorConnectionProduceFunction inceptorConnectionProduceFunction =
                 new InceptorConnectionProduceFunction(driver, jdbcConfig);
 
-        if (jdbcConfig.useKerberos) {
+        if (jdbcConfig.isUseKerberos()) {
             super.setConnection(getConnectionWithKerberos(inceptorConnectionProduceFunction));
         } else {
             super.setConnection(inceptorConnectionProduceFunction.produce());
@@ -75,9 +75,9 @@ public class InceptorJdbcConnectionProvider extends SimpleJdbcConnectionProvider
             configuration.set("hadoop.security.authentication", "kerberos");
             return loginWithKerberos(
                     configuration,
-                    jdbcConfig.krb5Path,
-                    jdbcConfig.kerberosPrincipal,
-                    jdbcConfig.kerberosKeytabPath,
+                    jdbcConfig.getKrb5Path(),
+                    jdbcConfig.getKerberosPrincipal(),
+                    jdbcConfig.getKerberosKeytabPath(),
                     (conf, userGroupInformation) -> hiveConnectionProduceFunction.produce());
         } catch (Exception ex) {
             throw new JdbcConnectorException(KERBEROS_AUTHENTICATION_FAILED, ex);

@@ -35,9 +35,9 @@ import static org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConne
 public class InceptorJdbcUtils {
 
     public static synchronized void doKerberosAuthentication(JdbcConnectionConfig jdbcConfig) {
-        String principal = jdbcConfig.kerberosPrincipal;
-        String keytabPath = jdbcConfig.kerberosKeytabPath;
-        String krb5Path = jdbcConfig.krb5Path;
+        String principal = jdbcConfig.getKerberosPrincipal();
+        String keytabPath = jdbcConfig.getKerberosKeytabPath();
+        String krb5Path = jdbcConfig.getKrb5Path();
         Configuration configuration = new Configuration();
 
         if (StringUtils.isBlank(principal) || StringUtils.isBlank(keytabPath)) {

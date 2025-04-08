@@ -24,11 +24,14 @@ import org.apache.seatunnel.api.sink.SaveModeHandler;
 import org.apache.seatunnel.api.sink.SchemaSaveMode;
 import org.apache.seatunnel.api.sink.SeaTunnelSink;
 import org.apache.seatunnel.api.sink.SinkWriter;
+import org.apache.seatunnel.api.sink.SupportMultiTableSink;
 import org.apache.seatunnel.api.sink.SupportSaveMode;
+import org.apache.seatunnel.api.sink.SupportSchemaEvolutionSink;
 import org.apache.seatunnel.api.table.catalog.Catalog;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.factory.CatalogFactory;
+import org.apache.seatunnel.api.table.schema.SchemaChangeType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.connectors.seatunnel.elasticsearch.config.SinkConfig;
 import org.apache.seatunnel.connectors.seatunnel.elasticsearch.state.ElasticsearchAggregatedCommitInfo;
@@ -37,6 +40,8 @@ import org.apache.seatunnel.connectors.seatunnel.elasticsearch.state.Elasticsear
 
 import com.google.auto.service.AutoService;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 
 import static org.apache.seatunnel.api.table.factory.FactoryUtil.discoverFactory;
@@ -50,7 +55,9 @@ public class ElasticsearchSink
                         ElasticsearchSinkState,
                         ElasticsearchCommitInfo,
                         ElasticsearchAggregatedCommitInfo>,
-                SupportSaveMode {
+                SupportMultiTableSink,
+                SupportSaveMode,
+                SupportSchemaEvolutionSink {
 
     private ReadonlyConfig config;
     private CatalogTable catalogTable;
@@ -72,8 +79,7 @@ public class ElasticsearchSink
     }
 
     @Override
-    public SinkWriter<SeaTunnelRow, ElasticsearchCommitInfo, ElasticsearchSinkState> createWriter(
-            SinkWriter.Context context) {
+    public ElasticsearchSinkWriter createWriter(SinkWriter.Context context) {
         return new ElasticsearchSinkWriter(
                 context, catalogTable, config, maxBatchSize, maxRetryCount);
     }
@@ -96,5 +102,10 @@ public class ElasticsearchSink
         return Optional.of(
                 new DefaultSaveModeHandler(
                         schemaSaveMode, dataSaveMode, catalog, tablePath, null, null));
+    }
+
+    @Override
+    public List<SchemaChangeType> supports() {
+        return Arrays.asList(SchemaChangeType.ADD_COLUMN);
     }
 }

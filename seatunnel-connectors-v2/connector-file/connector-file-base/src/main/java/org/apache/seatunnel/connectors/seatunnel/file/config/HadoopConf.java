@@ -17,16 +17,23 @@
 
 package org.apache.seatunnel.connectors.seatunnel.file.config;
 
+import org.apache.seatunnel.shade.com.google.common.collect.ImmutableList;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.net.MalformedURLException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.apache.parquet.avro.AvroReadSupport.READ_INT96_AS_FIXED;
@@ -34,12 +41,16 @@ import static org.apache.parquet.avro.AvroSchemaConverter.ADD_LIST_ELEMENT_RECOR
 import static org.apache.parquet.avro.AvroWriteSupport.WRITE_OLD_LIST_STRUCTURE;
 
 @Data
+@Slf4j
 public class HadoopConf implements Serializable {
+    private static final List<String> HADOOP_CONF_FILES =
+            ImmutableList.of("hdfs-site.xml", "core-site.xml");
     private static final String HDFS_IMPL = "org.apache.hadoop.hdfs.DistributedFileSystem";
     private static final String SCHEMA = "hdfs";
     protected Map<String, String> extraOptions = new HashMap<>();
     protected String hdfsNameKey;
     protected String hdfsSitePath;
+    protected String hadoopConfPath;
 
     protected String remoteUser;
 
@@ -66,6 +77,22 @@ public class HadoopConf implements Serializable {
         try {
             if (StringUtils.isNotBlank(hdfsSitePath)) {
                 configuration.addResource(new File(hdfsSitePath).toURI().toURL());
+            }
+            if (StringUtils.isNotBlank(hadoopConfPath)) {
+                HADOOP_CONF_FILES.forEach(
+                        confFile -> {
+                            java.nio.file.Path path = Paths.get(hadoopConfPath, confFile);
+                            if (Files.exists(path)) {
+                                try {
+                                    configuration.addResource(path.toUri().toURL());
+                                } catch (IOException e) {
+                                    log.warn(
+                                            "Error adding Hadoop resource {}, resource was not added",
+                                            path,
+                                            e);
+                                }
+                            }
+                        });
             }
         } catch (MalformedURLException e) {
             throw new RuntimeException("Add hdfs site failed: ", e);

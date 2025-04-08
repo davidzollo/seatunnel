@@ -19,7 +19,7 @@ package org.apache.seatunnel.api.sink;
 
 import org.apache.seatunnel.api.common.metrics.MetricsContext;
 import org.apache.seatunnel.api.event.EventListener;
-import org.apache.seatunnel.api.table.event.SchemaChangeEvent;
+import org.apache.seatunnel.api.table.schema.event.SchemaChangeEvent;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -52,6 +52,7 @@ public interface SinkWriter<T, CommitInfoT, StateT> {
      * @param event
      * @throws IOException
      */
+    @Deprecated
     default void applySchemaChange(SchemaChangeEvent event) throws IOException {}
 
     /**

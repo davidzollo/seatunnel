@@ -26,6 +26,7 @@ connector-cassandra
 connector-cdc-mysql
 connector-cdc-mongodb
 connector-cdc-sqlserver
+connector-cdc-tidb
 connector-clickhouse
 connector-datahub
 connector-dingtalk

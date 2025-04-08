@@ -117,7 +117,7 @@ public interface JdbcOptions {
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
-                            "decimal type narrowing, if true, the decimal type will be narrowed to the int or long type if without loss of precision. Only support for Oracle at now.");
+                            "decimal type narrowing, if true, the decimal type will be narrowed to the int or long type if without loss of precision. Support for Oracle/Yashan at now.");
 
     Option<String> XA_DATA_SOURCE_CLASS_NAME =
             Options.key("xa_data_source_class_name")
@@ -192,6 +192,13 @@ public interface JdbcOptions {
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("support upsert by insert only");
+
+    Option<String> DIALECT =
+            Options.key("dialect")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The appointed dialect, if it does not exist, is still obtained according to the url");
 
     /** source config */
     Option<String> PARTITION_COLUMN =

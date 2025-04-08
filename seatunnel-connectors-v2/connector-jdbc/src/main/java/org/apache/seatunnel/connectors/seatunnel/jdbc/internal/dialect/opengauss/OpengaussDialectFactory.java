@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.opengauss;
 
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectFactory;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.psql.PostgresDialect;
@@ -28,6 +29,12 @@ import javax.annotation.Nonnull;
 
 @AutoService(JdbcDialectFactory.class)
 public class OpengaussDialectFactory implements JdbcDialectFactory {
+
+    @Override
+    public String dialectFactoryName() {
+        return DatabaseIdentifier.OPENGAUSS;
+    }
+
     @Override
     public boolean acceptsURL(String url) {
         return url.startsWith("jdbc:opengauss:");

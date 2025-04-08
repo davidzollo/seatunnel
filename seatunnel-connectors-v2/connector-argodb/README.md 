@@ -1,0 +1,18 @@
+# Install argodb driver
+
+## Download the argodb driver
+
+https://drive.weixin.qq.com/s?k=AJoAegdfAAggf9qm4r
+
+## Install it to your private maven repository.
+
+```shell
+mvn deploy:deploy-file \
+    -Dfile=argodb-sink-client-8.37.3-2024080510-all-in-one.jar \
+    -DgroupId=io.transwarp.inceptor \
+    -DartifactId=argodb-sink-client \
+    -Dversion=8.37.3 \
+    -Dpackaging=jar \
+    -Durl=http://1.92.205.70:8081/repository/maven-public/ \
+    -DrepositoryId=whaleops
+```

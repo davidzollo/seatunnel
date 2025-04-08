@@ -41,12 +41,14 @@
         <module>connector-jdbc-hive1</module>
         <module>connector-jdbc-hive2</module>
         <module>connector-jdbc-cdh-hive2</module>
-        <module>connector-kafka</module>
+        <!--        <module>connector-kafka</module>-->
+        <module>connector-kafka-wt</module>
         <module>connector-pulsar</module>
         <module>connector-socket</module>
         <module>connector-hive1</module>
         <module>connector-hive2</module>
         <module>connector-hive3</module>
+        <module>connector-hw-mrs-hive3</module>
         <module>connector-file</module>
         <module>connector-hudi</module>
         <module>connector-assert</module>
@@ -86,6 +88,8 @@
         <module>connector-dws-gaussdb-wt</module>
         <module>connector-jdbc-phoenix</module>
         <module>connector-jdbc-inceptor</module>
+        <module>connector-jdbc-starrocks</module>
+        <module>connector-argodb</module>
     </modules>
 
     <dependencyManagement>

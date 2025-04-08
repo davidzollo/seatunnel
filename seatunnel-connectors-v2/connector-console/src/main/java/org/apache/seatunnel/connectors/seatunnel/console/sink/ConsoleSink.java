@@ -20,16 +20,21 @@ package org.apache.seatunnel.connectors.seatunnel.console.sink;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.sink.SinkWriter;
 import org.apache.seatunnel.api.sink.SupportMultiTableSink;
+import org.apache.seatunnel.api.sink.SupportSchemaEvolutionSink;
+import org.apache.seatunnel.api.table.schema.SchemaChangeType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.connectors.seatunnel.common.sink.AbstractSimpleSink;
 import org.apache.seatunnel.connectors.seatunnel.common.sink.AbstractSinkWriter;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static org.apache.seatunnel.connectors.seatunnel.console.sink.ConsoleSinkFactory.LOG_PRINT_DATA;
 import static org.apache.seatunnel.connectors.seatunnel.console.sink.ConsoleSinkFactory.LOG_PRINT_DELAY;
 
 public class ConsoleSink extends AbstractSimpleSink<SeaTunnelRow, Void>
-        implements SupportMultiTableSink {
+        implements SupportMultiTableSink, SupportSchemaEvolutionSink {
     private final SeaTunnelRowType seaTunnelRowType;
     private final boolean isPrintData;
     private final int delayMs;
@@ -48,5 +53,14 @@ public class ConsoleSink extends AbstractSimpleSink<SeaTunnelRow, Void>
     @Override
     public String getPluginName() {
         return "Console";
+    }
+
+    @Override
+    public List<SchemaChangeType> supports() {
+        return Arrays.asList(
+                SchemaChangeType.ADD_COLUMN,
+                SchemaChangeType.DROP_COLUMN,
+                SchemaChangeType.RENAME_COLUMN,
+                SchemaChangeType.UPDATE_COLUMN);
     }
 }

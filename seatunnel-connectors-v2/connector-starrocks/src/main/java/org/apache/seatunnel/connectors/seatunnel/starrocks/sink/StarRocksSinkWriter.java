@@ -18,10 +18,11 @@
 package org.apache.seatunnel.connectors.seatunnel.starrocks.sink;
 
 import org.apache.seatunnel.api.sink.SupportMultiTableSinkWriter;
+import org.apache.seatunnel.api.sink.SupportSchemaEvolutionSinkWriter;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.CatalogTableUtil;
-import org.apache.seatunnel.api.table.event.SchemaChangeEvent;
-import org.apache.seatunnel.api.table.event.handler.DataTypeChangeEventDispatcher;
+import org.apache.seatunnel.api.table.schema.event.SchemaChangeEvent;
+import org.apache.seatunnel.api.table.schema.handler.DataTypeChangeEventDispatcher;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated;
@@ -47,7 +48,8 @@ import java.util.stream.Collectors;
 
 @Slf4j
 public class StarRocksSinkWriter extends AbstractSinkWriter<SeaTunnelRow, Void>
-        implements SupportMultiTableSinkWriter<ConnectionPoolManager> {
+        implements SupportMultiTableSinkWriter<ConnectionPoolManager>,
+                SupportSchemaEvolutionSinkWriter {
 
     private StarRocksISerializer serializer;
     private StarRocksSinkManager manager;

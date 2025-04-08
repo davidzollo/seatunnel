@@ -83,8 +83,7 @@ public class FtpFileSinkFactory extends BaseMultipleTableFinkSinkFactory {
                         BaseSinkConfig.FILE_FORMAT_TYPE,
                         FileFormat.PARQUET,
                         BaseSinkConfig.PARQUET_COMPRESS,
-                        // TODO 等待 http://172.28.230.21:18056/browse/ST-1912 修复
-                        //                        BaseSinkConfig.PARQUET_AVRO_WRITE_FIXED_AS_INT96,
+                        BaseSinkConfig.PARQUET_AVRO_WRITE_FIXED_AS_INT96,
                         BaseSinkConfig.PARQUET_AVRO_WRITE_TIMESTAMP_AS_INT96)
                 .conditional(
                         BaseSinkConfig.FILE_FORMAT_TYPE,

@@ -19,12 +19,12 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.mysql.schema.ddl.listener;
 
 import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.catalog.TablePath;
-import org.apache.seatunnel.api.table.event.AlterTableAddColumnEvent;
-import org.apache.seatunnel.api.table.event.AlterTableChangeColumnEvent;
-import org.apache.seatunnel.api.table.event.AlterTableColumnsEvent;
-import org.apache.seatunnel.api.table.event.AlterTableDropColumnEvent;
-import org.apache.seatunnel.api.table.event.AlterTableModifyColumnEvent;
-import org.apache.seatunnel.api.table.event.AlterTableNameEvent;
+import org.apache.seatunnel.api.table.schema.event.AlterTableAddColumnEvent;
+import org.apache.seatunnel.api.table.schema.event.AlterTableChangeColumnEvent;
+import org.apache.seatunnel.api.table.schema.event.AlterTableColumnsEvent;
+import org.apache.seatunnel.api.table.schema.event.AlterTableDropColumnEvent;
+import org.apache.seatunnel.api.table.schema.event.AlterTableModifyColumnEvent;
+import org.apache.seatunnel.api.table.schema.event.AlterTableNameEvent;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mysql.schema.ddl.MySqlAntlrDdlParser;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mysql.utils.MySqlTypeUtils;
 

@@ -45,14 +45,20 @@ public class SqlServerURLParser {
         String[] split = url.split(";", 2);
         if (split.length > 1) {
             props = parseQueryParams(split[1], ";");
-            serverName = props.get("serverName");
-            instanceName = props.get("instanceName");
-            dbInstance = props.getOrDefault("databaseName", props.get("database"));
-            if (props.containsKey("portNumber") || props.containsKey("port")) {
+            Map<String, String> propsWithUpperCaseKey =
+                    props.entrySet().stream()
+                            .collect(
+                                    Collectors.toMap(
+                                            e -> e.getKey().toUpperCase(), Map.Entry::getValue));
+            serverName = propsWithUpperCaseKey.get("SERVERNAME");
+            instanceName = propsWithUpperCaseKey.get("INSTANCENAME");
+            dbInstance = propsWithUpperCaseKey.getOrDefault("DATABASENAME", props.get("DATABASE"));
+            if (propsWithUpperCaseKey.containsKey("PORTNUMBER")
+                    || propsWithUpperCaseKey.containsKey("PORT")) {
                 String portNumber =
-                        props.get("portNumber") == null
-                                ? props.get("port")
-                                : props.get("portNumber");
+                        propsWithUpperCaseKey.get("PORTNUMBER") == null
+                                ? propsWithUpperCaseKey.get("PORT")
+                                : propsWithUpperCaseKey.get("PORTNUMBER");
                 try {
                     port = Integer.parseInt(portNumber);
                 } catch (NumberFormatException ignored) {
@@ -86,8 +92,8 @@ public class SqlServerURLParser {
                 props.entrySet().stream()
                         .filter(
                                 e ->
-                                        !e.getKey().equals("databaseName")
-                                                && !e.getKey().equals("database"))
+                                        !e.getKey().equalsIgnoreCase("databaseName")
+                                                && !e.getKey().equalsIgnoreCase("database"))
                         .map(e -> e.getKey() + "=" + e.getValue())
                         .collect(Collectors.joining(";", "", ""));
         suffix = Optional.ofNullable(suffix).orElse("");

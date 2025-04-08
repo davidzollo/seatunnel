@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.starrocks;
 
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.mysql.MysqlDialect;
 
 public class StarRocksDialect extends MysqlDialect {
@@ -29,7 +30,7 @@ public class StarRocksDialect extends MysqlDialect {
 
     @Override
     public String dialectName() {
-        return "JDBC-StarRocks";
+        return DatabaseIdentifier.STARROCKS;
     }
 
     @Override
