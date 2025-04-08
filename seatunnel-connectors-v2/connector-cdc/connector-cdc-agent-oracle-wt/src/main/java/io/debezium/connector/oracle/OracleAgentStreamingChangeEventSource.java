@@ -62,6 +62,7 @@ public class OracleAgentStreamingChangeEventSource
     private final ErrorHandler errorHandler;
     private final Clock clock;
     private final OracleAgentDmlEntryFactory dmlEntryFactory;
+    private final ZoneId serverTimeZone;
     // todo: we don't support multiple database now, since the oracle9bridge event doesn't contains
     // the database field,
     // one oracle9bridge should only bind to one database instance.
@@ -92,6 +93,7 @@ public class OracleAgentStreamingChangeEventSource
         this.tables = tableIds.stream().map(TableId::table).collect(Collectors.toList());
         this.tableOwners = tableIds.stream().map(TableId::schema).collect(Collectors.toList());
         this.dmlEntryFactory = new OracleAgentDmlEntryFactory(ZoneId.of(serverTimeZone));
+        this.serverTimeZone = ZoneId.of(serverTimeZone);
     }
 
     @Override
@@ -190,7 +192,8 @@ public class OracleAgentStreamingChangeEventSource
                 log.info(
                         "The DDL: {} of the OracleAgent-CDC connector is not supported, will skip it",
                         oracleOperation);
-                offsetContext.event(tableId, DateUtils.toInstant(oracleOperation.getScntime()));
+                offsetContext.event(
+                        tableId, DateUtils.toInstant(oracleOperation.getScntime(), serverTimeZone));
                 offsetContext.setScn(scn);
                 offsetContext.setFzsFileNumber(fzsFileNumber);
                 continue;
@@ -199,7 +202,8 @@ public class OracleAgentStreamingChangeEventSource
                     dmlEntryFactory.transformOperation(
                             customOracleAgentValueConverter, oracleOperation, table);
             for (OracleAgentDmlEntry dmlEntry : dmlEntries) {
-                offsetContext.event(tableId, DateUtils.toInstant(oracleOperation.getScntime()));
+                offsetContext.event(
+                        tableId, DateUtils.toInstant(oracleOperation.getScntime(), serverTimeZone));
                 offsetContext.setScn(scn);
                 offsetContext.setFzsFileNumber(fzsFileNumber);
                 try {

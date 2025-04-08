@@ -42,6 +42,7 @@ public class MySqlTypeConverter implements TypeConverter<BasicTypeDefine<MysqlTy
     // ============================data types=====================
     static final String MYSQL_NULL = "NULL";
     static final String MYSQL_BIT = "BIT";
+    static final String MYSQL_BIT_UNSIGNED = "BIT UNSIGNED";
 
     // -------------------------number----------------------------
     static final String MYSQL_TINYINT = "TINYINT";
@@ -139,6 +140,7 @@ public class MySqlTypeConverter implements TypeConverter<BasicTypeDefine<MysqlTy
                 builder.dataType(BasicType.VOID_TYPE);
                 break;
             case MYSQL_BIT:
+            case MYSQL_BIT_UNSIGNED:
                 if (typeDefine.getLength() == null || typeDefine.getLength() <= 0) {
                     builder.dataType(BasicType.BOOLEAN_TYPE);
                 } else if (typeDefine.getLength() == 1) {

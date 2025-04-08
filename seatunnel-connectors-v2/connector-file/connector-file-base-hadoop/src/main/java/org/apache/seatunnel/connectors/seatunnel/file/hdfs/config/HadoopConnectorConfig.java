@@ -31,6 +31,9 @@ public class HadoopConnectorConfig extends HadoopConf {
         if (config.getOptional(HdfsConfigOptions.HDFS_SITE_PATH).isPresent()) {
             hadoopConf.setHdfsSitePath(config.get(HdfsConfigOptions.HDFS_SITE_PATH));
         }
+        if (config.getOptional(HdfsConfigOptions.HADOOP_CONF_PATH).isPresent()) {
+            hadoopConf.setHadoopConfPath(config.get(HdfsConfigOptions.HADOOP_CONF_PATH));
+        }
 
         if (config.getOptional(HdfsConfigOptions.REMOTE_USER).isPresent()) {
             hadoopConf.setRemoteUser(config.get(HdfsConfigOptions.REMOTE_USER));

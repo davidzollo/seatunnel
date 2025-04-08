@@ -21,7 +21,8 @@ import org.apache.seatunnel.api.sink.MultiTableResourceManager;
 import org.apache.seatunnel.api.sink.SinkWriter;
 import org.apache.seatunnel.api.sink.SupportMultiTableSinkWriter;
 import org.apache.seatunnel.api.sink.SupportResourceShare;
-import org.apache.seatunnel.api.table.event.SchemaChangeEvent;
+import org.apache.seatunnel.api.sink.SupportSchemaEvolutionSinkWriter;
+import org.apache.seatunnel.api.table.schema.event.SchemaChangeEvent;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.tracing.MDCTracer;
 
@@ -47,7 +48,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class MultiTableSinkWriter
         implements SinkWriter<SeaTunnelRow, MultiTableCommitInfo, MultiTableState>,
-                SupportResourceShare {
+                SupportResourceShare,
+                SupportSchemaEvolutionSinkWriter {
 
     private final Map<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkWriters;
     private final Map<String, Optional<Integer>> sinkPrimaryKeys = new HashMap<>();
@@ -167,7 +169,14 @@ public class MultiTableSinkWriter
                             sinkWriterEntry.getKey().getTableIdentifier(),
                             sinkWriterEntry.getKey().getIndex());
                     synchronized (runnable.get(i)) {
-                        sinkWriterEntry.getValue().applySchemaChange(event);
+                        if (sinkWriterEntry.getValue()
+                                instanceof SupportSchemaEvolutionSinkWriter) {
+                            ((SupportSchemaEvolutionSinkWriter) sinkWriterEntry.getValue())
+                                    .applySchemaChange(event);
+                        } else {
+                            // TODO remove deprecated method
+                            sinkWriterEntry.getValue().applySchemaChange(event);
+                        }
                     }
                     log.info(
                             "Finish apply schema change for table {} sub-writer {}",

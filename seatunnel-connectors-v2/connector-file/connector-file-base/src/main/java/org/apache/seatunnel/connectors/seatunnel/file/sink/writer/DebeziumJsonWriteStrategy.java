@@ -23,7 +23,7 @@ import org.apache.seatunnel.common.exception.CommonErrorCode;
 import org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated;
 import org.apache.seatunnel.connectors.seatunnel.file.exception.FileConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.file.sink.config.FileSinkConfig;
-import org.apache.seatunnel.format.compatible.debezium.json.CompatibleDebeziumJsonSerializationSchema;
+import org.apache.seatunnel.format.json.debezium.DebeziumJsonSerializationSchema;
 
 import org.apache.hadoop.fs.FSDataOutputStream;
 
@@ -42,7 +42,7 @@ import java.util.Map;
  */
 public class DebeziumJsonWriteStrategy extends AbstractWriteStrategy<FSDataOutputStream> {
     private final byte[] rowDelimiter;
-    protected CompatibleDebeziumJsonSerializationSchema serializationSchema;
+    protected DebeziumJsonSerializationSchema serializationSchema;
     private final LinkedHashMap<String, FSDataOutputStream> beingWrittenOutputStream;
     private final Map<String, Boolean> isFirstWrite;
 
@@ -59,8 +59,8 @@ public class DebeziumJsonWriteStrategy extends AbstractWriteStrategy<FSDataOutpu
         // we only write the value
         // todo: config if we need to write key, value or the whole row
         this.serializationSchema =
-                new CompatibleDebeziumJsonSerializationSchema(
-                        buildSchemaWithRowType(seaTunnelRowType, sinkColumnsIndexInRow), false);
+                new DebeziumJsonSerializationSchema(
+                        buildSchemaWithRowType(seaTunnelRowType, sinkColumnsIndexInRow));
     }
 
     @Override

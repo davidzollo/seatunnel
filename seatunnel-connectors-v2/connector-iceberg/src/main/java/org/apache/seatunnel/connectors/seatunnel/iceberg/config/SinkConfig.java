@@ -59,7 +59,15 @@ public class SinkConfig extends CommonConfig {
     public static final Option<Map<String, String>> WRITE_PROPS =
             Options.key("iceberg.table.write-props")
                     .mapType()
-                    .defaultValue(new HashMap<>())
+                    .defaultValue(
+                            new HashMap<String, String>() {
+                                {
+                                    put("write.format.default", "parquet");
+                                    put(
+                                            "write.target-file-size-bytes",
+                                            Long.toString(1024 * 1024 * 128));
+                                }
+                            })
                     .withDescription(
                             "Properties passed through to Iceberg writer initialization, these take precedence, such as 'write.format.default', 'write.target-file-size-bytes', and other settings, can be found with specific parameters at 'https://github.com/apache/iceberg/blob/main/core/src/main/java/org/apache/iceberg/TableProperties.java'.");
 

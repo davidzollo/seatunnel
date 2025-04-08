@@ -38,11 +38,11 @@ public final class JdbcDialectLoader {
     private JdbcDialectLoader() {}
 
     public static JdbcDialect load(String url) {
-        return load(url, "", "", null);
+        return load(url, "", "", "", null);
     }
 
-    public static JdbcDialect load(String url, String compatibleMode) {
-        return load(url, compatibleMode, "", null);
+    public static JdbcDialect load(String url, String compatibleMode, String dialect) {
+        return load(url, compatibleMode, dialect, "", null);
     }
 
     /**
@@ -55,7 +55,11 @@ public final class JdbcDialectLoader {
      *     unambiguously process the given database URL.
      */
     public static JdbcDialect load(
-            String url, String compatibleMode, String fieldIde, ReadonlyConfig readonlyConfig) {
+            String url,
+            String compatibleMode,
+            String dialect,
+            String fieldIde,
+            ReadonlyConfig readonlyConfig) {
         ClassLoader cl = Thread.currentThread().getContextClassLoader();
         List<JdbcDialectFactory> foundFactories = discoverFactories(cl);
 
@@ -67,8 +71,18 @@ public final class JdbcDialectLoader {
                             JdbcDialectFactory.class.getName()));
         }
 
-        List<JdbcDialectFactory> matchingFactories =
-                foundFactories.stream().filter(f -> f.acceptsURL(url)).collect(Collectors.toList());
+        List<JdbcDialectFactory> matchingFactories;
+        if (dialect != null) {
+            matchingFactories =
+                    foundFactories.stream()
+                            .filter(f -> f.dialectFactoryName().equalsIgnoreCase(dialect))
+                            .collect(Collectors.toList());
+        } else {
+            matchingFactories =
+                    foundFactories.stream()
+                            .filter(f -> f.acceptsURL(url))
+                            .collect(Collectors.toList());
+        }
 
         if (matchingFactories.isEmpty()) {
             throw new JdbcConnectorException(

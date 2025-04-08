@@ -19,7 +19,7 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.oracleAgent.utils;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 public class DateUtils {
@@ -30,7 +30,7 @@ public class DateUtils {
         return LocalDateTime.parse(dateTime, DATE_TIME_FORMATTER);
     }
 
-    public static Instant toInstant(String dateTime) {
-        return parse(dateTime).toInstant(ZoneOffset.UTC);
+    public static Instant toInstant(String dateTime, ZoneId serverTimeZone) {
+        return parse(dateTime).atZone(serverTimeZone).toInstant();
     }
 }

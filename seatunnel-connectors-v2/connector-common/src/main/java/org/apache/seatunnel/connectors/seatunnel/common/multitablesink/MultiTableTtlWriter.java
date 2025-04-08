@@ -22,7 +22,8 @@ import org.apache.seatunnel.api.sink.SeaTunnelSink;
 import org.apache.seatunnel.api.sink.SinkWriter;
 import org.apache.seatunnel.api.sink.SupportMultiTableSinkWriter;
 import org.apache.seatunnel.api.sink.SupportResourceShare;
-import org.apache.seatunnel.api.table.event.SchemaChangeEvent;
+import org.apache.seatunnel.api.sink.SupportSchemaEvolutionSinkWriter;
+import org.apache.seatunnel.api.table.schema.event.SchemaChangeEvent;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 
 import lombok.Getter;
@@ -37,7 +38,9 @@ import java.util.StringJoiner;
 
 @Slf4j
 public class MultiTableTtlWriter
-        implements SinkWriter<SeaTunnelRow, Object, Object>, SupportResourceShare {
+        implements SinkWriter<SeaTunnelRow, Object, Object>,
+                SupportResourceShare,
+                SupportSchemaEvolutionSinkWriter {
     private Map<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkWriters;
     private final SeaTunnelSink sink;
     @Getter private final String tableIdentifier;
@@ -155,7 +158,12 @@ public class MultiTableTtlWriter
     public void applySchemaChange(SchemaChangeEvent event) throws IOException {
         prepare();
         lastWriteTime = System.currentTimeMillis();
-        sinkWriter.applySchemaChange(event);
+        if (sinkWriter instanceof SupportSchemaEvolutionSinkWriter) {
+            ((SupportSchemaEvolutionSinkWriter) sinkWriter).applySchemaChange(event);
+        } else {
+            // TODO remove deprecated method
+            sinkWriter.applySchemaChange(event);
+        }
     }
 
     @Override

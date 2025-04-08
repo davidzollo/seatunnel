@@ -91,6 +91,11 @@
             <artifactId>arrow-memory-netty</artifactId>
             <version>${arrow.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.seatunnel</groupId>
+            <artifactId>connector-jdbc-starrocks</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

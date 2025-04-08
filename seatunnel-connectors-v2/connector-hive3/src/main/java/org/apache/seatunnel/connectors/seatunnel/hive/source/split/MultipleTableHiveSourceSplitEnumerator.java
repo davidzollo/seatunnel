@@ -71,6 +71,17 @@ public class MultipleTableHiveSourceSplitEnumerator
     }
 
     @Override
+    public void open() {
+        for (Map.Entry<String, List<String>> filePathEntry : filePathMap.entrySet()) {
+            String tableId = filePathEntry.getKey();
+            List<String> filePaths = filePathEntry.getValue();
+            for (String filePath : filePaths) {
+                pendingSplit.add(new HiveSourceSplit(tableId, filePath));
+            }
+        }
+    }
+
+    @Override
     public void addSplitsBack(List<HiveSourceSplit> splits, int subtaskId) {
         if (CollectionUtils.isEmpty(splits)) {
             return;
@@ -88,16 +99,7 @@ public class MultipleTableHiveSourceSplitEnumerator
     public void handleSplitRequest(int subtaskId) {}
 
     @Override
-    public void registerReader(int subtaskId) {
-        for (Map.Entry<String, List<String>> filePathEntry : filePathMap.entrySet()) {
-            String tableId = filePathEntry.getKey();
-            List<String> filePaths = filePathEntry.getValue();
-            for (String filePath : filePaths) {
-                pendingSplit.add(new HiveSourceSplit(tableId, filePath));
-            }
-        }
-        assignSplit(subtaskId);
-    }
+    public void registerReader(int subtaskId) {}
 
     @Override
     public HiveSourceState snapshotState(long checkpointId) {
@@ -145,13 +147,11 @@ public class MultipleTableHiveSourceSplitEnumerator
     }
 
     @Override
-    public void open() {
-        // do nothing
-    }
-
-    @Override
     public void run() throws Exception {
-        // do nothing
+        for (int i = 0; i < context.currentParallelism(); i++) {
+            log.info("Assigned splits to reader [{}]", i);
+            assignSplit(i);
+        }
     }
 
     @Override

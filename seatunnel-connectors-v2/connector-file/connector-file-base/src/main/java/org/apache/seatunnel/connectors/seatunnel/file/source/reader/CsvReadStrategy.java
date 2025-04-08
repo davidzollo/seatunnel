@@ -33,7 +33,6 @@ import org.apache.seatunnel.connectors.seatunnel.file.config.CompressFormat;
 import org.apache.seatunnel.connectors.seatunnel.file.exception.FileConnectorErrorCode;
 import org.apache.seatunnel.connectors.seatunnel.file.exception.FileConnectorException;
 import org.apache.seatunnel.format.csv.CsvDeserializationSchema;
-import org.apache.seatunnel.format.csv.constant.CsvFormatConstant;
 import org.apache.seatunnel.format.csv.processor.CsvLineProcessor;
 import org.apache.seatunnel.format.csv.processor.DefaultCsvLineProcessor;
 
@@ -46,12 +45,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.Optional;
 
 @Slf4j
 public class CsvReadStrategy extends AbstractReadStrategy {
     private DeserializationSchema<SeaTunnelRow> deserializationSchema;
-    private String fieldDelimiter = BaseSourceConfigOptions.FIELD_DELIMITER.defaultValue();
     private DateUtils.Formatter dateFormat = BaseSourceConfigOptions.DATE_FORMAT.defaultValue();
     private DateTimeUtils.Formatter datetimeFormat =
             BaseSourceConfigOptions.DATETIME_FORMAT.defaultValue();
@@ -145,7 +142,7 @@ public class CsvReadStrategy extends AbstractReadStrategy {
         ReadonlyConfig readonlyConfig = ReadonlyConfig.fromConfig(pluginConfig);
         CsvDeserializationSchema.Builder builder =
                 CsvDeserializationSchema.builder()
-                        .delimiter(CsvFormatConstant.PLACEHOLDER)
+                        .delimiter(",")
                         .nullFormat(
                                 readonlyConfig
                                         .getOptional(BaseSourceConfigOptions.NULL_FORMAT)
@@ -165,17 +162,14 @@ public class CsvReadStrategy extends AbstractReadStrategy {
         SeaTunnelRowType userDefinedRowTypeWithPartition =
                 mergePartitionTypes(fileNames.get(0), seaTunnelRowType);
         ReadonlyConfig readonlyConfig = ReadonlyConfig.fromConfig(pluginConfig);
-        Optional<String> fieldDelimiterOptional =
-                readonlyConfig.getOptional(BaseSourceConfigOptions.FIELD_DELIMITER);
         encoding =
                 readonlyConfig
                         .getOptional(BaseSourceConfigOptions.ENCODING)
                         .orElse(StandardCharsets.UTF_8.name());
-        fieldDelimiter = fieldDelimiterOptional.orElse(",");
         initFormatter();
         CsvDeserializationSchema.Builder builder =
                 CsvDeserializationSchema.builder()
-                        .delimiter(fieldDelimiter)
+                        .delimiter(",")
                         .nullFormat(
                                 readonlyConfig
                                         .getOptional(BaseSourceConfigOptions.NULL_FORMAT)

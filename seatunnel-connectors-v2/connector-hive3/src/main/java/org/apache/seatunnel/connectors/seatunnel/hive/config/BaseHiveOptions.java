@@ -40,4 +40,11 @@ public class BaseHiveOptions extends BaseSourceConfigOptions {
                     .stringType()
                     .noDefaultValue()
                     .withDescription("The path of hive-site.xml");
+
+    public static final Option<String> HADOOP_CONF_PATH =
+            Options.key("hive.hadoop.conf-path")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The specified loading path for the 'core-site.xml', 'hdfs-site.xml', 'hivemetastore-site.xml' files");
 }

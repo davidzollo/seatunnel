@@ -44,6 +44,7 @@ public class HiveSinkFactory
                 .required(HiveSinkOptions.TABLE_NAME)
                 .required(HiveSinkOptions.METASTORE_URI)
                 .optional(HiveSinkOptions.HIVE_SITE_PATH)
+                .optional(HiveSinkOptions.HADOOP_CONF_PATH)
                 .optional(HiveSinkOptions.ABORT_DROP_PARTITION_METADATA)
                 .optional(BaseSinkConfig.PARQUET_AVRO_WRITE_TIMESTAMP_AS_INT96)
                 .optional(BaseSinkConfig.HAVE_PARTITION)

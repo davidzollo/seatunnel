@@ -38,7 +38,7 @@ public class MrsHiveJdbcConnectionProvider extends SimpleJdbcConnectionProvider 
 
     @Override
     public Connection getOrEstablishConnection() throws SQLException, ClassNotFoundException {
-        if (jdbcConfig.useKerberos) {
+        if (jdbcConfig.isUseKerberos()) {
             HiveJdbcUtils.doKerberosAuthentication(jdbcConfig);
         }
         Class.forName("org.apache.seatunnel.shade.mrs.org.apache.hive.jdbc.HiveDriver");
@@ -53,7 +53,7 @@ public class MrsHiveJdbcConnectionProvider extends SimpleJdbcConnectionProvider 
         String jdbcUrl = getJdbcUrl();
         try {
             if (useKerberos()) {
-                String kerberosKrb5ConfPath = jdbcConfig.krb5Path;
+                String kerberosKrb5ConfPath = jdbcConfig.getKrb5Path();
                 System.setProperty("java.security.krb5.conf", kerberosKrb5ConfPath);
             }
             HiveDriver driver = new HiveDriver();
@@ -68,10 +68,10 @@ public class MrsHiveJdbcConnectionProvider extends SimpleJdbcConnectionProvider 
         if (!useKerberos()) {
             return url;
         }
-        String principal = jdbcConfig.kerberosPrincipal;
+        String principal = jdbcConfig.getKerberosPrincipal();
         StringBuilder stringBuilder = new StringBuilder(url);
         String username = jdbcConfig.getUsername().get();
-        String kerberosKeytabPath = jdbcConfig.kerberosKeytabPath;
+        String kerberosKeytabPath = jdbcConfig.getKerberosKeytabPath();
         stringBuilder
                 .append(";principal=")
                 .append(principal)
@@ -85,6 +85,6 @@ public class MrsHiveJdbcConnectionProvider extends SimpleJdbcConnectionProvider 
     }
 
     private boolean useKerberos() {
-        return StringUtils.isNotEmpty(jdbcConfig.kerberosPrincipal);
+        return StringUtils.isNotEmpty(jdbcConfig.getKerberosPrincipal());
     }
 }

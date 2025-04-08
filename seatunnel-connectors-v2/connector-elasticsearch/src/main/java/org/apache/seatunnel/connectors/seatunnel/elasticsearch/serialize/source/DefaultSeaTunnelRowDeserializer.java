@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.seatunnel.elasticsearch.serialize.source
 import org.apache.seatunnel.shade.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.seatunnel.shade.com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.node.NullNode;
 import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.node.TextNode;
 
@@ -41,10 +42,13 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.apache.seatunnel.api.table.type.BasicType.BOOLEAN_TYPE;
 import static org.apache.seatunnel.api.table.type.BasicType.BYTE_TYPE;
@@ -118,7 +122,9 @@ public class DefaultSeaTunnelRowDeserializer implements SeaTunnelRowDeserializer
                 value = recursiveGet(rowRecord.getDoc(), fieldName);
                 if (value != null) {
                     seaTunnelDataType = rowTypeInfo.getFieldType(i);
-                    if (value instanceof TextNode) {
+                    if (value instanceof NullNode) {
+                        seaTunnelFields[i] = null;
+                    } else if (value instanceof TextNode) {
                         seaTunnelFields[i] =
                                 convertValue(seaTunnelDataType, ((TextNode) value).textValue());
                     } else {
@@ -134,7 +140,9 @@ public class DefaultSeaTunnelRowDeserializer implements SeaTunnelRowDeserializer
                             fieldName, value, seaTunnelDataType, JsonUtils.toJsonString(rowRecord)),
                     ex);
         }
-        return new SeaTunnelRow(seaTunnelFields);
+        SeaTunnelRow seaTunnelRow = new SeaTunnelRow(seaTunnelFields);
+        seaTunnelRow.setTableId(rowRecord.getTableId());
+        return seaTunnelRow;
     }
 
     Object convertValue(SeaTunnelDataType<?> fieldType, String fieldValue)
@@ -172,7 +180,17 @@ public class DefaultSeaTunnelRowDeserializer implements SeaTunnelRowDeserializer
             } else if (fieldType instanceof ArrayType) {
                 ArrayType<?, ?> arrayType = (ArrayType<?, ?>) fieldType;
                 SeaTunnelDataType<?> elementType = arrayType.getElementType();
-                List<String> stringList = JsonUtils.toList(fieldValue, String.class);
+                List<String> stringList = new ArrayList<>();
+                if (elementType instanceof MapType) {
+                    stringList =
+                            JsonUtils.isJsonArray(fieldValue)
+                                    ? JsonUtils.toList(fieldValue, Map.class).stream()
+                                            .map(JsonUtils::toJsonString)
+                                            .collect(Collectors.toList())
+                                    : Collections.singletonList(fieldValue);
+                } else {
+                    stringList = JsonUtils.toList(fieldValue, String.class);
+                }
                 Object arr = Array.newInstance(elementType.getTypeClass(), stringList.size());
                 for (int i = 0; i < stringList.size(); i++) {
                     Object convertValue = convertValue(elementType, stringList.get(i));

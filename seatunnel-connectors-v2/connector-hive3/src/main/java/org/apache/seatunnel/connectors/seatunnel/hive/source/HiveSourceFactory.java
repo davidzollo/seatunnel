@@ -53,6 +53,7 @@ public class HiveSourceFactory implements TableSourceFactory {
                 .optional(HiveSourceOptions.METASTORE_URI)
                 .optional(HiveSourceOptions.TABLE_CONFIGS)
                 .optional(HiveSourceOptions.HIVE_SITE_PATH)
+                .optional(HiveSourceOptions.HADOOP_CONF_PATH)
                 .optional(
                         HdfsConfigOptions.HDFS_SITE_PATH,
                         HdfsConfigOptions.KERBEROS_PRINCIPAL,

@@ -29,7 +29,7 @@ public abstract class AbstractSinkWriter<T, StateT> implements SinkWriter<T, Voi
     }
 
     @Override
-    public final void abortPrepare() {
+    public void abortPrepare() {
         // nothing
     }
 }

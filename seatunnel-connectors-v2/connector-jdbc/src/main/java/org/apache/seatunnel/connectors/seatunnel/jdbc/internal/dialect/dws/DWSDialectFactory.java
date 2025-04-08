@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.dws;
 
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectFactory;
 
@@ -24,6 +25,12 @@ import com.google.auto.service.AutoService;
 
 @AutoService(JdbcDialectFactory.class)
 public class DWSDialectFactory implements JdbcDialectFactory {
+
+    @Override
+    public String dialectFactoryName() {
+        return DatabaseIdentifier.DWS;
+    }
+
     @Override
     public boolean acceptsURL(String url) {
         return url.startsWith("jdbc:gaussdb:");

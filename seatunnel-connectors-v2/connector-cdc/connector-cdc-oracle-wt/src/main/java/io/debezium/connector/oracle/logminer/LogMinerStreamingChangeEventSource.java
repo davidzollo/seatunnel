@@ -62,7 +62,6 @@ import static io.debezium.connector.oracle.logminer.LogMinerHelper.getLastScnToA
 import static io.debezium.connector.oracle.logminer.LogMinerHelper.getSystime;
 import static io.debezium.connector.oracle.logminer.LogMinerHelper.instantiateFlushConnections;
 import static io.debezium.connector.oracle.logminer.LogMinerHelper.logError;
-import static io.debezium.connector.oracle.logminer.LogMinerHelper.setLogFilesForMining;
 import static io.debezium.connector.oracle.logminer.LogMinerHelper.setNlsSessionParameters;
 import static io.debezium.connector.oracle.logminer.LogMinerHelper.startLogMining;
 
@@ -91,6 +90,7 @@ public class LogMinerStreamingChangeEventSource
     private final Duration archiveLogRetention;
     private final boolean archiveLogOnlyMode;
     private final String archiveDestinationName;
+    private List<String> lastMiningLogFiles = new ArrayList<>();
 
     private Scn startScn;
     private Scn endScn;
@@ -376,31 +376,62 @@ public class LogMinerStreamingChangeEventSource
     private void initializeRedoLogsForMining(
             OracleConnection connection, boolean postEndMiningSession, Scn startScn)
             throws SQLException {
+        List<String> logFilesForMining = new ArrayList<>();
         if (!postEndMiningSession) {
             if (OracleConnectorConfig.LogMiningStrategy.CATALOG_IN_REDO.equals(strategy)) {
                 buildDataDictionary(connection);
             }
             if (!isContinuousMining) {
-                setLogFilesForMining(
-                        connection,
-                        startScn,
-                        archiveLogRetention,
-                        archiveLogOnlyMode,
-                        archiveDestinationName);
+                logFilesForMining =
+                        SeaTunnelLogMinerHelper.setLogFilesForMiningWithResult(
+                                connection,
+                                startScn,
+                                archiveLogRetention,
+                                archiveLogOnlyMode,
+                                archiveDestinationName);
             }
         } else {
             if (!isContinuousMining) {
                 if (OracleConnectorConfig.LogMiningStrategy.CATALOG_IN_REDO.equals(strategy)) {
                     buildDataDictionary(connection);
                 }
-                setLogFilesForMining(
-                        connection,
-                        startScn,
-                        archiveLogRetention,
-                        archiveLogOnlyMode,
-                        archiveDestinationName);
+                logFilesForMining =
+                        SeaTunnelLogMinerHelper.setLogFilesForMiningWithResult(
+                                connection,
+                                startScn,
+                                archiveLogRetention,
+                                archiveLogOnlyMode,
+                                archiveDestinationName);
             }
         }
+
+        // add compare log files for mining
+        Set<String> lastMiningLogFilesSet = new HashSet<>(lastMiningLogFiles);
+        Set<String> logFilesForMiningSet = new HashSet<>(logFilesForMining);
+
+        boolean filesChanged = !lastMiningLogFilesSet.equals(logFilesForMiningSet);
+        if (filesChanged) {
+            LOGGER.warn(
+                    "Log files for mining: {}, startScn: {}, archiveLogRetention: {}, archiveLogOnlyMode: {}, archiveDestinationName: {}",
+                    logFilesForMining,
+                    startScn,
+                    archiveLogRetention,
+                    archiveLogOnlyMode,
+                    archiveDestinationName);
+            for (String s : lastMiningLogFilesSet) {
+                if (!logFilesForMiningSet.contains(s)) {
+                    LOGGER.warn("Log file {} is no longer needed for mining, removing it.", s);
+                }
+            }
+
+            for (String s : logFilesForMiningSet) {
+                if (!lastMiningLogFilesSet.contains(s)) {
+                    LOGGER.warn("Log file {} is new and will be added to mining session.", s);
+                }
+            }
+        }
+
+        lastMiningLogFiles = logFilesForMining;
     }
 
     /**

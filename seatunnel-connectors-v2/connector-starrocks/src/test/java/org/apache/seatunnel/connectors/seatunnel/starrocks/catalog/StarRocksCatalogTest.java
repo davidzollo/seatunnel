@@ -47,7 +47,8 @@ public class StarRocksCatalogTest {
         databases = catalog.listDatabases();
         LOGGER.info("find databases: " + databases);
 
-        catalog.createTable(
+        catalog.executeSql(
+                TablePath.of("default", null),
                 "CREATE TABLE IF NOT EXISTS `default`.`test` (\n"
                         + "`recruit_date`  DATE           NOT NULL COMMENT \"YYYY-MM-DD\",\n"
                         + "    `region_num`    TINYINT        COMMENT \"range [-128, 127]\",\n"

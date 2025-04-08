@@ -42,6 +42,7 @@
         <!--        <module>connector-cdc-oracle</module>-->
         <module>connector-cdc-opengauss-wt</module>
         <module>connector-cdc-highgo-wt</module>
+        <module>connector-cdc-tidb</module>
     </modules>
 
     <properties>

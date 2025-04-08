@@ -85,7 +85,7 @@
         <hadoop.binary.version>2.7</hadoop.binary.version>
         <jackson.version>2.13.3</jackson.version>
         <lombok.version>1.18.24</lombok.version>
-        <commons-compress.version>1.20</commons-compress.version>
+        <commons-compress.version>1.26.0</commons-compress.version>
         <skip.pmd.check>false</skip.pmd.check>
         <maven.deploy.skip>false</maven.deploy.skip>
         <maven.javadoc.skip>false</maven.javadoc.skip>
@@ -101,11 +101,10 @@
         <elasticsearch7.client.version>7.5.1</elasticsearch7.client.version>
         <flink-shaded-hadoop-2.version>2.7.5-7.0</flink-shaded-hadoop-2.version>
         <commons-lang3.version>3.8</commons-lang3.version>
-        <commons-io.version>2.11.0</commons-io.version>
+        <commons-io.version>2.15.1</commons-io.version>
         <commons-collections4.version>4.4</commons-collections4.version>
         <commons-csv.version>1.10.0</commons-csv.version>
         <maven-assembly-plugin.version>3.3.0</maven-assembly-plugin.version>
-        <commons-compress.version>1.20</commons-compress.version>
         <protostuff.version>1.8.0</protostuff.version>
         <spark.scope>provided</spark.scope>
         <flink.scope>provided</flink.scope>
@@ -853,6 +852,7 @@
                                     <mkdir dir="src/main/resources/connector-hbase" />
                                     <mkdir dir="src/main/resources/connector-hive2" />
                                     <mkdir dir="src/main/resources/connector-hive3" />
+                                    <mkdir dir="src/main/resources/connector-hw-mrs-hive3" />
                                     <mkdir dir="src/main/resources/connector-http-base" />
                                     <mkdir dir="src/main/resources/connector-http-feishu" />
                                     <mkdir dir="src/main/resources/connector-http-github" />
@@ -872,7 +872,7 @@
                                     <mkdir dir="src/main/resources/connector-jdbc-hive1" />
                                     <mkdir dir="src/main/resources/connector-jdbc-hive2" />
                                     <mkdir dir="src/main/resources/connector-jdbc-cdh-hive2" />
-                                    <mkdir dir="src/main/resources/connector-kafka" />
+                                    <mkdir dir="src/main/resources/connector-kafka-wt" />
                                     <mkdir dir="src/main/resources/connector-kudu" />
                                     <mkdir dir="src/main/resources/connector-maxcompute" />
                                     <mkdir dir="src/main/resources/connector-mongodb" />
@@ -892,6 +892,7 @@
                                     <mkdir dir="src/main/resources/connector-starrocks" />
                                     <mkdir dir="src/main/resources/connector-tablestore" />
                                     <mkdir dir="src/main/resources/connector-tdengine" />
+                                    <mkdir dir="src/main/resources/connector-argodb" />
                                 </target>
                             </configuration>
                         </execution>

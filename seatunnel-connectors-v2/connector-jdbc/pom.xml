@@ -44,7 +44,7 @@
         <informix.ifx-changestream-client.version>1.1.3</informix.ifx-changestream-client.version>
         <informix.version>4.50.10</informix.version>
         <redshift.version>2.1.0.9</redshift.version>
-        <saphana.version>2.14.7</saphana.version>
+        <saphana.version>2.23.10</saphana.version>
         <snowflake.version>3.13.29</snowflake.version>
         <vertica.version>12.0.3-0</vertica.version>
         <hikari.version>4.0.3</hikari.version>
@@ -53,6 +53,7 @@
         <hive.jdbc.version>3.1.3</hive.jdbc.version>
         <oceanbase.jdbc.version>2.4.3</oceanbase.jdbc.version>
         <dws.jdbc.version>8.2.1.300-200</dws.jdbc.version>
+        <tikv.version>3.2.0</tikv.version>
     </properties>
 
     <dependencyManagement>
@@ -198,6 +199,11 @@
                 <version>${dws.jdbc.version}</version>
                 <scope>provided</scope>
             </dependency>
+            <dependency>
+                <groupId>org.tikv</groupId>
+                <artifactId>tikv-client-java</artifactId>
+                <version>${tikv.version}</version>
+            </dependency>
             <!-- dependency by phoenix -->
             <dependency>
                 <groupId>org.apache.seatunnel</groupId>
@@ -207,6 +213,11 @@
                 <scope>provided</scope>
             </dependency>
             <!-- dependency by phoenix end -->
+            <dependency>
+                <groupId>com.yashandb</groupId>
+                <artifactId>yashandb-jdbc</artifactId>
+                <version>1.7.10</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -331,11 +342,19 @@
             <artifactId>seatunnel-phoenix-5.1.3-hadoop3.3.6-uber</artifactId>
             <classifier>optional</classifier>
         </dependency>
+        <dependency>
+            <groupId>org.tikv</groupId>
+            <artifactId>tikv-client-java</artifactId>
+        </dependency>
         <!-- dependency by phoenix end -->
         <dependency>
             <groupId>org.apache.seatunnel</groupId>
             <artifactId>seatunnel-hive-mrs-3.1.1-hw-ei-315008-uber</artifactId>
             <classifier>optional</classifier>
+        </dependency>
+        <dependency>
+            <groupId>com.yashandb</groupId>
+            <artifactId>yashandb-jdbc</artifactId>
         </dependency>
         <dependency>
             <groupId>junit</groupId>

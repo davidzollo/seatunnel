@@ -28,7 +28,9 @@ import org.apache.seatunnel.api.sink.SinkCommitter;
 import org.apache.seatunnel.api.sink.SinkWriter;
 import org.apache.seatunnel.api.sink.SupportMultiTableSink;
 import org.apache.seatunnel.api.sink.SupportSaveMode;
+import org.apache.seatunnel.api.sink.SupportSchemaEvolutionSink;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
+import org.apache.seatunnel.api.table.schema.SchemaChangeType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.common.config.CheckConfigUtil;
 import org.apache.seatunnel.common.config.CheckResult;
@@ -51,13 +53,14 @@ import org.apache.seatunnel.connectors.seatunnel.redshift.exception.S3RedshiftCo
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 @Slf4j
 public class S3RedshiftSink extends BaseHdfsFileSink
-        implements SupportMultiTableSink, SupportSaveMode {
+        implements SupportMultiTableSink, SupportSaveMode, SupportSchemaEvolutionSink {
 
     private S3RedshiftConf s3RedshiftConf;
     private CatalogTable catalogTable;
@@ -176,5 +179,13 @@ public class S3RedshiftSink extends BaseHdfsFileSink
                 WriteStrategyFactory.of(fileSinkConfig.getFileFormat(), fileSinkConfig);
         writeStrategy.setSeaTunnelRowTypeInfo(seaTunnelRowType);
         return writeStrategy;
+    }
+
+    @Override
+    public List<SchemaChangeType> supports() {
+        return Arrays.asList(
+                SchemaChangeType.ADD_COLUMN,
+                SchemaChangeType.RENAME_COLUMN,
+                SchemaChangeType.DROP_COLUMN);
     }
 }

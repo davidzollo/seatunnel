@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.connectors.cdc.debezium.row;
 
+import org.apache.seatunnel.api.table.type.ArrayType;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
@@ -41,6 +42,7 @@ import io.debezium.time.Timestamp;
 import io.debezium.time.ZonedTimestamp;
 
 import java.io.Serializable;
+import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.time.Instant;
@@ -50,6 +52,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 
 /** Deserialization schema from Debezium object to {@link SeaTunnelRow} */
@@ -175,10 +178,62 @@ public class SeaTunnelRowDebeziumDeserializationConverters implements Serializab
                 return createRowConverter(
                         (SeaTunnelRowType) type, serverTimeZone, userDefinedConverterFactory);
             case ARRAY:
+                return createArrayConverter(
+                        (ArrayType) type, serverTimeZone, userDefinedConverterFactory);
             case MAP:
             default:
                 throw new UnsupportedOperationException("Unsupported type: " + type);
         }
+    }
+
+    private static DebeziumDeserializationConverter createArrayConverter(
+            ArrayType arrayType,
+            ZoneId serverTimeZone,
+            DebeziumDeserializationConverterFactory userDefinedConverterFactory) {
+        DebeziumDeserializationConverter elementConverter =
+                createNotNullConverter(
+                        arrayType.getElementType(), serverTimeZone, userDefinedConverterFactory);
+
+        return new DebeziumDeserializationConverter() {
+
+            @Override
+            public Object convert(Object dbzObj, Schema schema) throws Exception {
+                if (dbzObj == null) {
+                    return null;
+                }
+
+                if (dbzObj instanceof List) {
+                    List<?> dataList = (List<?>) dbzObj;
+                    Object arr =
+                            Array.newInstance(
+                                    arrayType.getElementType().getTypeClass(), dataList.size());
+                    for (int i = 0; i < dataList.size(); i++) {
+                        Object element = dataList.get(i);
+                        if (element == null) {
+                            continue;
+                        }
+                        Array.set(arr, i, elementConverter.convert(element, schema));
+                    }
+                    return arr;
+                }
+                if (dbzObj instanceof Object[]) {
+                    Object[] dataArray = (Object[]) dbzObj;
+                    Object arr =
+                            Array.newInstance(
+                                    arrayType.getElementType().getTypeClass(), dataArray.length);
+                    for (int i = 0; i < dataArray.length; i++) {
+                        Object element = dataArray[i];
+                        if (element == null) {
+                            continue;
+                        }
+                        Array.set(arr, i, elementConverter.convert(element, schema));
+                    }
+                    return arr;
+                }
+                throw new UnsupportedOperationException(
+                        "Unsupported ARRAY value type: " + dbzObj.getClass().getSimpleName());
+            }
+        };
     }
 
     private static DebeziumDeserializationConverter convertToBoolean() {

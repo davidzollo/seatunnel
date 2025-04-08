@@ -19,6 +19,7 @@ package org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.starrocks;
 
 import org.apache.seatunnel.api.table.factory.Factory;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.mysql.MySqlCatalogFactory;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 
 import com.google.auto.service.AutoService;
 
@@ -27,6 +28,6 @@ public class StarRocksFactory extends MySqlCatalogFactory {
 
     @Override
     public String factoryIdentifier() {
-        return "JDBC-StarRocks";
+        return DatabaseIdentifier.STARROCKS;
     }
 }

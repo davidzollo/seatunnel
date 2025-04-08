@@ -27,6 +27,13 @@ import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 public interface JdbcDialectFactory {
 
     /**
+     * Retrieves the name of the dialect.
+     *
+     * @return the name of the dialect
+     */
+    String dialectFactoryName();
+
+    /**
      * Retrieves whether the dialect thinks that it can open a connection to the given URL.
      * Typically, dialects will return <code>true</code> if they understand the sub-protocol
      * specified in the URL and <code>false</code> if they do not.

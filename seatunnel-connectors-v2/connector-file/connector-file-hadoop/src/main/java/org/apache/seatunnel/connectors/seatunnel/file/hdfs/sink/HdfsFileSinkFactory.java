@@ -75,8 +75,7 @@ public class HdfsFileSinkFactory extends BaseMultipleTableFinkSinkFactory {
                         BaseSinkConfig.FILE_FORMAT_TYPE,
                         FileFormat.PARQUET,
                         BaseSinkConfig.PARQUET_COMPRESS,
-                        // TODO 等待 http://172.28.230.21:18056/browse/ST-1912 修复
-                        //                        BaseSinkConfig.PARQUET_AVRO_WRITE_FIXED_AS_INT96,
+                        BaseSinkConfig.PARQUET_AVRO_WRITE_FIXED_AS_INT96,
                         BaseSinkConfig.PARQUET_AVRO_WRITE_TIMESTAMP_AS_INT96)
                 .conditional(
                         BaseSinkConfig.FILE_FORMAT_TYPE,
@@ -103,6 +102,7 @@ public class HdfsFileSinkFactory extends BaseMultipleTableFinkSinkFactory {
                 .optional(BaseSinkConfig.DATETIME_FORMAT)
                 .optional(BaseSinkConfig.TIME_FORMAT)
                 .optional(HdfsConfigOptions.HDFS_SITE_PATH)
+                .optional(HdfsConfigOptions.HADOOP_CONF_PATH)
                 .optional(HdfsConfigOptions.KERBEROS_PRINCIPAL)
                 .optional(HdfsConfigOptions.KERBEROS_KEYTAB_PATH)
                 .optional(HdfsConfigOptions.KRB5_PATH)

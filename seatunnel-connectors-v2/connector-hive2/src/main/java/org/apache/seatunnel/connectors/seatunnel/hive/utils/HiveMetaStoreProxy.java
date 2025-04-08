@@ -17,9 +17,12 @@
 
 package org.apache.seatunnel.connectors.seatunnel.hive.utils;
 
+import org.apache.seatunnel.shade.com.google.common.collect.ImmutableList;
+
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.connectors.seatunnel.file.hadoop.HadoopLoginFactory;
 import org.apache.seatunnel.connectors.seatunnel.file.hdfs.config.HdfsConfigOptions;
+import org.apache.seatunnel.connectors.seatunnel.hive.config.BaseHiveOptions;
 import org.apache.seatunnel.connectors.seatunnel.hive.exception.HiveConnectorErrorCode;
 import org.apache.seatunnel.connectors.seatunnel.hive.exception.HiveConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.hive.sink.HiveSinkOptions;
@@ -37,7 +40,10 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.MalformedURLException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Objects;
 
@@ -45,13 +51,31 @@ import java.util.Objects;
 public class HiveMetaStoreProxy {
     private HiveMetaStoreClient hiveMetaStoreClient;
     private static volatile HiveMetaStoreProxy INSTANCE = null;
+    private static final List<String> HADOOP_CONF_FILES =
+            ImmutableList.of("hive-site.xml", "hivemetastore-site.xml", "core-site.xml");
 
     private HiveMetaStoreProxy(ReadonlyConfig readonlyConfig) {
         String metastoreUri = readonlyConfig.get(HiveSinkOptions.METASTORE_URI);
-
+        String hiveHadoopConfigPath = readonlyConfig.get(BaseHiveOptions.HADOOP_CONF_PATH);
         try {
             HiveConf hiveConf = new HiveConf();
             hiveConf.set("hive.metastore.uris", metastoreUri);
+            if (StringUtils.isNotBlank(hiveHadoopConfigPath)) {
+                HADOOP_CONF_FILES.forEach(
+                        confFile -> {
+                            java.nio.file.Path path = Paths.get(hiveHadoopConfigPath, confFile);
+                            if (Files.exists(path)) {
+                                try {
+                                    hiveConf.addResource(path.toUri().toURL());
+                                } catch (IOException e) {
+                                    log.warn(
+                                            "Error adding Hadoop resource {}, resource was not added",
+                                            path,
+                                            e);
+                                }
+                            }
+                        });
+            }
             readonlyConfig
                     .getOptional(HiveSinkOptions.HIVE_SITE_PATH)
                     .ifPresent(
