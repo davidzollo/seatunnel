@@ -359,7 +359,49 @@ public class JdbcStarRocksCatalog extends AbstractJdbcCatalog {
         return indexList;
     }
 
-    protected Column buildColumn(ResultSet resultSet, ResultSet NullableResultSet)
+    @Override
+    protected Column buildColumn(ResultSet resultSet) throws SQLException {
+        String columnName = resultSet.getString("COLUMN_NAME");
+        // e.g. tinyint(1) unsigned
+        String columnType = resultSet.getString("COLUMN_TYPE");
+        // e.g. tinyint
+        String dataType = resultSet.getString("DATA_TYPE").toUpperCase();
+        String comment = resultSet.getString("COLUMN_COMMENT");
+        Object defaultValue = resultSet.getObject("COLUMN_DEFAULT");
+        boolean isNullable = "YES".equals(resultSet.getString("IS_NULLABLE"));
+        // e.g. `decimal(10, 2)` is 10
+        long numberPrecision = resultSet.getInt("NUMERIC_PRECISION");
+        // e.g. `decimal(10, 2)` is 2
+        int numberScale = resultSet.getInt("NUMERIC_SCALE");
+        // e.g. `varchar(10)` is 40
+        long charOctetLength = resultSet.getLong("CHARACTER_OCTET_LENGTH");
+        // e.g. `timestamp(3)` is 3
+        int timePrecision = resultSet.getInt("DATETIME_PRECISION");
+
+        Preconditions.checkArgument(!(numberPrecision > 0 && charOctetLength > 0));
+        Preconditions.checkArgument(!(numberScale > 0 && timePrecision > 0));
+
+        MysqlType mysqlType = MysqlType.getByName(columnType);
+        boolean unsigned = columnType.toLowerCase(Locale.ROOT).contains("unsigned");
+
+        BasicTypeDefine<MysqlType> typeDefine =
+                BasicTypeDefine.<MysqlType>builder()
+                        .name(columnName)
+                        .columnType(columnType)
+                        .dataType(dataType)
+                        .nativeType(mysqlType)
+                        .unsigned(unsigned)
+                        .length(Math.max(charOctetLength, numberPrecision))
+                        .precision(numberPrecision)
+                        .scale(Math.max(numberScale, timePrecision))
+                        .nullable(isNullable)
+                        .defaultValue(defaultValue)
+                        .comment(comment)
+                        .build();
+        return typeConverter.convert(typeDefine);
+    }
+
+    protected Column buildColumn(ResultSet resultSet, ResultSet nullableResultSet)
             throws SQLException {
         String columnName = resultSet.getString("COLUMN_NAME");
         // e.g. tinyint(1) unsigned
@@ -368,7 +410,7 @@ public class JdbcStarRocksCatalog extends AbstractJdbcCatalog {
         String dataType = resultSet.getString("DATA_TYPE").toUpperCase();
         String comment = resultSet.getString("COLUMN_COMMENT");
         Object defaultValue = resultSet.getObject("COLUMN_DEFAULT");
-        boolean isNullable = getNullAble(NullableResultSet, columnName);
+        boolean isNullable = getNullAble(nullableResultSet, columnName);
         // e.g. `decimal(10, 2)` is 10
         long numberPrecision = resultSet.getInt("NUMERIC_PRECISION");
         // e.g. `decimal(10, 2)` is 2

@@ -58,14 +58,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.IntStream;
 
-import static org.apache.seatunnel.common.utils.DateTimeUtils.Formatter.YYYY_MM_DD_HH_MM_SS;
-
 public class ExcelReadStrategy extends AbstractReadStrategy {
 
-    private final DateUtils.Formatter dateFormat = DateUtils.Formatter.YYYY_MM_DD;
+    private DateUtils.Formatter dateFormat = DateUtils.Formatter.YYYY_MM_DD;
 
-    private final DateTimeUtils.Formatter datetimeFormat = YYYY_MM_DD_HH_MM_SS;
-    private final TimeUtils.Formatter timeFormat = TimeUtils.Formatter.HH_MM_SS;
+    private DateTimeUtils.Formatter datetimeFormat = DateTimeUtils.Formatter.YYYY_MM_DD_HH_MM_SS;
+    private TimeUtils.Formatter timeFormat = TimeUtils.Formatter.HH_MM_SS;
 
     private int[] indexes;
 
@@ -92,6 +90,21 @@ public class ExcelReadStrategy extends AbstractReadStrategy {
                     "Only support read excel file");
         }
         DataFormatter formatter = new DataFormatter();
+        if (pluginConfig.hasPath(BaseSourceConfigOptions.DATE_FORMAT.key())) {
+            dateFormat =
+                    DateUtils.Formatter.parse(
+                            pluginConfig.getString(BaseSourceConfigOptions.DATE_FORMAT.key()));
+        }
+        if (pluginConfig.hasPath(BaseSourceConfigOptions.DATETIME_FORMAT.key())) {
+            datetimeFormat =
+                    DateTimeUtils.Formatter.parse(
+                            pluginConfig.getString(BaseSourceConfigOptions.DATETIME_FORMAT.key()));
+        }
+        if (pluginConfig.hasPath(BaseSourceConfigOptions.TIME_FORMAT.key())) {
+            timeFormat =
+                    TimeUtils.Formatter.parse(
+                            pluginConfig.getString(BaseSourceConfigOptions.TIME_FORMAT.key()));
+        }
         Sheet sheet =
                 pluginConfig.hasPath(BaseSourceConfigOptions.SHEET_NAME.key())
                         ? workbook.getSheet(
@@ -255,14 +268,11 @@ public class ExcelReadStrategy extends AbstractReadStrategy {
             case DECIMAL:
                 return BigDecimal.valueOf(Double.parseDouble(field.toString()));
             case DATE:
-                return LocalDate.parse(
-                        (String) field, DateTimeFormatter.ofPattern(dateFormat.getValue()));
+                return parseDate(field, fieldType);
             case TIME:
-                return LocalTime.parse(
-                        (String) field, DateTimeFormatter.ofPattern(timeFormat.getValue()));
+                return parseTime(field, fieldType);
             case TIMESTAMP:
-                return LocalDateTime.parse(
-                        (String) field, DateTimeFormatter.ofPattern(datetimeFormat.getValue()));
+                return parseTimestamp(field, fieldType);
             case NULL:
                 return null;
             case BYTES:
@@ -284,6 +294,30 @@ public class ExcelReadStrategy extends AbstractReadStrategy {
                         CommonErrorCodeDeprecated.UNSUPPORTED_DATA_TYPE,
                         "User defined schema validation failed");
         }
+    }
+
+    private Object parseDate(Object fieldValue, SeaTunnelDataType<?> fieldType) {
+        if (fieldValue instanceof LocalDateTime) {
+            return ((LocalDateTime) fieldValue).toLocalDate();
+        }
+        return LocalDate.parse(
+                fieldValue.toString(), DateTimeFormatter.ofPattern(dateFormat.getValue()));
+    }
+
+    private Object parseTime(Object fieldValue, SeaTunnelDataType<?> fieldType) {
+        if (fieldValue instanceof LocalDateTime) {
+            return ((LocalDateTime) fieldValue).toLocalTime();
+        }
+        return LocalTime.parse(
+                fieldValue.toString(), DateTimeFormatter.ofPattern(timeFormat.getValue()));
+    }
+
+    private Object parseTimestamp(Object fieldValue, SeaTunnelDataType<?> fieldType) {
+        if (fieldValue instanceof LocalDateTime) {
+            return fieldValue;
+        }
+        return LocalDateTime.parse(
+                fieldValue.toString(), DateTimeFormatter.ofPattern(datetimeFormat.getValue()));
     }
 
     private <T> boolean isNullOrEmpty(T[] arr) {
