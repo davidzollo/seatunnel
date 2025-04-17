@@ -135,7 +135,9 @@ public class KafkaSourceConfig implements Serializable {
         return consumerMetadataList.stream()
                 .collect(
                         Collectors.toMap(
-                                consumerMetadata -> TablePath.of(consumerMetadata.getTopic()),
+                                consumerMetadata ->
+                                        getTablePathFromSchema(
+                                                readonlyConfig, consumerMetadata.getTopic()),
                                 consumerMetadata -> consumerMetadata));
     }
 
@@ -208,7 +210,6 @@ public class KafkaSourceConfig implements Serializable {
     private CatalogTable createCatalogTable(ReadonlyConfig readonlyConfig) {
         Optional<Map<String, Object>> schemaOptions =
                 readonlyConfig.getOptional(TableSchemaOptions.SCHEMA);
-        TablePath tablePath = TablePath.of(readonlyConfig.get(TOPIC));
         TableSchema tableSchema;
         if (schemaOptions.isPresent()) {
             tableSchema = new ReadonlyConfigParser().parse(readonlyConfig);
@@ -229,12 +230,26 @@ public class KafkaSourceConfig implements Serializable {
                                             null))
                             .build();
         }
+        TablePath tablePath = getTablePathFromSchema(readonlyConfig, readonlyConfig.get(TOPIC));
+
         return CatalogTable.of(
                 TableIdentifier.of("", tablePath),
                 tableSchema,
                 Collections.emptyMap(),
                 Collections.emptyList(),
                 null);
+    }
+
+    private TablePath getTablePathFromSchema(ReadonlyConfig readonlyConfig, String topicName) {
+        ReadonlyConfig schema =
+                readonlyConfig
+                        .getOptional(TableSchemaOptions.SCHEMA)
+                        .map(ReadonlyConfig::fromMap)
+                        .orElse(ReadonlyConfig.fromMap(Collections.emptyMap()));
+
+        return schema.getOptional(TableSchemaOptions.TableIdentifierOptions.TABLE)
+                .map(TablePath::of)
+                .orElseGet(() -> TablePath.of("default", topicName));
     }
 
     private DeserializationSchema<SeaTunnelRow> createDeserializationSchema(
