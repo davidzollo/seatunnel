@@ -99,11 +99,15 @@ public class SelectDBSaveModeUtil {
 
     public static String columnToSelectDBType(Column column) {
         checkNotNull(column, "The column is required.");
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else {
+            columnType = SelectDBTypeConverter.INSTANCE.reconvert(column).getColumnType();
+        }
         return String.format(
                 "`%s` %s %s ",
-                column.getName(),
-                SelectDBTypeConverter.INSTANCE.reconvert(column).getColumnType(),
-                column.isNullable() ? "NULL" : "NOT NULL");
+                column.getName(), columnType, column.isNullable() ? "NULL" : "NOT NULL");
     }
 
     private static String mergeColumnInTemplate(

@@ -189,13 +189,15 @@ public class PostgresCreateTableSqlBuilder extends AbstractJdbcCreateTableSqlBui
         return String.format("PRIMARY KEY (%s)", CatalogUtils.quoteIdentifier(key, fieldIde));
     }
 
-    private String buildColumnSql(Column column) {
+    String buildColumnSql(Column column) {
         StringBuilder columnSql = new StringBuilder();
         columnSql.append("\"").append(column.getName()).append("\" ");
 
         // For simplicity, assume the column type in SeaTunnelDataType is the same as in PostgreSQL
         String columnType;
-        if (isCompatibleCatalog(sourceCatalogName)
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else if (isCompatibleCatalog(sourceCatalogName)
                 && StringUtils.isNotBlank(column.getSourceType())) {
             if ((column.getSourceType().startsWith(PostgresTypeConverter.PG_POSTGIS_GEOMETRY)
                             || column.getSourceType()

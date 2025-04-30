@@ -76,10 +76,15 @@ public class DolphinDBSaveModeUtil {
                         SaveModePlaceHolder.ROWTYPE_FIELDS.getReplacePlaceHolder(), rowTypeFields);
     }
 
-    private static String columnToDolphinDBType(Column column) {
+    static String columnToDolphinDBType(Column column) {
         checkNotNull(column, "The column is required.");
-        return String.format(
-                "%s %s", column.getName(), dataTypeToDolphinDBType(column.getDataType()));
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else {
+            columnType = dataTypeToDolphinDBType(column.getDataType());
+        }
+        return String.format("%s %s", column.getName(), columnType);
     }
 
     private static String mergeColumnInTemplate(

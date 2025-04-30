@@ -41,6 +41,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @DisabledOnOs(OS.WINDOWS)
 class SeaTunnelSourcePluginDiscoveryTest {
@@ -100,9 +102,17 @@ class SeaTunnelSourcePluginDiscoveryTest {
                         PluginIdentifier.of("seatunnel", PluginType.SOURCE.getType(), "HttpBase"));
         SeaTunnelSourcePluginDiscovery seaTunnelSourcePluginDiscovery =
                 new SeaTunnelSourcePluginDiscovery();
-        Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () -> seaTunnelSourcePluginDiscovery.getPluginJarPaths(pluginIdentifiers));
+
+        Assertions.assertIterableEquals(
+                Stream.of(
+                                Paths.get(seatunnelHome, "connectors", "connector-http-jira.jar")
+                                        .toString(),
+                                Paths.get(seatunnelHome, "connectors", "connector-http.jar")
+                                        .toString())
+                        .collect(Collectors.toList()),
+                seaTunnelSourcePluginDiscovery.getPluginJarPaths(pluginIdentifiers).stream()
+                        .map(URL::getPath)
+                        .collect(Collectors.toList()));
     }
 
     @Test

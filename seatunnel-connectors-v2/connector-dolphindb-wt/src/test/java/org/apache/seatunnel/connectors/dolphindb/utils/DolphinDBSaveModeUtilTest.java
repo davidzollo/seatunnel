@@ -22,12 +22,17 @@ import org.apache.seatunnel.api.table.catalog.PhysicalColumn;
 import org.apache.seatunnel.api.table.catalog.PrimaryKey;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
 import org.apache.seatunnel.api.table.type.BasicType;
+import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class DolphinDBSaveModeUtilTest {
 
@@ -58,5 +63,17 @@ public class DolphinDBSaveModeUtilTest {
                                 .build());
 
         System.out.println(result);
+    }
+
+    @Test
+    void returnsReconvertedTypeWhenSinkTypeNotNull() {
+        Column column = mock(Column.class);
+        when(column.getName()).thenReturn("col1");
+        when(column.getDataType()).thenReturn((SeaTunnelDataType) BasicType.INT_TYPE);
+        when(column.getSinkType()).thenReturn("String");
+
+        String result = DolphinDBSaveModeUtil.columnToDolphinDBType(column);
+
+        assertEquals("col1 String", result);
     }
 }

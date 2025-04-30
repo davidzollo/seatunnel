@@ -115,16 +115,20 @@ public class DB2CreateTableSqlBuilder {
         return createTableSql.toString();
     }
 
-    private String buildColumnSql(Column column) {
+    String buildColumnSql(Column column) {
         StringBuilder columnSql = new StringBuilder();
         columnSql.append("\"").append(column.getName()).append("\" ");
 
         // For simplicity, assume the column type in SeaTunnelDataType is the same as in DB2
-        String columnType =
-                sourceCatalogName.equals(DatabaseIdentifier.DB_2)
-                                && StringUtils.isNotBlank(column.getSourceType())
-                        ? column.getSourceType()
-                        : DB2TypeConverter.INSTANCE.reconvert(column).getColumnType();
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else if (sourceCatalogName.equals(DatabaseIdentifier.DB_2)
+                && StringUtils.isNotBlank(column.getSourceType())) {
+            columnType = column.getSourceType();
+        } else {
+            columnType = DB2TypeConverter.INSTANCE.reconvert(column).getColumnType();
+        }
         columnSql.append(columnType);
 
         // Add NOT NULL if column is not nullable

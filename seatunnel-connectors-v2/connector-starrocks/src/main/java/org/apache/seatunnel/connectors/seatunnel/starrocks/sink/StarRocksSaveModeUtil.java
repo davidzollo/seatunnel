@@ -106,12 +106,19 @@ public class StarRocksSaveModeUtil {
 
     public static String columnToStarrocksType(Column column) {
         checkNotNull(column, "The column is required.");
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else {
+            columnType =
+                    dataTypeToStarrocksType(
+                            column.getDataType(),
+                            column.getColumnLength() == null ? 0 : column.getColumnLength());
+        }
         return String.format(
                 "`%s` %s %s %s",
                 column.getName(),
-                dataTypeToStarrocksType(
-                        column.getDataType(),
-                        column.getColumnLength() == null ? 0 : column.getColumnLength()),
+                columnType,
                 column.isNullable() ? "NULL" : "NOT NULL",
                 StringUtils.isEmpty(column.getComment())
                         ? ""

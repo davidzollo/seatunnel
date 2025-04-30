@@ -233,10 +233,16 @@ public class DorisCatalogUtil {
     public static String columnToDorisType(
             Column column, TypeConverter<BasicTypeDefine> typeConverter) {
         checkNotNull(column, "The column is required.");
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else {
+            columnType = typeConverter.reconvert(column).getColumnType();
+        }
         return String.format(
                 "`%s` %s %s %s",
                 column.getName(),
-                typeConverter.reconvert(column).getColumnType(),
+                columnType,
                 column.isNullable() ? "NULL" : "NOT NULL",
                 StringUtils.isEmpty(column.getComment())
                         ? ""

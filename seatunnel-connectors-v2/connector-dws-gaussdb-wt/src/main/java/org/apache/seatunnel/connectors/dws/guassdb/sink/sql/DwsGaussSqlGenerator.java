@@ -341,8 +341,14 @@ public class DwsGaussSqlGenerator implements Serializable {
         return columnSql.toString();
     }
 
-    private String buildColumnType(Column column) {
-        return DwsGaussDBTypeConverter.INSTANCE.reconvert(column).getColumnType();
+    String buildColumnType(Column column) {
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else {
+            columnType = DwsGaussDBTypeConverter.INSTANCE.reconvert(column).getColumnType();
+        }
+        return columnType;
     }
 
     private String getIDEString(String originString) {

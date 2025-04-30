@@ -123,11 +123,15 @@ public class SqliteCreateTableSqlBuilder extends AbstractJdbcCreateTableSqlBuild
         columnSql.append("`").append(column.getName()).append("` ");
 
         // For simplicity, assume the column type in SeaTunnelDataType is the same as in PostgreSQL
-        String columnType =
-                sourceCatalogName.equals(DatabaseIdentifier.SQLITE)
-                                && StringUtils.isNotBlank(column.getSourceType())
-                        ? column.getSourceType()
-                        : buildColumnType(column);
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else if (sourceCatalogName.equals(DatabaseIdentifier.SQLITE)
+                && StringUtils.isNotBlank(column.getSourceType())) {
+            columnType = column.getSourceType();
+        } else {
+            columnType = buildColumnType(column);
+        }
         columnSql.append(columnType);
 
         // Add NOT NULL if column is not nullable

@@ -103,17 +103,21 @@ public class KingbaseCreateTableSqlBuilder {
         return createTableSql.toString();
     }
 
-    private String buildColumnSql(Column column) {
+    String buildColumnSql(Column column) {
         StringBuilder columnSql = new StringBuilder();
         columnSql.append("\"").append(column.getName()).append("\" ");
 
         // For simplicity, assume the column type in SeaTunnelDataType is the same as in PostgreSQL
-        String columnType =
-                (sourceCatalogName.equals(DatabaseIdentifier.KINGBASE)
-                                        || sourceCatalogName.equals(DatabaseIdentifier.POSTGRESQL))
-                                && StringUtils.isNotBlank(column.getSourceType())
-                        ? column.getSourceType()
-                        : KingbaseTypeConverter.INSTANCE.reconvert(column).getColumnType();
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else if ((sourceCatalogName.equals(DatabaseIdentifier.KINGBASE)
+                        || sourceCatalogName.equals(DatabaseIdentifier.POSTGRESQL))
+                && StringUtils.isNotBlank(column.getSourceType())) {
+            columnType = column.getSourceType();
+        } else {
+            columnType = KingbaseTypeConverter.INSTANCE.reconvert(column).getColumnType();
+        }
         columnSql.append(columnType);
 
         // Add NOT NULL if column is not nullable

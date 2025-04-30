@@ -96,17 +96,21 @@ public class InformixCreateTableSqlBuilder {
         return createTableSql.toString();
     }
 
-    private String buildColumnSql(Column column) {
+    String buildColumnSql(Column column) {
         StringBuilder columnSql = new StringBuilder();
         columnSql.append(column.getName()).append(" ");
 
         // For simplicity, assume the column type in SeaTunnelDataType is the same as in Informix
         // SQL
-        String columnType =
-                sourceCatalogName.equalsIgnoreCase(DatabaseIdentifier.INFORMIX)
-                                && StringUtils.isNotBlank(column.getSourceType())
-                        ? column.getSourceType()
-                        : InformixTypeConverter.INSTANCE.reconvert(column).getColumnType();
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else if (sourceCatalogName.equalsIgnoreCase(DatabaseIdentifier.INFORMIX)
+                && StringUtils.isNotBlank(column.getSourceType())) {
+            columnType = column.getSourceType();
+        } else {
+            columnType = InformixTypeConverter.INSTANCE.reconvert(column).getColumnType();
+        }
         columnSql.append(columnType);
 
         // Add NOT NULL if column is not nullable

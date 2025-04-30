@@ -118,10 +118,15 @@ public class PhoenixCreateTableSqlBuilder {
         columnSql.append("\"").append(column.getName()).append("\" ");
 
         // For simplicity, assume the column type in SeaTunnelDataType is the same as in phoenix
-        String columnType =
-                StringUtils.equalsIgnoreCase(DatabaseIdentifier.PHOENIX, sourceCatalogName)
-                        ? column.getSourceType()
-                        : buildColumnType(column);
+        String columnType;
+        if (column.getSinkType() != null) {
+            columnType = column.getSinkType();
+        } else if (StringUtils.equalsIgnoreCase(DatabaseIdentifier.PHOENIX, sourceCatalogName)
+                && StringUtils.isNotBlank(column.getSourceType())) {
+            columnType = column.getSourceType();
+        } else {
+            columnType = buildColumnType(column);
+        }
         columnSql.append(columnType);
         return columnSql.toString();
     }

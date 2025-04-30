@@ -15,26 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.seatunnel.connectors.seatunnel.redshift.datatype;
+package org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.db2;
 
 import org.apache.seatunnel.api.table.catalog.Column;
-import org.apache.seatunnel.api.table.catalog.PhysicalColumn;
+import org.apache.seatunnel.api.table.type.BasicType;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 
-import java.io.Serializable;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-public class ToRedshiftTypeConverter implements Serializable {
-    public static final ToRedshiftTypeConverter INSTANCE = new ToRedshiftTypeConverter();
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-    public String convert(Column column) {
-        if (column.getSinkType() != null) {
-            return column.getSinkType();
-        }
-        return RedshiftTypeConverter.INSTANCE.reconvert(column).getColumnType();
-    }
+public class DB2CreateTableSqlBuilderTest {
+    @Test
+    public void testColumnSinkType() {
+        DB2CreateTableSqlBuilder sqlBuilder = mock(DB2CreateTableSqlBuilder.class);
 
-    public String convert(SeaTunnelDataType dataType) {
-        Column column = PhysicalColumn.of("tmp", dataType, (Long) null, true, null, null);
-        return convert(column);
+        Column column = mock(Column.class);
+        when(column.getSinkType()).thenReturn("VARCHAR(10)");
+        when(column.getDataType()).thenReturn((SeaTunnelDataType) BasicType.INT_TYPE);
+        when(column.getName()).thenReturn("col1");
+        when(sqlBuilder.buildColumnSql(column)).thenCallRealMethod();
+
+        String result = sqlBuilder.buildColumnSql(column);
+
+        Assertions.assertEquals("\"col1\" VARCHAR(10) NOT NULL", result);
     }
 }

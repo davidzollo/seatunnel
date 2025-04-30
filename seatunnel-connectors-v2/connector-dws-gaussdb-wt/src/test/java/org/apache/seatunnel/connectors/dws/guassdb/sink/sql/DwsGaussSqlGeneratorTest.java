@@ -27,6 +27,7 @@ import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
 import org.apache.seatunnel.api.table.type.BasicType;
 import org.apache.seatunnel.api.table.type.LocalTimeType;
+import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.connectors.dws.guassdb.sink.config.DwsGaussDBSinkOption;
 import org.apache.seatunnel.connectors.dws.guassdb.sink.writer.SnapshotIdManager;
@@ -41,6 +42,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class DwsGaussSqlGeneratorTest {
     private static final String delimiter = "\t";
@@ -253,5 +258,19 @@ public class DwsGaussSqlGeneratorTest {
                         + currentSnapshotId
                         + " AND st_is_deleted = true",
                 deleteRowsInTemporaryTableSql);
+    }
+
+    @Test
+    void returnsReconvertedTypeWhenSinkTypesNotNull() {
+        Column column = mock(Column.class);
+        when(column.getSinkType()).thenReturn("VARCHAR");
+        when(column.getDataType()).thenReturn((SeaTunnelDataType) BasicType.INT_TYPE);
+        when(column.getName()).thenReturn("col1");
+
+        DwsGaussSqlGenerator sqlGenerator = mock(DwsGaussSqlGenerator.class);
+        when(sqlGenerator.buildColumnType(column)).thenCallRealMethod();
+        String result = sqlGenerator.buildColumnType(column);
+
+        assertEquals("VARCHAR", result);
     }
 }
