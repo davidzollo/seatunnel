@@ -40,8 +40,10 @@ class HiveMetaStoreProxyTest extends BaseHiveTest {
         String path = getTestConfigFile("/hive.conf");
         Config config = ConfigFactory.parseFile(new File(path));
         ReadonlyConfig readonlyConfig = ReadonlyConfig.fromConfig(config);
-        Table table =
-                HiveMetaStoreProxy.getInstance(readonlyConfig).getTable("default", "czjtest_03");
-        System.out.println(table);
+
+        try (HiveMetaStoreProxy hiveMetaStoreProxy = new HiveMetaStoreProxy(readonlyConfig)) {
+            Table table = hiveMetaStoreProxy.getTable("default", "czjtest_03");
+            System.out.println(table);
+        }
     }
 }

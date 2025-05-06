@@ -43,11 +43,13 @@ public class HiveSinkAggregatedCommitter extends FileSinkAggregatedCommitter {
     private final boolean abortDropPartitionMetadata;
 
     private final ReadonlyConfig readonlyConfig;
+    private final HiveMetaStoreProxy hiveMetaStore;
 
     public HiveSinkAggregatedCommitter(
             ReadonlyConfig readonlyConfig, Table table, HiveHadoopConfig hiveHadoopConfig) {
         super(hiveHadoopConfig);
         this.readonlyConfig = readonlyConfig;
+        this.hiveMetaStore = new HiveMetaStoreProxy(readonlyConfig);
         this.dbName = table.getDbName();
         this.tableName = table.getTableName();
         this.abortDropPartitionMetadata =
@@ -57,7 +59,6 @@ public class HiveSinkAggregatedCommitter extends FileSinkAggregatedCommitter {
     @Override
     public List<FileAggregatedCommitInfo> commit(
             List<FileAggregatedCommitInfo> aggregatedCommitInfos) throws IOException {
-        HiveMetaStoreProxy hiveMetaStore = HiveMetaStoreProxy.getInstance(readonlyConfig);
 
         List<FileAggregatedCommitInfo> errorCommitInfos = super.commit(aggregatedCommitInfos);
         if (errorCommitInfos.isEmpty()) {
@@ -72,7 +73,6 @@ public class HiveSinkAggregatedCommitter extends FileSinkAggregatedCommitter {
                     hiveMetaStore.addPartitions(dbName, tableName, partitions);
                     log.info("Add these partitions {}", partitions);
                 } catch (TException e) {
-                    hiveMetaStore.close();
                     log.error("Failed to add these partitions {}", partitions, e);
                     errorCommitInfos.add(aggregatedCommitInfo);
                     throw new HiveConnectorException(
@@ -80,7 +80,6 @@ public class HiveSinkAggregatedCommitter extends FileSinkAggregatedCommitter {
                 }
             }
         }
-        hiveMetaStore.close();
         return errorCommitInfos;
     }
 
@@ -88,7 +87,6 @@ public class HiveSinkAggregatedCommitter extends FileSinkAggregatedCommitter {
     public void abort(List<FileAggregatedCommitInfo> aggregatedCommitInfos) throws Exception {
         super.abort(aggregatedCommitInfos);
         if (abortDropPartitionMetadata) {
-            HiveMetaStoreProxy hiveMetaStore = HiveMetaStoreProxy.getInstance(readonlyConfig);
             for (FileAggregatedCommitInfo aggregatedCommitInfo : aggregatedCommitInfos) {
                 Map<String, List<String>> partitionDirAndValuesMap =
                         aggregatedCommitInfo.getPartitionDirAndValuesMap();
@@ -103,7 +101,15 @@ public class HiveSinkAggregatedCommitter extends FileSinkAggregatedCommitter {
                     log.error("Failed to remove these partitions {}", partitions, e);
                 }
             }
+        }
+    }
+
+    @Override
+    public void close() throws IOException {
+        try {
             hiveMetaStore.close();
+        } finally {
+            super.close();
         }
     }
 }
