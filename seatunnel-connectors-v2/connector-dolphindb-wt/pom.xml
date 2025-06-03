@@ -29,8 +29,8 @@
     <artifactId>connector-dolphindb-wt</artifactId>
 
     <properties>
-        <dolphindb-javaapi.version>1.30.22.1</dolphindb-javaapi.version>
-        <dolphindb-jdbc.version>1.30.22.1</dolphindb-jdbc.version>
+        <dolphindb-javaapi.version>3.00.2.6</dolphindb-javaapi.version>
+        <dolphindb-jdbc.version>3.00.2.1</dolphindb-jdbc.version>
     </properties>
 
     <dependencies>

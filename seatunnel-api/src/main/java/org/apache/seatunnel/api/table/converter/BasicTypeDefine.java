@@ -24,7 +24,7 @@ import lombok.experimental.Tolerate;
 import java.io.Serializable;
 
 @Data
-@Builder
+@Builder(toBuilder = true)
 public class BasicTypeDefine<T> implements Serializable {
     protected String name;
     // e.g. `varchar(10)` for MySQL

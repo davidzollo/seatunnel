@@ -54,7 +54,6 @@ public class IcebergSinkFactory implements TableSinkFactory {
                         SinkConfig.KEY_TABLE,
                         SinkConfig.CATALOG_PROPS)
                 .optional(
-                        SinkConfig.TABLE_PROPS,
                         SinkConfig.HADOOP_PROPS,
                         SinkConfig.KERBEROS_PRINCIPAL,
                         SinkConfig.KERBEROS_KEYTAB_PATH,

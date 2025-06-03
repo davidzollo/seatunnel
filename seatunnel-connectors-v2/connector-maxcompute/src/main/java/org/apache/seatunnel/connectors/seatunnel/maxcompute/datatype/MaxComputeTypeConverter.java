@@ -40,6 +40,7 @@ import com.aliyun.odps.type.MapTypeInfo;
 import com.aliyun.odps.type.StructTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
 import com.aliyun.odps.type.TypeInfoFactory;
+import com.aliyun.odps.type.TypeInfoParser;
 import com.google.auto.service.AutoService;
 import lombok.extern.slf4j.Slf4j;
 
@@ -105,6 +106,10 @@ public class MaxComputeTypeConverter implements TypeConverter<BasicTypeDefine<Ty
     @Override
     public String identifier() {
         return PLUGIN_NAME;
+    }
+
+    public TypeInfo getNativeType(String str) {
+        return TypeInfoParser.getTypeInfoFromTypeString(str);
     }
 
     @Override

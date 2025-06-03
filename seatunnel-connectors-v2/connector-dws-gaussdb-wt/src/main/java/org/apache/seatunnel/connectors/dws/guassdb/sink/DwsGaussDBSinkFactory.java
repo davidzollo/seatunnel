@@ -77,7 +77,7 @@ public class DwsGaussDBSinkFactory
             createSink(TableSinkFactoryContext context) {
         // Load the JDBC driver in to DriverManager
         try {
-            Class.forName("com.huawei.gauss200.jdbc.Driver");
+            Class.forName(context.getOptions().get(BaseDwsGaussDBOption.DRIVER));
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }

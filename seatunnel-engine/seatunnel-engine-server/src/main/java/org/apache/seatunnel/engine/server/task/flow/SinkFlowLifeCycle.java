@@ -265,6 +265,7 @@ public class SinkFlowLifeCycle<T, CommitInfoT extends Serializable, AggregatedCo
                 }
             }
         } catch (Exception e) {
+            log.error("Failed to receive record: {}", record, e);
             throw new RuntimeException(e);
         }
     }

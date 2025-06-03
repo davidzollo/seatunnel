@@ -223,8 +223,6 @@ public class JdbcOutputFormat<I, E extends JdbcBatchStatementExecutor<I>> implem
                         CommonErrorCodeDeprecated.FLUSH_DATA_FAILED,
                         "Close JDBC writer failed.",
                         e);
-            } finally {
-                connectionProvider.closeConnection();
             }
             checkFlushException();
         }

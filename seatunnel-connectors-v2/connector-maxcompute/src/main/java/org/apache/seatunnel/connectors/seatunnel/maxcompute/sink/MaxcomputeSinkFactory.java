@@ -18,6 +18,7 @@
 package org.apache.seatunnel.connectors.seatunnel.maxcompute.sink;
 
 import org.apache.seatunnel.api.configuration.util.OptionRule;
+import org.apache.seatunnel.api.sink.DataSaveMode;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.connector.TableSink;
@@ -58,8 +59,8 @@ public class MaxcomputeSinkFactory implements TableSinkFactory {
                         OVERWRITE,
                         SCHEMA_SAVE_MODE,
                         DATA_SAVE_MODE,
-                        SAVE_MODE_CREATE_TEMPLATE,
-                        CUSTOM_SQL)
+                        SAVE_MODE_CREATE_TEMPLATE)
+                .conditional(DATA_SAVE_MODE, DataSaveMode.CUSTOM_PROCESSING, CUSTOM_SQL)
                 .optional(MULTI_TABLE_SINK_REPLICA, MULTI_TABLE_SINK_TTL_SEC)
                 .build();
     }

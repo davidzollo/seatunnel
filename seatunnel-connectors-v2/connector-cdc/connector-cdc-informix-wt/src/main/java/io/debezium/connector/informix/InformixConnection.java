@@ -128,10 +128,22 @@ public class InformixConnection extends JdbcConnection {
                                 }
                             });
             try (Connection connection = cdcEngine.getDs().getConnection()) {
-                connection
-                        .createStatement()
-                        .execute(
-                                "CREATE TABLE IF NOT EXISTS syscdcv1:informix.seatunnel_track (id int)");
+                String sql =
+                        "SELECT tabname FROM syscdcv1:informix.systables WHERE tabname = 'seatunnel_track'";
+                JdbcConnection.ResultSetMapper<List<String>> mapper =
+                        rs -> {
+                            List<String> tables = new ArrayList<>();
+                            while (rs.next()) {
+                                String table = rs.getString(1).trim();
+                                tables.add(table);
+                            }
+                            return tables;
+                        };
+                if (queryAndMap(sql, mapper).isEmpty()) {
+                    connection
+                            .createStatement()
+                            .execute("CREATE TABLE syscdcv1:informix.seatunnel_track (id int)");
+                }
                 connection
                         .createStatement()
                         .execute("DELETE FROM syscdcv1:informix.seatunnel_track where id = 1");

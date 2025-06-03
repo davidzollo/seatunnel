@@ -58,6 +58,9 @@ public class FtpConf extends HadoopConf {
                     "fs.ftp.connection.mode",
                     config.get(FtpConfigOptions.FTP_CONNECTION_MODE).toString());
         }
+        ftpOptions.put(
+                "fs.ftp.remote.verification.enabled",
+                String.valueOf(config.get(FtpConfigOptions.FTP_REMOTE_VERIFICATION_ENABLED)));
         hadoopConf.setExtraOptions(ftpOptions);
         return hadoopConf;
     }

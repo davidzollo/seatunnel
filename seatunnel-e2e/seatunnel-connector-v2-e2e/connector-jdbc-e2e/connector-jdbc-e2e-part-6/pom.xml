@@ -65,5 +65,13 @@
             <artifactId>ngdbc</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Informix JDBC Driver -->
+        <dependency>
+            <groupId>com.ibm.informix</groupId>
+            <artifactId>jdbc</artifactId>
+            <version>4.50.10</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

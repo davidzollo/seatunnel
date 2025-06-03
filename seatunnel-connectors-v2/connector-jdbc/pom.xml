@@ -54,6 +54,7 @@
         <oceanbase.jdbc.version>2.4.3</oceanbase.jdbc.version>
         <dws.jdbc.version>8.2.1.300-200</dws.jdbc.version>
         <tikv.version>3.2.0</tikv.version>
+        <gbase8s.version>3.6.3.2</gbase8s.version>
     </properties>
 
     <dependencyManagement>
@@ -218,6 +219,11 @@
                 <artifactId>yashandb-jdbc</artifactId>
                 <version>1.7.10</version>
             </dependency>
+            <dependency>
+                <groupId>com.gbasedbt</groupId>
+                <artifactId>jdbc</artifactId>
+                <version>${gbase8s.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -355,6 +361,10 @@
         <dependency>
             <groupId>com.yashandb</groupId>
             <artifactId>yashandb-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.gbasedbt</groupId>
+            <artifactId>jdbc</artifactId>
         </dependency>
         <dependency>
             <groupId>junit</groupId>

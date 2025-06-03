@@ -33,7 +33,6 @@ import org.apache.seatunnel.connectors.seatunnel.cdc.oracle.source.eumerator.Ora
 import org.apache.seatunnel.connectors.seatunnel.cdc.oracle.source.reader.fetch.OracleSourceFetchTaskContext;
 import org.apache.seatunnel.connectors.seatunnel.cdc.oracle.source.reader.fetch.logminer.OracleStreamFetchTask;
 import org.apache.seatunnel.connectors.seatunnel.cdc.oracle.source.reader.fetch.scan.OracleSnapshotFetchTask;
-import org.apache.seatunnel.connectors.seatunnel.cdc.oracle.utils.OracleConnectionUtils;
 import org.apache.seatunnel.connectors.seatunnel.cdc.oracle.utils.OracleSchema;
 
 import io.debezium.connector.oracle.OracleConnection;
@@ -45,6 +44,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.apache.seatunnel.connectors.seatunnel.cdc.oracle.utils.OracleConnectionUtils.createOracleConnection;
 
@@ -93,13 +93,9 @@ public class OracleDialect implements JdbcDataSourceDialect {
     public List<TableId> discoverDataCollections(JdbcSourceConfig sourceConfig) {
         OracleSourceConfig oracleSourceConfig = (OracleSourceConfig) sourceConfig;
         String database = oracleSourceConfig.getDbzConnectorConfig().getDatabaseName();
-
-        try (JdbcConnection jdbcConnection = openJdbcConnection(sourceConfig)) {
-            return OracleConnectionUtils.listTables(
-                    jdbcConnection, database, oracleSourceConfig.getTableFilters());
-        } catch (SQLException e) {
-            throw new SeaTunnelException("Error to discover tables: " + e.getMessage(), e);
-        }
+        return tableMap.keySet().stream()
+                .map(tableId -> new TableId(database, tableId.schema(), tableId.table()))
+                .collect(Collectors.toList());
     }
 
     @Override

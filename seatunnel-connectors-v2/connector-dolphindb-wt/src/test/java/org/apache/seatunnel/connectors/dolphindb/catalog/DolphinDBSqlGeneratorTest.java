@@ -42,7 +42,7 @@ class DolphinDBSqlGeneratorTest {
                         "dfs://whalescheduler", "users", seaTunnelRowType);
         Assertions.assertEquals("delete from users where id = ? , name = ? , age = ?", sql);
 
-        String tableName = Utils.getTableName(sql);
-        Assertions.assertEquals(" users ", tableName);
+        String tableName = Utils.getTableName(sql, true);
+        Assertions.assertEquals("users", tableName);
     }
 }

@@ -32,6 +32,7 @@ import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.connectors.dws.guassdb.catalog.DwsGaussDBCatalog;
 import org.apache.seatunnel.connectors.dws.guassdb.catalog.DwsGaussDBCatalogFactory;
+import org.apache.seatunnel.connectors.dws.guassdb.config.BaseDwsGaussDBOption;
 import org.apache.seatunnel.connectors.dws.guassdb.config.DwsGaussDBConfig;
 import org.apache.seatunnel.connectors.dws.guassdb.sink.commit.DwsGaussDBSinkAggregatedCommitInfo;
 import org.apache.seatunnel.connectors.dws.guassdb.sink.commit.DwsGaussDBSinkAggregatedCommitter;
@@ -74,7 +75,7 @@ public class DwsGaussDBSink
 
     public DwsGaussDBSink(ReadonlyConfig readonlyConfig, CatalogTable catalogTable) {
         try {
-            Class.forName("com.huawei.gauss200.jdbc.Driver");
+            Class.forName(readonlyConfig.get(BaseDwsGaussDBOption.DRIVER));
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -92,7 +93,7 @@ public class DwsGaussDBSink
     public DwsGaussDBSinkWriter createWriter(SinkWriter.Context context) {
         try {
             try {
-                Class.forName("com.huawei.gauss200.jdbc.Driver");
+                Class.forName(readonlyConfig.get(BaseDwsGaussDBOption.DRIVER));
             } catch (ClassNotFoundException e) {
                 throw new RuntimeException(e);
             }
@@ -108,7 +109,7 @@ public class DwsGaussDBSink
             SinkWriter.Context context, List<DwsGaussDBSinkState> states) {
         try {
             try {
-                Class.forName("com.huawei.gauss200.jdbc.Driver");
+                Class.forName(readonlyConfig.get(BaseDwsGaussDBOption.DRIVER));
             } catch (ClassNotFoundException e) {
                 throw new RuntimeException(e);
             }
@@ -152,7 +153,7 @@ public class DwsGaussDBSink
                             DwsGaussDBSinkCommitInfo, DwsGaussDBSinkAggregatedCommitInfo>>
             createAggregatedCommitter() {
         try {
-            Class.forName("com.huawei.gauss200.jdbc.Driver");
+            Class.forName(readonlyConfig.get(BaseDwsGaussDBOption.DRIVER));
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -169,7 +170,7 @@ public class DwsGaussDBSink
     @Override
     public Optional<SaveModeHandler> getSaveModeHandler() {
         try {
-            Class.forName("com.huawei.gauss200.jdbc.Driver");
+            Class.forName(readonlyConfig.get(BaseDwsGaussDBOption.DRIVER));
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }

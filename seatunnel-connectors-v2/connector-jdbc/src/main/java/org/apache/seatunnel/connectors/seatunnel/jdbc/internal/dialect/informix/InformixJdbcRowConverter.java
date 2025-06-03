@@ -26,11 +26,17 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConnectorExc
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.converter.AbstractJdbcRowConverter;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 
+import javax.annotation.Nullable;
+
+import java.io.ByteArrayInputStream;
+import java.io.StringReader;
 import java.sql.Date;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public class InformixJdbcRowConverter extends AbstractJdbcRowConverter {
@@ -108,5 +114,132 @@ public class InformixJdbcRowConverter extends AbstractJdbcRowConverter {
             }
         }
         return new SeaTunnelRow(fields);
+    }
+
+    /**
+     * Override setValueToStatementByDataType to handle Informix-specific data types for Sink
+     * functionality. This method provides enhanced support for Informix types like TEXT, BYTE,
+     * BLOB, MONEY, etc.
+     *
+     * @param value The value to set
+     * @param statement The PreparedStatement to set the value into
+     * @param seaTunnelDataType The SeaTunnel data type
+     * @param statementIndex The parameter index in the statement (1-based)
+     * @param sourceType The source database type for special handling
+     * @throws SQLException if database access error occurs
+     */
+    @Override
+    protected void setValueToStatementByDataType(
+            Object value,
+            PreparedStatement statement,
+            SeaTunnelDataType<?> seaTunnelDataType,
+            int statementIndex,
+            @Nullable String sourceType)
+            throws SQLException {
+
+        if (value == null) {
+            statement.setObject(statementIndex, null);
+            return;
+        }
+
+        switch (seaTunnelDataType.getSqlType()) {
+            case BYTES:
+                handleBytesType(value, statement, statementIndex, sourceType);
+                break;
+            case STRING:
+                handleStringType(value, statement, statementIndex, sourceType);
+                break;
+            case DECIMAL:
+                handleDecimalType(value, statement, statementIndex, sourceType);
+                break;
+            case TIMESTAMP:
+                handleTimestampType(value, statement, statementIndex, sourceType);
+                break;
+            default:
+                // Use the parent class implementation for standard types
+                super.setValueToStatementByDataType(
+                        value, statement, seaTunnelDataType, statementIndex, sourceType);
+                break;
+        }
+    }
+
+    /** Handle Informix BYTE and BLOB types with proper stream handling. */
+    private void handleBytesType(
+            Object value,
+            PreparedStatement statement,
+            int statementIndex,
+            @Nullable String sourceType)
+            throws SQLException {
+        byte[] bytes = (byte[]) value;
+
+        if ("BLOB".equalsIgnoreCase(sourceType)) {
+            // For BLOB types, use setBinaryStream for better performance with large data
+            statement.setBinaryStream(
+                    statementIndex, new ByteArrayInputStream(bytes), bytes.length);
+        } else {
+            // For BYTE types, use setBytes
+            statement.setBytes(statementIndex, bytes);
+        }
+    }
+
+    /** Handle Informix string types including TEXT and CLOB with large text support. */
+    private void handleStringType(
+            Object value,
+            PreparedStatement statement,
+            int statementIndex,
+            @Nullable String sourceType)
+            throws SQLException {
+        String stringValue = value.toString();
+
+        if ("TEXT".equalsIgnoreCase(sourceType) || "CLOB".equalsIgnoreCase(sourceType)) {
+            // For large text types, use setCharacterStream if the value is very large
+            // Informix has a threshold around 32KB for efficient handling
+            if (stringValue.length() > 32767) {
+                statement.setCharacterStream(
+                        statementIndex, new StringReader(stringValue), stringValue.length());
+            } else {
+                statement.setString(statementIndex, stringValue);
+            }
+        } else {
+            // For standard string types (CHAR, VARCHAR, NCHAR, NVARCHAR, LVARCHAR)
+            statement.setString(statementIndex, stringValue);
+        }
+    }
+
+    /** Handle Informix decimal types including MONEY with proper precision. */
+    private void handleDecimalType(
+            Object value,
+            PreparedStatement statement,
+            int statementIndex,
+            @Nullable String sourceType)
+            throws SQLException {
+        // MONEY type in Informix is handled as BigDecimal with special formatting
+        // All decimal types (DECIMAL, NUMERIC, MONEY) use setBigDecimal
+        statement.setBigDecimal(statementIndex, (java.math.BigDecimal) value);
+    }
+
+    /** Handle Informix DATETIME type with proper precision handling. */
+    private void handleTimestampType(
+            Object value,
+            PreparedStatement statement,
+            int statementIndex,
+            @Nullable String sourceType)
+            throws SQLException {
+        if ("DATETIME".equalsIgnoreCase(sourceType)) {
+            // Informix DATETIME handling with proper precision
+            if (value instanceof LocalDateTime) {
+                statement.setTimestamp(statementIndex, Timestamp.valueOf((LocalDateTime) value));
+            } else {
+                statement.setTimestamp(statementIndex, (Timestamp) value);
+            }
+        } else {
+            // Use parent implementation for standard timestamp handling
+            super.setValueToStatementByDataType(
+                    value,
+                    statement,
+                    org.apache.seatunnel.api.table.type.LocalTimeType.LOCAL_DATE_TIME_TYPE,
+                    statementIndex,
+                    sourceType);
+        }
     }
 }

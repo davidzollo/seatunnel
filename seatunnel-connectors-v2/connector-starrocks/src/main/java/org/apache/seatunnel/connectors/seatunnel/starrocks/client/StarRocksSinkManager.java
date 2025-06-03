@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.connectors.seatunnel.starrocks.client;
 
+import org.apache.seatunnel.common.utils.ExceptionUtils;
 import org.apache.seatunnel.connectors.seatunnel.starrocks.config.SinkConfig;
 import org.apache.seatunnel.connectors.seatunnel.starrocks.exception.StarRocksConnectorErrorCode;
 import org.apache.seatunnel.connectors.seatunnel.starrocks.exception.StarRocksConnectorException;
@@ -88,6 +89,13 @@ public class StarRocksSinkManager {
                 }
             } catch (Exception e) {
                 log.warn("Writing records to StarRocks failed, retry times = {}", i, e);
+                String labelAlreadyMessage =
+                        String.format("Label [%s] has already been used", label);
+                if (ExceptionUtils.getMessage(e).contains(labelAlreadyMessage)) {
+                    log.warn("Label [{}] has already been used, Skipping this batch", label);
+                    break;
+                }
+
                 if (i >= sinkConfig.getMaxRetries()) {
                     throw new StarRocksConnectorException(
                             StarRocksConnectorErrorCode.WRITE_RECORDS_FAILED,

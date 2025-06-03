@@ -311,7 +311,9 @@ public class IncrementalSourceStreamFetcherTest {
 
     static SourceRecord createSchemaChangeEvent() {
         Schema keySchema =
-                SchemaBuilder.struct().name(SourceRecordUtils.SCHEMA_CHANGE_EVENT_KEY_NAME).build();
+                SchemaBuilder.struct()
+                        .name(SourceRecordUtils.SUPPORT_SCHEMA_CHANGE_EVENT_KEY_NAME.get(0))
+                        .build();
         SourceRecord record =
                 new SourceRecord(
                         Collections.emptyMap(),

@@ -285,12 +285,15 @@ public class CheckpointCoordinator {
         if (checkpointCoordinatorFuture.isDone()) {
             return;
         }
-        cleanPendingCheckpoint(reason);
         updateStatus(CheckpointCoordinatorStatus.FAILED);
         checkpointCoordinatorFuture.complete(
                 new CheckpointCoordinatorState(
                         CheckpointCoordinatorStatus.FAILED, errorByPhysicalVertex.get()));
         checkpointManager.handleCheckpointError(pipelineId, false);
+        // we should wait the checkpoint manager handle the error to cancel other task by use
+        // checkpoint coordinator thread pool. So we killed the thread pool at the end of this
+        // method to avoid the thread be interrupted before handle checkpoint error finished.
+        cleanPendingCheckpoint(reason);
     }
 
     private void restoreTaskState(TaskLocation taskLocation) {
@@ -448,7 +451,6 @@ public class CheckpointCoordinator {
                 }
             }
             readyToCloseIdleTask.addAll(subTaskList);
-            tryTriggerPendingCheckpoint(CheckpointType.CHECKPOINT_TYPE);
         }
     }
 
@@ -467,7 +469,7 @@ public class CheckpointCoordinator {
     }
 
     protected void restoreCoordinator(boolean alreadyStarted) {
-        LOG.info("received restore CheckpointCoordinator with alreadyStarted= " + alreadyStarted);
+        LOG.info("received restore CheckpointCoordinator with alreadyStarted = {}", alreadyStarted);
         errorByPhysicalVertex = new AtomicReference<>();
         checkpointCoordinatorFuture = new CompletableFuture<>();
         updateStatus(CheckpointCoordinatorStatus.RUNNING);
@@ -489,9 +491,18 @@ public class CheckpointCoordinator {
         }
         final long currentTimestamp = Instant.now().toEpochMilli();
         if (checkpointType.notFinalCheckpoint() && checkpointType.notSchemaChangeCheckpoint()) {
-            if (currentTimestamp - latestTriggerTimestamp.get()
-                            < coordinatorConfig.getCheckpointInterval()
-                    || !isAllTaskReady) {
+            if (!isAllTaskReady) {
+                LOG.info("The all task not ready, skip trigger checkpoint");
+                return;
+            }
+            long interval = currentTimestamp - latestTriggerTimestamp.get();
+            if (interval < coordinatorConfig.getCheckpointInterval()) {
+                LOG.info(
+                        "skip trigger checkpoint because the last trigger timestamp is {} and current timestamp is {}",
+                        latestTriggerTimestamp.get(),
+                        currentTimestamp);
+                scheduleTriggerPendingCheckpoint(
+                        checkpointType, coordinatorConfig.getCheckpointInterval() - interval);
                 return;
             }
         }
@@ -525,6 +536,10 @@ public class CheckpointCoordinator {
             // if checkpoint type are final type, we don't need to trigger next checkpoint
             if (checkpointType.notFinalCheckpoint() && checkpointType.notSchemaChangeCheckpoint()) {
                 scheduleTriggerPendingCheckpoint(coordinatorConfig.getCheckpointInterval());
+            } else {
+                LOG.info(
+                        "skip schedule trigger checkpoint because checkpoint type is {}",
+                        checkpointType);
             }
         }
     }
@@ -587,7 +602,7 @@ public class CheckpointCoordinator {
             CompletableFuture<PendingCheckpoint> pendingCompletableFuture) {
         pendingCompletableFuture.thenAccept(
                 pendingCheckpoint -> {
-                    LOG.info("wait checkpoint completed: " + pendingCheckpoint.getCheckpointId());
+                    LOG.info("wait checkpoint completed: {}", pendingCheckpoint.getCheckpointId());
                     PassiveCompletableFuture<CompletedCheckpoint> completableFuture =
                             pendingCheckpoint.getCompletableFuture();
                     completableFuture.whenCompleteAsync(
@@ -638,8 +653,8 @@ public class CheckpointCoordinator {
                     }
                     if (coordinatorConfig.isCheckpointEnable()) {
                         LOG.debug(
-                                "Start a scheduled task to prevent checkpoint timeouts for barrier "
-                                        + pendingCheckpoint.getInfo());
+                                "Start a scheduled task to prevent checkpoint timeouts for barrier {}",
+                                pendingCheckpoint.getInfo());
                         long checkpointTimeout = coordinatorConfig.getCheckpointTimeout();
                         if (pendingCheckpoint.getCheckpointType().isSchemaChangeAfterCheckpoint()) {
                             checkpointTimeout =
@@ -656,8 +671,8 @@ public class CheckpointCoordinator {
                                                             != null
                                                     && !pendingCheckpoint.isFullyAcknowledged()) {
                                                 LOG.info(
-                                                        "timeout checkpoint: "
-                                                                + pendingCheckpoint.getInfo());
+                                                        "timeout checkpoint: {}",
+                                                        pendingCheckpoint.getInfo());
                                                 handleCoordinatorError(
                                                         CheckpointCloseReason.CHECKPOINT_EXPIRED,
                                                         null);
@@ -809,7 +824,7 @@ public class CheckpointCoordinator {
         final long checkpointId = ackOperation.getBarrier().getId();
         final PendingCheckpoint pendingCheckpoint = pendingCheckpoints.get(checkpointId);
         if (pendingCheckpoint == null) {
-            LOG.info("skip already ack checkpoint " + checkpointId);
+            LOG.info("skip already ack checkpoint {}", checkpointId);
             return;
         }
         TaskLocation location = ackOperation.getTaskLocation();
@@ -987,7 +1002,7 @@ public class CheckpointCoordinator {
                     new RetryUtils.RetryMaterial(
                             Constant.OPERATION_RETRY_TIME,
                             true,
-                            exception -> ExceptionUtil.isOperationNeedRetryException(exception),
+                            ExceptionUtil::isOperationNeedRetryException,
                             Constant.OPERATION_RETRY_SLEEP));
         } catch (Exception e) {
             LOG.warn(

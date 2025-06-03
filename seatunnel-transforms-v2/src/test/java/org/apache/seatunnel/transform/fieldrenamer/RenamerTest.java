@@ -323,7 +323,7 @@ public class RenamerTest {
                         TransformException.class,
                         () -> transform.mapSchemaChangeEvent(alterTableAddColumnEvent));
         Assertions.assertEquals(
-                "ErrorCode:[FIELD_RENAMER-01], ErrorDescription:[The FieldRenamer renamed target field name had duplicate name: '{\"database-x.table-x\":{\"f1\":\"f1_x\",\"f1_x\":\"f1_x\"}}']",
+                "ErrorCode:[FIELD_RENAMER-01], ErrorDescription:[The FieldRenamer renamed target field name had duplicate name: '{\"database-x.table-x\":{\"f1_x\":\"f1_x\",\"f1\":\"f1_x\"}}']",
                 exception.getMessage());
 
         FieldRenamerTransform transform2 =
@@ -383,12 +383,12 @@ public class RenamerTest {
                                 null,
                                 null),
                         false,
-                        "f2");
+                        "f1");
         AlterTableChangeColumnEvent newAlterTableChangeColumnEvent =
                 (AlterTableChangeColumnEvent)
                         transform2.mapSchemaChangeEvent(alterTableChangeColumnEvent);
         Assertions.assertEquals("abcF3ee", newAlterTableChangeColumnEvent.getOldColumn());
-        Assertions.assertEquals("abcF2ee", newAlterTableChangeColumnEvent.getAfterColumn());
+        Assertions.assertEquals("abcF1ee", newAlterTableChangeColumnEvent.getAfterColumn());
         Assertions.assertEquals("abcF3_XXee", newAlterTableChangeColumnEvent.getColumn().getName());
 
         AlterTableChangeColumnEvent alterTableChangeColumnEvent2 =
@@ -413,7 +413,7 @@ public class RenamerTest {
         Assertions.assertNull(transform2.mapSchemaChangeEvent(alterTableChangeColumnEvent2));
         List<CatalogTable> catalogTables = transform2.getProducedCatalogTables();
         Assertions.assertEquals(
-                "f1_x", catalogTables.get(0).getTableSchema().getColumns().get(3).getName());
+                "f1_x", catalogTables.get(0).getTableSchema().getColumns().get(2).getName());
 
         AlterTableNameEvent alterTableNameEvent =
                 new AlterTableNameEvent(
@@ -422,7 +422,7 @@ public class RenamerTest {
                                 DEFAULT_TABLE.getCatalogName(), TablePath.of("test", "test3")));
         transform2.mapSchemaChangeEvent(alterTableNameEvent);
         Assertions.assertEquals(
-                "abcF2ee",
+                "abcF1_XXee",
                 transform2
                         .getProducedCatalogTables()
                         .get(0)
@@ -431,7 +431,7 @@ public class RenamerTest {
                         .get(0)
                         .getName());
         Assertions.assertEquals(
-                "abcF3ee",
+                "abcF2ee",
                 transform2
                         .getProducedCatalogTables()
                         .get(0)
@@ -440,7 +440,7 @@ public class RenamerTest {
                         .get(1)
                         .getName());
         Assertions.assertEquals(
-                "abcF1_XXee",
+                "f1_x",
                 transform2
                         .getProducedCatalogTables()
                         .get(0)
@@ -449,7 +449,7 @@ public class RenamerTest {
                         .get(2)
                         .getName());
         Assertions.assertEquals(
-                "f1_x",
+                "abcF3ee",
                 transform2
                         .getProducedCatalogTables()
                         .get(0)

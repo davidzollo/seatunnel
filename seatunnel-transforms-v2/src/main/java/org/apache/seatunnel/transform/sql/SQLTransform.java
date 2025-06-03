@@ -102,14 +102,14 @@ public class SQLTransform extends AbstractCatalogSupportTransform {
                 query);
     }
 
-    private void tryOpen() {
+    public void tryOpen() {
         if (sqlEngine == null) {
             open();
         }
     }
 
     @Override
-    protected SeaTunnelRow transformRow(SeaTunnelRow inputRow) {
+    public SeaTunnelRow transformRow(SeaTunnelRow inputRow) {
         tryOpen();
         return sqlEngine.transformBySQL(inputRow);
     }
@@ -118,7 +118,7 @@ public class SQLTransform extends AbstractCatalogSupportTransform {
     protected TableSchema transformTableSchema() {
         tryOpen();
         List<String> inputColumnsMapping = new ArrayList<>();
-        SeaTunnelRowType outRowType = sqlEngine.typeMapping(inputColumnsMapping);
+        SeaTunnelRowType outRowType = getOutputRowTypeAndColumns(inputColumnsMapping);
         List<String> outputColumns = Arrays.asList(outRowType.getFieldNames());
 
         TableSchema.Builder builder = TableSchema.builder();
@@ -179,6 +179,10 @@ public class SQLTransform extends AbstractCatalogSupportTransform {
             columns.add(column);
         }
         return builder.columns(columns).build();
+    }
+
+    public SeaTunnelRowType getOutputRowTypeAndColumns(List<String> inputColumnsMapping) {
+        return sqlEngine.typeMapping(inputColumnsMapping);
     }
 
     @Override
