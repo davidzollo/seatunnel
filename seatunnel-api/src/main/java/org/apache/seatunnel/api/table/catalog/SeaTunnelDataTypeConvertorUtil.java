@@ -36,8 +36,8 @@ import org.apache.seatunnel.common.exception.CommonError;
 public class SeaTunnelDataTypeConvertorUtil {
 
     /** Convert sqlType to SeaTunnelDataType */
-    public static SeaTunnelDataType<?> convertSqlTypeToSeaTunnelDataType(SqlType sqlType) {
-        return deserializeSeaTunnelDataType(null, sqlType.name());
+    public static SeaTunnelDataType<?> convertSqlTypeToSeaTunnelDataType(String sqlTypeName) {
+        return deserializeSeaTunnelDataType(null, sqlTypeName);
     }
 
     /**

@@ -49,6 +49,9 @@ public class MapperConfig implements Serializable {
         @JsonAlias("output_name")
         private String outputName;
 
+        @JsonAlias("source_field_names")
+        private List<String> sourceFieldNames;
+
         @JsonAlias("columns")
         private List<Column> columns;
 

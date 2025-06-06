@@ -204,7 +204,7 @@ public class InformixCatalog extends AbstractJdbcCatalog {
     protected String getDropTableSql(TablePath tablePath) {
         String schemaName = tablePath.getSchemaName();
         String tableName = tablePath.getTableName();
-        return "DROP TABLE IF EXISTS " + schemaName + "." + tableName;
+        return "DROP TABLE " + schemaName + "." + tableName;
     }
 
     @Override

@@ -29,6 +29,9 @@ import org.apache.seatunnel.api.table.catalog.exception.CatalogException;
 import org.apache.seatunnel.api.table.catalog.exception.DatabaseNotExistException;
 import org.apache.seatunnel.api.table.catalog.exception.TableNotExistException;
 import org.apache.seatunnel.api.table.converter.BasicTypeDefine;
+import org.apache.seatunnel.common.exception.CommonErrorCode;
+import org.apache.seatunnel.common.exception.SeaTunnelRuntimeException;
+import org.apache.seatunnel.common.utils.ExceptionUtils;
 import org.apache.seatunnel.common.utils.JdbcUrlUtil;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.AbstractJdbcCatalog;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.utils.CatalogUtils;
@@ -48,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class Gbase8sInformixCatalog extends AbstractJdbcCatalog {
@@ -162,6 +166,95 @@ public class Gbase8sInformixCatalog extends AbstractJdbcCatalog {
             throw new CatalogException(
                     String.format("Failed getting table %s", tablePath.getFullName()), e);
         }
+    }
+
+    public CatalogTable getTableIgnoreUnSupportColumn(TablePath tablePath)
+            throws CatalogException, TableNotExistException {
+        if (!tableExists(tablePath)) {
+            throw new TableNotExistException(catalogName, tablePath);
+        }
+
+        String dbUrl;
+        if (StringUtils.isNotBlank(tablePath.getDatabaseName())) {
+            dbUrl = getUrlFromDatabaseName(tablePath.getDatabaseName());
+        } else {
+            dbUrl = getUrlFromDatabaseName(defaultDatabase);
+        }
+        Connection conn = getConnection(dbUrl);
+        try {
+            DatabaseMetaData metaData = conn.getMetaData();
+            Optional<PrimaryKey> primaryKey = getPrimaryKey(metaData, tablePath);
+            List<ConstraintKey> constraintKeys = getConstraintKeys(metaData, tablePath);
+            constraintKeys = filterDuplicateConstraintKeys(constraintKeys, primaryKey);
+            String tableComment = getTableComment(metaData, tablePath);
+            try (ResultSet resultSet =
+                    metaData.getColumns(
+                            tablePath.getDatabaseName(),
+                            tablePath.getSchemaName(),
+                            tablePath.getTableName(),
+                            null)) {
+
+                TableSchema.Builder builder = TableSchema.builder();
+                try {
+                    buildColumnsWithErrorCheck(tablePath, resultSet, builder);
+                } catch (SeaTunnelRuntimeException e) {
+                    if (e.getSeaTunnelErrorCode() != null
+                            && CommonErrorCode.GET_CATALOG_TABLE_WITH_UNSUPPORTED_TYPE_ERROR.equals(
+                                    e.getSeaTunnelErrorCode())) {
+                        log.debug(ExceptionUtils.getMessage(e));
+                    } else {
+                        throw e;
+                    }
+                }
+                // add primary key
+                primaryKey.ifPresent(builder::primaryKey);
+                // filter constraint key
+                List<String> columnNames = builder.build().getColumnNames();
+                constraintKeys =
+                        constraintKeys.stream()
+                                .filter(
+                                        key -> {
+                                            boolean valid =
+                                                    key.getColumnNames().stream()
+                                                            .allMatch(
+                                                                    column ->
+                                                                            columnNames.contains(
+                                                                                    column
+                                                                                            .getColumnName()));
+                                            if (!valid) {
+                                                log.warn(
+                                                        "The table {} constraint key [{}] is not supported. {}",
+                                                        tablePath,
+                                                        key.getConstraintName(),
+                                                        key);
+                                            }
+                                            return valid;
+                                        })
+                                .collect(Collectors.toList());
+                // add constraint key
+                constraintKeys.forEach(builder::constraintKey);
+                TableIdentifier tableIdentifier = getTableIdentifier(tablePath);
+                return CatalogTable.of(
+                        tableIdentifier,
+                        builder.build(),
+                        buildConnectorOptions(tablePath),
+                        Collections.emptyList(),
+                        tableComment,
+                        catalogName);
+            }
+        } catch (SeaTunnelRuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CatalogException(
+                    String.format("Failed getting table %s", tablePath.getFullName()), e);
+        }
+    }
+
+    protected Optional<PrimaryKey> getPrimaryKey(
+            DatabaseMetaData metaData, String database, String schema, String table)
+            throws SQLException {
+        return CatalogUtils.getPrimaryKeyWithTablePathStrictMode(
+                metaData, TablePath.of(database, schema, table));
     }
 
     @Override

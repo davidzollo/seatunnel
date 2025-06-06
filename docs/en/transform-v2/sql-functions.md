@@ -186,8 +186,6 @@ RPAD(TEXT, 10, '-')
 
 Removes all leading spaces or other specified characters from a string.
 
-This function is deprecated, use TRIM instead of it.
-
 Example:
 
 LTRIM(NAME)
@@ -198,8 +196,6 @@ LTRIM(NAME)
 
 Removes all trailing spaces or other specified characters from a string.
 
-This function is deprecated, use TRIM instead of it.
-
 Example:
 
 RTRIM(NAME)
@@ -208,13 +204,11 @@ RTRIM(NAME)
 
 ```TRIM(string[, characterToTrimString])```
 
-Removes all leading spaces or other specified characters from a string.
-
-This function is deprecated, use TRIM instead of it.
+Removes all leading spaces and trailing spaces or other specified characters from a string.
 
 Example:
 
-LTRIM(NAME)
+TRIM(NAME)
 
 ### REGEXP_REPLACE
 
@@ -302,6 +296,14 @@ Example:
 
 REPLACE(NAME, ' ')
 
+### SPLIT
+
+Split a string into an array.
+
+Example:
+
+select SPLIT(test,';') as arrays
+
 ### SOUNDEX
 
 ```SOUNDEX(string)```
@@ -376,6 +378,26 @@ Calculate the arc cosine. See also Java Math.acos. This method returns a double.
 Example:
 
 ACOS(D)
+
+### ARRAY_MAX
+
+```ARRAY_MAX(ARRAY)```
+
+The MAX function returns the maximum value of the expression.
+
+Example:
+
+ARRAY_MAX(I)
+
+### ARRAY_MIN
+
+```ARRAY_MIN(ARRAY)```
+
+The MIN function returns the minimum value of the expression.
+
+Example:
+
+ARRAY_MIN(I)
 
 ### ASIN
 
@@ -889,11 +911,29 @@ CALL FROM_UNIXTIME(1672502400, 'yyyy-MM-dd HH:mm:ss','UTC+6')
 
 Converts a value to another data type.
 
-Supported data types: STRING | VARCHAR, INT | INTEGER, LONG | BIGINT, BYTE, FLOAT, DOUBLE, DECIMAL(p,s), TIMESTAMP, DATE, TIME
+Supported data types: STRING | VARCHAR, INT | INTEGER, LONG | BIGINT, BYTE, FLOAT, DOUBLE, DECIMAL(p,s), TIMESTAMP, DATE, TIME, BYTES, BOOLEAN
+
+Example:
+* CAST(NAME AS INT)
+* CAST(FLAG AS BOOLEAN)
+
+NOTE:
+Converts a value to a BOOLEAN data type according to the following rules:
+1. If the value can be interpreted as a boolean string (`'true'` or `'false'`), it returns the corresponding boolean value.
+2. If the value can be interpreted as a numeric value (`1` or `0`), it returns `true` for `1` and `false` for `0`.
+3. If the value cannot be interpreted according to the above rules, it throws a `TransformException`.
+
+### TRY_CAST
+
+```TRY_CAST(value as dataType)```
+
+This function is similar to CAST, but when the conversion fails, it returns NULL instead of throwing an exception.
+
+Supported data types: STRING | VARCHAR, INT | INTEGER, LONG | BIGINT, BYTE, FLOAT, DOUBLE, DECIMAL(p,s), TIMESTAMP, DATE, TIME, BYTES
 
 Example:
 
-CONVERT(NAME AS INT)
+TRY_CAST(NAME AS INT)
 
 ### COALESCE
 
@@ -963,9 +1003,13 @@ select
   case
     when c_tinyint <> 117 then 1
     else 0
-  end as c_number_0
+  end as c_number_0,
+  case
+    when c_boolean then 1
+    else 0
+  end as c_boolean_0
 from
-  fake
+  dual
 ```
 
 It is used to determine whether the condition is valid and return different values according to different judgments
@@ -973,3 +1017,53 @@ It is used to determine whether the condition is valid and return different valu
 Example:
 
 case when c_string in ('c_string') then 1 else 0 end
+
+case when c_string in ('c_string') then true else false end
+
+### UUID
+
+```UUID()```
+
+Generate a uuid through java function.
+
+Example:
+
+select UUID() as seatunnel_uuid
+
+### ARRAY
+
+```ARRAY<T> array(T, ...)```
+Create an array consisting of variadic elements and return it. Here, T can be either “column” or “literal”.
+
+Example:
+
+select ARRAY(1,2,3) as arrays
+select ARRAY('c_1',2,3.12) as arrays
+select ARRAY(column1,column2,column3) as arrays
+
+notes: Currently only string, double, long, int types are supported
+
+### LATERAL VIEW
+
+#### EXPLODE
+
+Used to flatten array columns into multiple rows. It applies the EXPLODE function to an array and generates a new row for each element.
+
+EXPLODE: Converts an array column into multiple rows. No rows generated if array is NULL or empty.
+
+OUTER EXPLODE: Returns NULL when array is NULL or empty, ensuring at least one row is generated.
+
+EXPLODE(SPLIT(field_name, separator)): Splits a string into an array using the specified separator, then explodes it into rows.
+
+EXPLODE(ARRAY(value1, value2, ...)): Explodes a custom-defined array into multiple rows.
+
+Example:
+
+```
+SELECT * FROM dual
+	LATERAL VIEW EXPLODE ( SPLIT ( NAME, ',' ) ) AS NAME
+	LATERAL VIEW EXPLODE ( SPLIT ( pk_id, ';' ) ) AS pk_id
+	LATERAL VIEW OUTER EXPLODE ( age ) AS age
+	LATERAL VIEW OUTER EXPLODE ( ARRAY(1,1) ) AS num
+```
+

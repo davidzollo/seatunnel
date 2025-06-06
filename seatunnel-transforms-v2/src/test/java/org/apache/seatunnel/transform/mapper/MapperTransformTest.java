@@ -118,6 +118,7 @@ public class MapperTransformTest {
                         new MapperConfig.SpecificModify(
                                 "default.default",
                                 "schema.table",
+                                null,
                                 Lists.newArrayList(
                                         MapperConfig.Column.builder()
                                                 .position(2)

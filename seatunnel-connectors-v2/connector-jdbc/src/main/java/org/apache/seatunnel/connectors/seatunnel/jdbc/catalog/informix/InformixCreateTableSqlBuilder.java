@@ -49,7 +49,7 @@ public class InformixCreateTableSqlBuilder {
     public String build(TablePath tablePath, String fieldIde) {
         StringBuilder createTableSql = new StringBuilder();
         createTableSql
-                .append(CatalogUtils.quoteIdentifier("CREATE TABLE IF NOT EXISTS ", fieldIde))
+                .append(CatalogUtils.quoteIdentifier("CREATE TABLE ", fieldIde))
                 .append(tablePath.getSchemaAndTableName())
                 .append(" (\n");
 
@@ -74,6 +74,7 @@ public class InformixCreateTableSqlBuilder {
                                     + ")",
                             fieldIde));
         }
+
         createTableSql.append(String.join(",\n", columnSqls));
         createTableSql.append("\n);");
 
