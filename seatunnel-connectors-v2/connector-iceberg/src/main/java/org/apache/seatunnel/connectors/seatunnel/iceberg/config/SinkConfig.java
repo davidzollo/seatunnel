@@ -50,12 +50,6 @@ public class SinkConfig extends CommonConfig {
     private static final String ID_COLUMNS = "id-columns";
     private static final String PARTITION_BY = "partition-by";
 
-    public static final Option<Map<String, String>> TABLE_PROPS =
-            Options.key("iceberg.table.config")
-                    .mapType()
-                    .defaultValue(new HashMap<>())
-                    .withDescription("Iceberg table configs");
-
     public static final Option<Map<String, String>> WRITE_PROPS =
             Options.key("iceberg.table.write-props")
                     .mapType()

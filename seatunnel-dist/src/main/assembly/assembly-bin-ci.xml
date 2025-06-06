@@ -104,6 +104,15 @@
             </includes>
             <outputDirectory>.</outputDirectory>
         </fileSet>
+
+        <fileSet>
+            <directory>src/main/sapbw</directory>
+            <includes>
+                <include>libsapjco3.so</include>
+            </includes>
+            <outputDirectory>/plugins/connector-sapbw</outputDirectory>
+            <fileMode>0755</fileMode>
+        </fileSet>
     </fileSets>
 
     <files>
@@ -239,6 +248,7 @@
 <!--                <include>org.apache.seatunnel:seatunnel-hive-mrs-3.1.1-hw-ei-315008-uber:jar</include>-->
                 <include>com.oceanbase:oceanbase-client:jar</include>
                 <include>com.yashandb:yashandb-jdbc:jar</include>
+                <include>com.gbasedbt:jdbc:jar</include>
             </includes>
             <outputFileNameMapping>${artifact.file.name}</outputFileNameMapping>
             <outputDirectory>/plugins/connector-jdbc</outputDirectory>
@@ -692,6 +702,18 @@
             <outputFileNameMapping>${artifact.file.name}</outputFileNameMapping>
             <outputDirectory>/plugins/connector-doris</outputDirectory>
             <scope>provided</scope>
+        </dependencySet>
+
+        <dependencySet>
+            <useProjectArtifact>false</useProjectArtifact>
+            <useTransitiveDependencies>true</useTransitiveDependencies>
+            <unpack>false</unpack>
+            <includes>
+                <include>com.sap:sapjco3:jar</include>
+            </includes>
+            <outputFileNameMapping>${artifact.file.name}</outputFileNameMapping>
+            <outputDirectory>/plugins/connector-sapbw</outputDirectory>
+            <scope>system</scope>
         </dependencySet>
 
         <dependencySet>

@@ -81,6 +81,9 @@ public class AdaptSinkTableCasts {
 
     public static Object castColumnData(
             Column inputColumn, Column outputColumn, Object columnValue) {
+        if (columnValue == null) {
+            return null;
+        }
         switch (outputColumn.getDataType().getSqlType()) {
             case NULL:
                 return null;

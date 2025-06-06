@@ -19,7 +19,6 @@ package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.psql;
 
 import org.apache.seatunnel.shade.org.apache.commons.csv.CSVFormat;
 import org.apache.seatunnel.shade.org.apache.commons.csv.CSVPrinter;
-import org.apache.seatunnel.shade.org.apache.commons.csv.QuoteMode;
 
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
@@ -62,17 +61,7 @@ public class PostgresCopyBatchStatementExecutor implements CopyBatchStatementExe
     protected String copySql;
     @Getter protected TableSchema tableSchema;
     private Connection connection;
-    CSVFormat csvFormat =
-            CSVFormat.DEFAULT
-                    .builder()
-                    .setDelimiter(COMMA)
-                    .setEscape(null)
-                    .setIgnoreEmptyLines(false)
-                    .setQuote(null)
-                    .setRecordSeparator(LF)
-                    .setNullString(EMPTY)
-                    .setQuoteMode(QuoteMode.ALL_NON_NULL)
-                    .build();
+    CSVFormat csvFormat = CSVFormat.POSTGRESQL_CSV;
     CSVPrinter csvPrinter;
 
     @Getter private boolean flushed = true;
@@ -165,6 +154,7 @@ public class PostgresCopyBatchStatementExecutor implements CopyBatchStatementExe
                                             : strVal;
                             strVal = DOUBLE_QUOTE + strVal + DOUBLE_QUOTE;
                         }
+                        strVal = strVal.replace("\u0000", "");
                         csvRecord.add(strVal);
                     } else {
                         csvRecord.add(null);
@@ -197,7 +187,7 @@ public class PostgresCopyBatchStatementExecutor implements CopyBatchStatementExe
             doCopy(copySql, new StringReader(this.csvPrinter.getOut().toString()));
         } catch (SQLException | IOException e) {
             throw new JdbcConnectorException(
-                    CommonErrorCodeDeprecated.SQL_OPERATION_FAILED, "Sql command: " + copySql);
+                    CommonErrorCodeDeprecated.SQL_OPERATION_FAILED, "Sql command: " + copySql, e);
         } finally {
             try {
                 this.csvPrinter.close();

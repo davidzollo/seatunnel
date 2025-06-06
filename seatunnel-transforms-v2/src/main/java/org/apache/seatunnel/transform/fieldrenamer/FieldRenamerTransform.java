@@ -29,8 +29,11 @@ import org.apache.seatunnel.api.table.schema.event.AlterTableChangeColumnEvent;
 import org.apache.seatunnel.api.table.schema.event.AlterTableColumnEvent;
 import org.apache.seatunnel.api.table.schema.event.AlterTableColumnsEvent;
 import org.apache.seatunnel.api.table.schema.event.AlterTableDropColumnEvent;
+import org.apache.seatunnel.api.table.schema.event.AlterTableModifyColumnEvent;
 import org.apache.seatunnel.api.table.schema.event.AlterTableNameEvent;
 import org.apache.seatunnel.api.table.schema.event.SchemaChangeEvent;
+import org.apache.seatunnel.api.table.schema.handler.AlterTableSchemaEventHandler;
+import org.apache.seatunnel.api.table.schema.handler.TableSchemaChangeEventHandler;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.transform.SeaTunnelTransform;
@@ -61,6 +64,8 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
     public static String PLUGIN_NAME = "FieldRenamer";
     private List<CatalogTable> inputCatalogTable;
     private final FieldRenamerConfig config;
+    private final TableSchemaChangeEventHandler tableSchemaChangeEventHandler =
+            new AlterTableSchemaEventHandler();
 
     public FieldRenamerTransform(List<CatalogTable> inputCatalogTable, FieldRenamerConfig config) {
         this.inputCatalogTable =
@@ -294,8 +299,9 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
     }
 
     private boolean shouldBeRenamedBySpecific(String tableName) {
-        return config.getSpecific().stream()
-                .anyMatch(specific -> specific.getTableName().equals(tableName));
+        return config.getSpecific() != null
+                && config.getSpecific().stream()
+                        .anyMatch(specific -> specific.getTableName().equals(tableName));
     }
 
     private boolean shouldBeRenamedByRegex(String tableName) {
@@ -335,18 +341,29 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
                     (AlterTableChangeColumnEvent) schemaChangeEvent;
             Column newColumn = alterTableChangeColumnEvent.getColumn();
             String oldColumnName = alterTableChangeColumnEvent.getOldColumn();
-            inputCatalogTable.stream()
-                    .filter(
-                            t ->
-                                    t.getTablePath()
-                                            .equals(alterTableChangeColumnEvent.getTablePath()))
-                    .forEach(
-                            t -> {
-                                t.getTableSchema()
-                                        .getColumns()
-                                        .removeIf(c -> c.getName().equals(oldColumnName));
-                                t.getTableSchema().getColumns().add(newColumn);
-                            });
+            inputCatalogTable =
+                    inputCatalogTable.stream()
+                            .map(
+                                    table -> {
+                                        if (table.getTablePath()
+                                                .equals(
+                                                        alterTableChangeColumnEvent
+                                                                .getTablePath())) {
+                                            TableSchema newSchema =
+                                                    tableSchemaChangeEventHandler
+                                                            .reset(table.getTableSchema())
+                                                            .apply(alterTableChangeColumnEvent);
+                                            return CatalogTable.of(
+                                                    table.getTableId(),
+                                                    newSchema,
+                                                    table.getOptions(),
+                                                    table.getPartitionKeys(),
+                                                    table.getComment(),
+                                                    table.getCatalogName());
+                                        }
+                                        return table;
+                                    })
+                            .collect(Collectors.toList());
             String tableName = alterTableChangeColumnEvent.getTablePath().getFullName();
             boolean uselessEvent = false;
             if (shouldBeRenamedBySpecific(tableName)) {
@@ -389,13 +406,76 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
                         alterTableChangeColumnEvent.isFirst(),
                         afterColumnRenamed);
             }
+        } else if (schemaChangeEvent instanceof AlterTableModifyColumnEvent) {
+            AlterTableModifyColumnEvent alterTableModifyColumnEvent =
+                    (AlterTableModifyColumnEvent) schemaChangeEvent;
+            inputCatalogTable =
+                    inputCatalogTable.stream()
+                            .map(
+                                    table -> {
+                                        if (table.getTablePath()
+                                                .equals(
+                                                        alterTableModifyColumnEvent
+                                                                .getTablePath())) {
+                                            TableSchema newSchema =
+                                                    tableSchemaChangeEventHandler
+                                                            .reset(table.getTableSchema())
+                                                            .apply(alterTableModifyColumnEvent);
+                                            return CatalogTable.of(
+                                                    table.getTableId(),
+                                                    newSchema,
+                                                    table.getOptions(),
+                                                    table.getPartitionKeys(),
+                                                    table.getComment(),
+                                                    table.getCatalogName());
+                                        }
+                                        return table;
+                                    })
+                            .collect(Collectors.toList());
+
+            // Use getProducedCatalogTables() to check rules
+            getProducedCatalogTables();
+            String tableName = alterTableModifyColumnEvent.getTablePath().getFullName();
+            if (shouldBeRenamed(tableName)) {
+                Column columnRenamed =
+                        alterTableModifyColumnEvent
+                                .getColumn()
+                                .rename(
+                                        convertName(
+                                                tableName,
+                                                alterTableModifyColumnEvent.getColumn().getName()));
+                String afterColumnRenamed =
+                        convertName(tableName, alterTableModifyColumnEvent.getAfterColumn());
+                return new AlterTableModifyColumnEvent(
+                        alterTableModifyColumnEvent.tableIdentifier(),
+                        columnRenamed,
+                        alterTableModifyColumnEvent.isFirst(),
+                        afterColumnRenamed);
+            }
         } else if (schemaChangeEvent instanceof AlterTableAddColumnEvent) {
             AlterTableAddColumnEvent alterTableAddColumnEvent =
                     (AlterTableAddColumnEvent) schemaChangeEvent;
-            Column newColumn = alterTableAddColumnEvent.getColumn();
-            inputCatalogTable.stream()
-                    .filter(t -> t.getTablePath().equals(alterTableAddColumnEvent.getTablePath()))
-                    .forEach(t -> t.getTableSchema().getColumns().add(newColumn));
+            inputCatalogTable =
+                    inputCatalogTable.stream()
+                            .map(
+                                    table -> {
+                                        if (table.getTablePath()
+                                                .equals(alterTableAddColumnEvent.getTablePath())) {
+                                            TableSchema newSchema =
+                                                    tableSchemaChangeEventHandler
+                                                            .reset(table.getTableSchema())
+                                                            .apply(alterTableAddColumnEvent);
+                                            return CatalogTable.of(
+                                                    table.getTableId(),
+                                                    newSchema,
+                                                    table.getOptions(),
+                                                    table.getPartitionKeys(),
+                                                    table.getComment(),
+                                                    table.getCatalogName());
+                                        }
+                                        return table;
+                                    })
+                            .collect(Collectors.toList());
             // Use getProducedCatalogTables() to check rules
             getProducedCatalogTables();
             String tableName = alterTableAddColumnEvent.getTablePath().getFullName();
@@ -419,13 +499,27 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
             AlterTableDropColumnEvent alterTableDropColumnEvent =
                     (AlterTableDropColumnEvent) schemaChangeEvent;
             String oldColumnName = alterTableDropColumnEvent.getColumn();
-            inputCatalogTable.stream()
-                    .filter(t -> t.getTablePath().equals(alterTableDropColumnEvent.getTablePath()))
-                    .forEach(
-                            t ->
-                                    t.getTableSchema()
-                                            .getColumns()
-                                            .removeIf(c -> c.getName().equals(oldColumnName)));
+            inputCatalogTable =
+                    inputCatalogTable.stream()
+                            .map(
+                                    table -> {
+                                        if (table.getTablePath()
+                                                .equals(alterTableDropColumnEvent.getTablePath())) {
+                                            TableSchema newSchema =
+                                                    tableSchemaChangeEventHandler
+                                                            .reset(table.getTableSchema())
+                                                            .apply(alterTableDropColumnEvent);
+                                            return CatalogTable.of(
+                                                    table.getTableId(),
+                                                    newSchema,
+                                                    table.getOptions(),
+                                                    table.getPartitionKeys(),
+                                                    table.getComment(),
+                                                    table.getCatalogName());
+                                        }
+                                        return table;
+                                    })
+                            .collect(Collectors.toList());
             // Use getProducedCatalogTables() to check rules
             getProducedCatalogTables();
             String tableName = alterTableDropColumnEvent.getTablePath().getFullName();

@@ -59,6 +59,7 @@ public class JdbcSinkWriter extends AbstractJdbcSinkWriter<ConnectionPoolManager
         implements SupportSchemaEvolutionSinkWriter {
     private JdbcOutputFormat<SeaTunnelRow, JdbcBatchStatementExecutor<SeaTunnelRow>> outputFormat;
     private final JdbcDialect dialect;
+    private final TablePath sinkTablePath;
     private final TableSchema tableSchema;
     private final TableSchema databaseTableSchema;
     private JdbcConnectionProvider connectionProvider;
@@ -68,26 +69,18 @@ public class JdbcSinkWriter extends AbstractJdbcSinkWriter<ConnectionPoolManager
     private SeaTunnelRowType rowType;
 
     public JdbcSinkWriter(
+            TablePath sinkTablePath,
             JdbcDialect dialect,
             JdbcSinkConfig jdbcSinkConfig,
             TableSchema tableSchema,
             TableSchema databaseTableSchema,
             Integer primaryKeyIndex) {
+        this.sinkTablePath = sinkTablePath;
         this.jdbcSinkConfig = jdbcSinkConfig;
         this.dialect = dialect;
         this.tableSchema = tableSchema;
         this.databaseTableSchema = databaseTableSchema;
         this.primaryKeyIndex = primaryKeyIndex;
-        this.connectionProvider =
-                dialect.getJdbcConnectionProvider(jdbcSinkConfig.getJdbcConnectionConfig());
-        this.outputFormat =
-                new JdbcOutputFormatBuilder(
-                                dialect,
-                                connectionProvider,
-                                jdbcSinkConfig,
-                                tableSchema,
-                                databaseTableSchema)
-                        .build();
         this.rowType = tableSchema.toPhysicalRowDataType();
     }
 
@@ -228,13 +221,11 @@ public class JdbcSinkWriter extends AbstractJdbcSinkWriter<ConnectionPoolManager
                                     databaseTableSchema)
                             .build();
             // Before OutputFormat opens, you need to update the database first
-            TablePath tablePath =
-                    TablePath.of(jdbcSinkConfig.getDatabase(), jdbcSinkConfig.getTable());
             JdbcConnectionProvider refreshTableSchemaConnectionProvider =
                     dialect.getJdbcConnectionProvider(jdbcSinkConfig.getJdbcConnectionConfig());
             try (Connection connection =
                     refreshTableSchemaConnectionProvider.getOrEstablishConnection()) {
-                dialect.applySchemaChange(connection, tablePath, event);
+                dialect.applySchemaChange(connection, sinkTablePath, event);
             } catch (Exception throwables) {
                 log.error("schema change error :", throwables);
                 throw new JdbcConnectorException(

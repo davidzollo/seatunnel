@@ -101,9 +101,9 @@ public class DwsGaussSqlGeneratorTest {
     void getCopyInTemporaryTableSql() {
         String copyInTemporaryTableSql = dwsGaussSqlGenerator.getCopyInTemporaryTableSql();
         Assertions.assertEquals(
-                "COPY \"public\".\"st_temporary_t_st_users\"(id,name,age,create_time) FROM STDIN DELIMITER '"
+                "COPY \"public\".\"st_temporary_t_st_users\"(id,name,age,create_time,st_snapshot_id,st_is_deleted) FROM STDIN WITH(format 'text', delimiter E'"
                         + delimiter
-                        + "' COMPATIBLE_ILLEGAL_CHARS",
+                        + "', noescaping 'true', compatible_illegal_chars 'true')",
                 copyInTemporaryTableSql);
     }
 
@@ -111,9 +111,9 @@ public class DwsGaussSqlGeneratorTest {
     void getCopyInTargetTableSql() {
         String copyInTargetTableSql = dwsGaussSqlGenerator.getCopyInTargetTableSql();
         Assertions.assertEquals(
-                "COPY \"public\".\"t_st_users\"(id,name,age,create_time) FROM STDIN DELIMITER '"
+                "COPY \"public\".\"t_st_users\"(id,name,age,create_time) FROM STDIN WITH(format 'text', delimiter E'"
                         + delimiter
-                        + "' COMPATIBLE_ILLEGAL_CHARS",
+                        + "', noescaping 'true', compatible_illegal_chars 'true')",
                 copyInTargetTableSql);
     }
 
@@ -217,18 +217,18 @@ public class DwsGaussSqlGeneratorTest {
     @Test
     void testGetCopyInTemporaryTableSql() {
         Assertions.assertEquals(
-                "COPY \"public\".\"st_temporary_t_st_users\"(id,name,age,create_time) FROM STDIN DELIMITER '"
+                "COPY \"public\".\"st_temporary_t_st_users\"(id,name,age,create_time,st_snapshot_id,st_is_deleted) FROM STDIN WITH(format 'text', delimiter E'"
                         + delimiter
-                        + "' COMPATIBLE_ILLEGAL_CHARS",
+                        + "', noescaping 'true', compatible_illegal_chars 'true')",
                 dwsGaussSqlGenerator.getCopyInTemporaryTableSql());
     }
 
     @Test
     void testGetCopyInTargetTableSql() {
         Assertions.assertEquals(
-                "COPY \"public\".\"t_st_users\"(id,name,age,create_time) FROM STDIN DELIMITER '"
+                "COPY \"public\".\"t_st_users\"(id,name,age,create_time) FROM STDIN WITH(format 'text', delimiter E'"
                         + delimiter
-                        + "' COMPATIBLE_ILLEGAL_CHARS",
+                        + "', noescaping 'true', compatible_illegal_chars 'true')",
                 dwsGaussSqlGenerator.getCopyInTargetTableSql());
     }
 

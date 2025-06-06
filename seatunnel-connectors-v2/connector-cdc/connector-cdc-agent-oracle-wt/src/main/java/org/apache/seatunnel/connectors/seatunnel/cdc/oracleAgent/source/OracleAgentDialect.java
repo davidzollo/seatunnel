@@ -48,6 +48,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class OracleAgentDialect implements JdbcDataSourceDialect {
@@ -91,23 +92,12 @@ public class OracleAgentDialect implements JdbcDataSourceDialect {
 
     @Override
     public List<TableId> discoverDataCollections(JdbcSourceConfig sourceConfig) {
-        long startTime = System.currentTimeMillis();
-
         OracleAgentSourceConfig oracleSourceConfig = (OracleAgentSourceConfig) sourceConfig;
         String database = oracleSourceConfig.getDbzConnectorConfig().getDatabaseName();
 
-        try (JdbcConnection jdbcConnection = openJdbcConnection(sourceConfig)) {
-            List<TableId> tableIds =
-                    OracleConnectionUtils.listTables(
-                            jdbcConnection, database, oracleSourceConfig.getTableFilters());
-            log.debug(
-                    "CatalogCatalog discoverDataCollections for: {} success cost {}/ms",
-                    database,
-                    System.currentTimeMillis() - startTime);
-            return tableIds;
-        } catch (SQLException e) {
-            throw new SeaTunnelException("Error to discover tables: " + e.getMessage(), e);
-        }
+        return tableMap.keySet().stream()
+                .map(tableId -> new TableId(database, tableId.schema(), tableId.table()))
+                .collect(Collectors.toList());
     }
 
     @Override

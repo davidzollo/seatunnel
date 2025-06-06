@@ -74,51 +74,90 @@ public class TransformFlowLifeCycle<T> extends ActionFlowLifeCycle
 
     @Override
     public void received(Record<?> record) {
-        if (record.getData() instanceof Barrier) {
-            CheckpointBarrier barrier = (CheckpointBarrier) record.getData();
-            if (barrier.prepareClose(this.runningTask.getTaskLocation())) {
-                prepareClose = true;
-            }
-            if (barrier.snapshot()) {
-                runningTask.addState(barrier, ActionStateKey.of(action), Collections.emptyList());
-            }
-            // ack after #addState
-            runningTask.ack(barrier);
-            collector.collect(record);
-        } else if (record.getData() instanceof SchemaChangeEvent) {
-            if (prepareClose) {
-                return;
-            }
-            SchemaChangeEvent event = (SchemaChangeEvent) record.getData();
-            for (SeaTunnelTransform<T> t : transform) {
-                event = t.mapSchemaChangeEvent(event);
-                if (event == null) {
-                    break;
+        try {
+            if (record.getData() instanceof Barrier) {
+                CheckpointBarrier barrier = (CheckpointBarrier) record.getData();
+                if (barrier.prepareClose(this.runningTask.getTaskLocation())) {
+                    prepareClose = true;
                 }
-            }
-            if (event != null) {
-                collector.collect(new Record<>(event));
-            }
-        } else {
-            if (prepareClose) {
-                return;
-            }
-            T inputData = (T) record.getData();
-            T outputData = inputData;
-            for (SeaTunnelTransform<T> t : transform) {
-                outputData = t.map(inputData);
-                log.debug("Transform[{}] input row {} and output row {}", t, inputData, outputData);
-                if (outputData == null) {
-                    log.trace("Transform[{}] filtered data row {}", t, inputData);
-                    break;
+                if (barrier.snapshot()) {
+                    runningTask.addState(
+                            barrier, ActionStateKey.of(action), Collections.emptyList());
                 }
+                // ack after #addState
+                runningTask.ack(barrier);
+                collector.collect(record);
+            } else if (record.getData() instanceof SchemaChangeEvent) {
+                if (prepareClose) {
+                    return;
+                }
+                SchemaChangeEvent inputEvent = (SchemaChangeEvent) record.getData();
+                SchemaChangeEvent outputEvent = null;
+                for (SeaTunnelTransform<T> t : transform) {
+                    try {
+                        outputEvent = t.mapSchemaChangeEvent(inputEvent);
+                    } catch (Exception e) {
+                        log.error(
+                                "Transform[{}] map event error. input row {}",
+                                t.getPluginName(),
+                                inputEvent);
+                        throw new RuntimeException(
+                                String.format("Transform[%s] map event error", t.getPluginName()),
+                                e);
+                    }
+                    log.debug(
+                            "Transform[{}] input event {} and output event {}",
+                            t,
+                            inputEvent,
+                            outputEvent);
+                    if (outputEvent == null) {
+                        log.trace("Transform[{}] filtered event {}", t, inputEvent);
+                        break;
+                    }
 
-                inputData = outputData;
+                    inputEvent = outputEvent;
+                }
+                if (outputEvent != null) {
+                    collector.collect(new Record<>(outputEvent));
+                }
+            } else {
+                if (prepareClose) {
+                    return;
+                }
+                T inputData = (T) record.getData();
+                T outputData = inputData;
+                for (SeaTunnelTransform<T> t : transform) {
+                    try {
+                        outputData = t.map(inputData);
+                    } catch (Exception e) {
+                        log.error(
+                                "Transform[{}] map data error. input row {}",
+                                t.getPluginName(),
+                                inputData);
+                        throw new RuntimeException(
+                                String.format("Transform[%s] map data error", t.getPluginName()),
+                                e);
+                    }
+                    log.debug(
+                            "Transform[{}] input row {} and output row {}",
+                            t,
+                            inputData,
+                            outputData);
+                    if (outputData == null) {
+                        log.trace("Transform[{}] filtered data row {}", t, inputData);
+                        break;
+                    }
+
+                    inputData = outputData;
+                }
+                if (outputData != null) {
+                    // todo log metrics
+                    collector.collect(new Record<>(outputData));
+                }
             }
-            if (outputData != null) {
-                // todo log metrics
-                collector.collect(new Record<>(outputData));
-            }
+        } catch (Exception e) {
+            log.error("Failed to receive record: {}", record, e);
+            throw e;
         }
     }
 

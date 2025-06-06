@@ -100,6 +100,7 @@ public class DynamicChunkSplitter extends ChunkSplitter {
 
         List<ChunkRange> chunks = splitTableIntoChunks(table, splitKeyName, splitKeyType);
 
+        boolean includeKeyNullValue = false;
         for (int i = 0; i < chunks.size(); i++) {
             ChunkRange chunk = chunks.get(i);
             JdbcSourceSplit split =
@@ -112,9 +113,14 @@ public class DynamicChunkSplitter extends ChunkSplitter {
                             chunk.getChunkStart(),
                             chunk.getChunkEnd(),
                             false);
+            if (split.getSplitStart() == null && split.getSplitEnd() == null) {
+                includeKeyNullValue = true;
+            }
             splits.add(split);
         }
-        splits.add(createNullValueSplit(table, splitKeyName, splitKeyType, chunks.size()));
+        if (!includeKeyNullValue) {
+            splits.add(createNullValueSplit(table, splitKeyName, splitKeyType, chunks.size()));
+        }
         return splits;
     }
 

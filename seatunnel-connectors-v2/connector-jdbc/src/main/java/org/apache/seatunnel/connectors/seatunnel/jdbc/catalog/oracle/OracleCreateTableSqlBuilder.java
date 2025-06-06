@@ -42,7 +42,7 @@ public class OracleCreateTableSqlBuilder extends AbstractJdbcCreateTableSqlBuild
     private List<Column> columns;
     private PrimaryKey primaryKey;
     private String comment;
-    private String sourceCatalogName;
+    protected String sourceCatalogName;
     private String fieldIde;
     private List<ConstraintKey> constraintKeys;
     public Boolean isHaveConstraintKey = false;
@@ -129,7 +129,7 @@ public class OracleCreateTableSqlBuilder extends AbstractJdbcCreateTableSqlBuild
         return sqls;
     }
 
-    String buildColumnSql(Column column) {
+    protected String buildColumnSql(Column column) {
         StringBuilder columnSql = new StringBuilder();
         columnSql.append("\"").append(column.getName()).append("\" ");
 

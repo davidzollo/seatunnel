@@ -113,6 +113,11 @@ public class OceanBaseOracleCatalog extends OracleCatalog {
     }
 
     @Override
+    protected List<String> getCreateTableSqls(TablePath tablePath, CatalogTable table) {
+        return new OceanBaseOracleCreateTableSqlBuilder(table).build(tablePath);
+    }
+
+    @Override
     public CatalogTable getTable(String sqlQuery) throws SQLException {
         try {
             return super.getTable(sqlQuery);

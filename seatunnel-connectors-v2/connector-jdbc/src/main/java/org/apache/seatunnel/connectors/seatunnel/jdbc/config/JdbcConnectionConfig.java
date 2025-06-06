@@ -47,6 +47,7 @@ public class JdbcConnectionConfig implements Serializable {
     private String xaDataSourceClassName;
 
     private boolean decimalTypeNarrowing = JdbcOptions.DECIMAL_TYPE_NARROWING.defaultValue();
+    private boolean intTypeNarrowing = JdbcOptions.INT_TYPE_NARROWING.defaultValue();
 
     private int maxCommitAttempts = JdbcOptions.MAX_COMMIT_ATTEMPTS.defaultValue();
 
@@ -90,6 +91,7 @@ public class JdbcConnectionConfig implements Serializable {
         config.getOptional(JdbcOptions.PROPERTIES).ifPresent(builder::properties);
         config.getOptional(JdbcOptions.DECIMAL_TYPE_NARROWING)
                 .ifPresent(builder::decimalTypeNarrowing);
+        config.getOptional(JdbcOptions.INT_TYPE_NARROWING).ifPresent(builder::intTypeNarrowing);
         config.getOptional(JdbcOptions.DIALECT).ifPresent(builder::dialect);
         return builder.build();
     }
@@ -124,6 +126,7 @@ public class JdbcConnectionConfig implements Serializable {
         private int batchSize = JdbcOptions.BATCH_SIZE.defaultValue();
         private String xaDataSourceClassName;
         private boolean decimalTypeNarrowing = JdbcOptions.DECIMAL_TYPE_NARROWING.defaultValue();
+        private boolean intTypeNarrowing = JdbcOptions.INT_TYPE_NARROWING.defaultValue();
         private int maxCommitAttempts = JdbcOptions.MAX_COMMIT_ATTEMPTS.defaultValue();
         private int transactionTimeoutSec = JdbcOptions.TRANSACTION_TIMEOUT_SEC.defaultValue();
         private Map<String, String> properties;
@@ -157,6 +160,11 @@ public class JdbcConnectionConfig implements Serializable {
 
         public Builder decimalTypeNarrowing(boolean decimalTypeNarrowing) {
             this.decimalTypeNarrowing = decimalTypeNarrowing;
+            return this;
+        }
+
+        public Builder intTypeNarrowing(boolean intTypeNarrowing) {
+            this.intTypeNarrowing = intTypeNarrowing;
             return this;
         }
 
@@ -250,6 +258,7 @@ public class JdbcConnectionConfig implements Serializable {
             jdbcConnectionConfig.maxCommitAttempts = this.maxCommitAttempts;
             jdbcConnectionConfig.xaDataSourceClassName = this.xaDataSourceClassName;
             jdbcConnectionConfig.decimalTypeNarrowing = this.decimalTypeNarrowing;
+            jdbcConnectionConfig.intTypeNarrowing = this.intTypeNarrowing;
             jdbcConnectionConfig.useKerberos = this.useKerberos;
             jdbcConnectionConfig.kerberosPrincipal = this.kerberosPrincipal;
             jdbcConnectionConfig.kerberosKeytabPath = this.kerberosKeytabPath;

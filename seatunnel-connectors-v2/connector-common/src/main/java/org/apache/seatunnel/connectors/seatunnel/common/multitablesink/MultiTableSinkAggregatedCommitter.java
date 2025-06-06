@@ -106,7 +106,14 @@ public class MultiTableSinkAggregatedCommitter
                 if (commitInfo.isEmpty()) {
                     errCommitList = new ArrayList<>();
                 } else {
-                    errCommitList = sinkCommitter.commit(commitInfo);
+                    try {
+                        errCommitList = sinkCommitter.commit(commitInfo);
+                    } catch (Exception e) {
+                        String message =
+                                String.format("table %s commit throw an error", sinkIdentifier);
+                        log.error(message, e);
+                        throw new RuntimeException(message, e);
+                    }
                 }
                 if (errCommitList.isEmpty()) {
                     continue;

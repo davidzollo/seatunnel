@@ -20,6 +20,7 @@ package org.apache.seatunnel.transform.common;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.Column;
 import org.apache.seatunnel.api.table.catalog.ConstraintKey;
+import org.apache.seatunnel.api.table.catalog.PrimaryKey;
 import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
@@ -36,11 +37,11 @@ import java.util.stream.Collectors;
 @Slf4j
 public abstract class MultipleFieldOutputTransform extends AbstractCatalogSupportTransform {
 
-    private static final String[] TYPE_ARRAY_STRING = new String[0];
+    protected static final String[] TYPE_ARRAY_STRING = new String[0];
 
-    private String[] outputFieldNames;
-    private int[] fieldsIndex;
-    private SeaTunnelRowContainerGenerator rowContainerGenerator;
+    protected String[] outputFieldNames;
+    protected int[] fieldsIndex;
+    protected SeaTunnelRowContainerGenerator rowContainerGenerator;
 
     public MultipleFieldOutputTransform(@NonNull CatalogTable inputCatalogTable) {
         super(inputCatalogTable);
@@ -77,14 +78,11 @@ public abstract class MultipleFieldOutputTransform extends AbstractCatalogSuppor
                         .collect(Collectors.toList())
                         .toArray(TYPE_ARRAY_STRING);
 
-        List<ConstraintKey> copiedConstraintKeys =
-                inputCatalogTable.getTableSchema().getConstraintKeys().stream()
-                        .map(ConstraintKey::copy)
-                        .collect(Collectors.toList());
+        List<ConstraintKey> copiedConstraintKeys = getOutputConstraintKey();
 
         TableSchema.Builder builder = TableSchema.builder();
         if (inputCatalogTable.getTableSchema().getPrimaryKey() != null) {
-            builder.primaryKey(inputCatalogTable.getTableSchema().getPrimaryKey().copy());
+            builder.primaryKey(getOutputPrimaryKey());
         }
         builder.constraintKey(copiedConstraintKeys);
         List<String> deletedColumns = getDeletedColumns();
@@ -160,6 +158,21 @@ public abstract class MultipleFieldOutputTransform extends AbstractCatalogSuppor
     }
 
     protected abstract Column[] getOutputColumns();
+
+    @Override
+    protected String transformComment() {
+        return inputCatalogTable.getComment();
+    }
+
+    protected List<ConstraintKey> getOutputConstraintKey() {
+        return inputCatalogTable.getTableSchema().getConstraintKeys().stream()
+                .map(ConstraintKey::copy)
+                .collect(Collectors.toList());
+    }
+
+    protected PrimaryKey getOutputPrimaryKey() {
+        return inputCatalogTable.getTableSchema().getPrimaryKey().copy();
+    }
 
     protected List<String> getDeletedColumns() {
         return Collections.emptyList();

@@ -87,7 +87,12 @@ public class SimpleJdbcConnectionPoolProviderProxy implements JdbcConnectionProv
     }
 
     @Override
-    public Connection reestablishConnection() {
+    public Connection reestablishConnection() throws SQLException {
+        if (isConnectionValid()) {
+            return getConnection();
+        }
+
+        log.info("Proxy connection is invalid, reestablishing connection.");
         closeConnection();
         return getOrEstablishConnection();
     }

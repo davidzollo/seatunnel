@@ -249,7 +249,7 @@ public class KafkaSourceConfig implements Serializable {
 
         return schema.getOptional(TableSchemaOptions.TableIdentifierOptions.TABLE)
                 .map(TablePath::of)
-                .orElseGet(() -> TablePath.of("default", topicName));
+                .orElseGet(() -> TablePath.of(null, topicName));
     }
 
     private DeserializationSchema<SeaTunnelRow> createDeserializationSchema(

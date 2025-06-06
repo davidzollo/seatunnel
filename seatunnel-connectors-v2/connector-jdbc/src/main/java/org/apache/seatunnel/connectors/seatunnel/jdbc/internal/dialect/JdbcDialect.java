@@ -34,6 +34,7 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.connection.Simple
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.converter.JdbcRowConverter;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.dialectenum.FieldIdeEnum;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.source.JdbcSourceTable;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.utils.DefaultValueUtils;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -420,7 +421,8 @@ public interface JdbcDialect extends Serializable {
             Connection connection, TablePath tablePath, AlterTableAddColumnEvent event)
             throws SQLException {
 
-        boolean someCatalog = event.tableIdentifier().getCatalogName().equals(dialectName());
+        String sourceDialectName = event.getSourceDialectName();
+        boolean someCatalog = StringUtils.equals(sourceDialectName, dialectName());
         BasicTypeDefine typeDefine = typeConverter().reconvert(event.getColumn());
         String columnType =
                 someCatalog ? event.getColumn().getSourceType() : typeDefine.getColumnType();
@@ -438,7 +440,7 @@ public interface JdbcDialect extends Serializable {
                         .append(" ")
                         .append(event.getColumn().isNullable() ? "NULL" : "NOT NULL");
         if (event.getColumn().getDefaultValue() != null) {
-            sqlBuilder.append(" ").append(sqlClauseWithDefaultValue(typeDefine));
+            sqlBuilder.append(" ").append(sqlClauseWithDefaultValue(typeDefine, sourceDialectName));
         }
         if (event.getColumn().getComment() != null) {
             sqlBuilder
@@ -462,7 +464,8 @@ public interface JdbcDialect extends Serializable {
     default void applySchemaChange(
             Connection connection, TablePath tablePath, AlterTableChangeColumnEvent event)
             throws SQLException {
-        boolean someCatalog = event.tableIdentifier().getCatalogName().equals(dialectName());
+        String sourceDialectName = event.getSourceDialectName();
+        boolean someCatalog = StringUtils.equals(sourceDialectName, dialectName());
         BasicTypeDefine typeDefine = typeConverter().reconvert(event.getColumn());
         String columnType =
                 someCatalog ? event.getColumn().getSourceType() : typeDefine.getColumnType();
@@ -482,7 +485,7 @@ public interface JdbcDialect extends Serializable {
                         .append(" ")
                         .append(event.getColumn().isNullable() ? "NULL" : "NOT NULL");
         if (event.getColumn().getDefaultValue() != null) {
-            sqlBuilder.append(" ").append(sqlClauseWithDefaultValue(typeDefine));
+            sqlBuilder.append(" ").append(sqlClauseWithDefaultValue(typeDefine, sourceDialectName));
         }
         if (event.getColumn().getComment() != null) {
             sqlBuilder
@@ -507,7 +510,8 @@ public interface JdbcDialect extends Serializable {
             Connection connection, TablePath tablePath, AlterTableModifyColumnEvent event)
             throws SQLException {
 
-        boolean someCatalog = event.tableIdentifier().getCatalogName().equals(dialectName());
+        String sourceDialectName = event.getSourceDialectName();
+        boolean someCatalog = StringUtils.equals(sourceDialectName, dialectName());
         BasicTypeDefine typeDefine = typeConverter().reconvert(event.getColumn());
         String columnType =
                 someCatalog ? event.getColumn().getSourceType() : typeDefine.getColumnType();
@@ -525,7 +529,7 @@ public interface JdbcDialect extends Serializable {
                         .append(" ")
                         .append(event.getColumn().isNullable() ? "NULL" : "NOT NULL");
         if (event.getColumn().getDefaultValue() != null) {
-            sqlBuilder.append(" ").append(sqlClauseWithDefaultValue(typeDefine));
+            sqlBuilder.append(" ").append(sqlClauseWithDefaultValue(typeDefine, sourceDialectName));
         }
         if (event.getColumn().getComment() != null) {
             sqlBuilder
@@ -559,11 +563,12 @@ public interface JdbcDialect extends Serializable {
         }
     }
 
-    default String sqlClauseWithDefaultValue(BasicTypeDefine columnDefine) {
+    default String sqlClauseWithDefaultValue(
+            BasicTypeDefine columnDefine, String sourceDialectName) {
         Object defaultValue = columnDefine.getDefaultValue();
         if (Objects.nonNull(defaultValue)
-                && needsQuotesWithDefaultValue(columnDefine.getColumnType())
-                && !isSpecialDefaultValue(defaultValue)) {
+                && needsQuotesWithDefaultValue(columnDefine)
+                && !isSpecialDefaultValue(defaultValue, sourceDialectName)) {
             defaultValue = quotesDefaultValue(defaultValue);
         }
         return "DEFAULT " + defaultValue;
@@ -575,7 +580,7 @@ public interface JdbcDialect extends Serializable {
      * @param sqlType sql type of column
      * @return whether needs quotes with the type
      */
-    default boolean needsQuotesWithDefaultValue(String sqlType) {
+    default boolean needsQuotesWithDefaultValue(BasicTypeDefine columnDefine) {
         return false;
     }
 
@@ -585,7 +590,10 @@ public interface JdbcDialect extends Serializable {
      * @param defaultValue default value of column
      * @return whether is special default value e.g current_timestamp
      */
-    default boolean isSpecialDefaultValue(Object defaultValue) {
+    default boolean isSpecialDefaultValue(Object defaultValue, String sourceDialectName) {
+        if (DatabaseIdentifier.MYSQL.equals(sourceDialectName)) {
+            return DefaultValueUtils.isMysqlSpecialDefaultValue(defaultValue);
+        }
         return false;
     }
 
@@ -611,6 +619,14 @@ public interface JdbcDialect extends Serializable {
                         info.put(key, value);
                     }
                 });
+    }
+
+    default TablePath parse(String database, String table) {
+        TablePath tablePath = parse(table);
+        if (tablePath.getDatabaseName() == null) {
+            tablePath = TablePath.of(database, tablePath.getSchemaName(), tablePath.getTableName());
+        }
+        return tablePath;
     }
 
     default TablePath parse(String tablePath) {

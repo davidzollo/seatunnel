@@ -32,6 +32,10 @@ public interface TypeConverter<T> extends Serializable {
 
     String identifier();
 
+    default Object getNativeType(String strType) {
+        return strType;
+    }
+
     /**
      * Convert an external system's type definition to {@link Column}.
      *

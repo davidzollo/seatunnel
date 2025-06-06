@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -94,8 +95,11 @@ public class DwsGaussSqlGenerator implements Serializable {
                 + templateTableName
                 + "\""
                 + "("
-                + catalogTable.getTableSchema().getColumns().stream()
-                        .map(column -> getIDEString(column.getName()))
+                + Stream.concat(
+                                catalogTable.getTableSchema().getColumns().stream()
+                                        .map(c -> c.getName()),
+                                Stream.of("st_snapshot_id", "st_is_deleted"))
+                        .map(column -> getIDEString(column))
                         .collect(Collectors.joining(","))
                 + ")"
                 + " FROM STDIN"
@@ -278,13 +282,21 @@ public class DwsGaussSqlGenerator implements Serializable {
 
     private String appendRowInTemporaryTable(
             SeaTunnelRow seaTunnelRow, boolean isDeleted, Long snapshotId) {
+        if (transformToCopyStringFunction == null) {
+            synchronized (this) {
+                transformToCopyStringFunction = initializeTransformToCopyStringFunction();
+            }
+        }
+
         StringBuilder stringBuilder = new StringBuilder();
         Object[] fields = seaTunnelRow.getFields();
         for (int i = 0; i < fields.length; i++) {
-            if (seaTunnelRow.getField(i) == null) {
+            Object field = seaTunnelRow.getField(i);
+            String fieldStr = transformToCopyStringFunction.get(i).apply(field);
+            if (fieldStr == null) {
                 // use '' represent null
             } else {
-                stringBuilder.append(seaTunnelRow.getField(i));
+                stringBuilder.append(fieldStr);
             }
             stringBuilder.append(delimiter);
         }

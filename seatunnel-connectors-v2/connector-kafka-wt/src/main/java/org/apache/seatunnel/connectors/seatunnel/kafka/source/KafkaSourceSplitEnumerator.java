@@ -66,6 +66,7 @@ public class KafkaSourceSplitEnumerator
     private final Map<TopicPartition, KafkaSourceSplit> assignedSplit;
     private ScheduledExecutorService executor;
     private ScheduledFuture<?> scheduledFuture;
+    private volatile boolean initialized;
 
     private final Map<String, TablePath> topicMappingTablePathMap = new HashMap<>();
 
@@ -98,7 +99,9 @@ public class KafkaSourceSplitEnumerator
                     executor.scheduleWithFixedDelay(
                             () -> {
                                 try {
-                                    discoverySplits();
+                                    if (initialized) {
+                                        discoverySplits();
+                                    }
                                 } catch (Exception e) {
                                     log.error("Dynamic discovery failure:", e);
                                 }
@@ -114,6 +117,9 @@ public class KafkaSourceSplitEnumerator
         fetchPendingPartitionSplit();
         setPartitionStartOffset();
         assignSplit();
+        if (!initialized) {
+            initialized = true;
+        }
     }
 
     private void setPartitionStartOffset() throws ExecutionException, InterruptedException {
@@ -219,7 +225,7 @@ public class KafkaSourceSplitEnumerator
 
     @Override
     public void registerReader(int subtaskId) {
-        if (!pendingSplit.isEmpty()) {
+        if (!pendingSplit.isEmpty() && initialized) {
             assignSplit();
         }
     }

@@ -33,7 +33,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class InformixDialect implements JdbcDialect {
@@ -213,5 +215,13 @@ public class InformixDialect implements JdbcDialect {
     @Override
     public boolean supportHashSplitter() {
         return false;
+    }
+
+    @Override
+    public Map<String, String> defaultParameter() {
+        Map<String, String> defaultParams = new HashMap<>();
+        // Set Informix connection parameters, remove locale settings to let system auto-match
+        defaultParams.put("IFX_USEPUT", "1");
+        return defaultParams;
     }
 }

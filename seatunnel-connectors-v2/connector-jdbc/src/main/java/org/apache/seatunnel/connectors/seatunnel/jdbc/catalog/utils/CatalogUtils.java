@@ -139,6 +139,47 @@ public class CatalogUtils {
         return Optional.of(PrimaryKey.of(pkName, pkFields));
     }
 
+    /*
+     * the default behavior of getPrimaryKey is to use the schema name from the tablePath
+     * if the schema name is null, it will use the database name as the schema name
+     * this method is used to get the primary key with strict mode, which means it will use the
+     * database name and schema name from the tablePath without any fallback
+     */
+    public static Optional<PrimaryKey> getPrimaryKeyWithTablePathStrictMode(
+            DatabaseMetaData metaData, TablePath tablePath) throws SQLException {
+        // According to the Javadoc of java.sql.DatabaseMetaData#getPrimaryKeys,
+        // the returned primary key columns are ordered by COLUMN_NAME, not by KEY_SEQ.
+        // We need to sort them based on the KEY_SEQ value.
+        // seq -> column name
+        LinkedHashSet<Pair<Integer, String>> primaryKeyColumns = new LinkedHashSet<>();
+        String pkName = null;
+        try (ResultSet rs =
+                metaData.getPrimaryKeys(
+                        tablePath.getDatabaseName(),
+                        tablePath.getSchemaName(),
+                        tablePath.getTableName())) {
+
+            while (rs.next()) {
+                String columnName = rs.getString("COLUMN_NAME");
+                // all the PK_NAME should be the same
+                pkName = cleanKeyName(rs.getString("PK_NAME"));
+                int keySeq = rs.getInt("KEY_SEQ");
+                // KEY_SEQ is 1-based index
+                primaryKeyColumns.add(Pair.of(keySeq, columnName));
+            }
+        }
+        // initialize size
+        List<String> pkFields =
+                primaryKeyColumns.stream()
+                        .sorted(Comparator.comparingInt(Pair::getKey))
+                        .map(Pair::getValue)
+                        .collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(pkFields)) {
+            return Optional.empty();
+        }
+        return Optional.of(PrimaryKey.of(pkName, pkFields));
+    }
+
     public static List<ConstraintKey> getConstraintKeys(
             DatabaseMetaData metadata, TablePath tablePath) throws SQLException {
         // We set approximate to true to avoid querying the statistics table, which is slow.
