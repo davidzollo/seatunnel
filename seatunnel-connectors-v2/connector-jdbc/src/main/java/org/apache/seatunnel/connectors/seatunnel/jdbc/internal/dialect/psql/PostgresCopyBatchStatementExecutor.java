@@ -70,7 +70,7 @@ public class PostgresCopyBatchStatementExecutor implements CopyBatchStatementExe
     public void init(TablePath tablePath, TableSchema tableSchema) {
         JdbcDialect dialect = new PostgresDialect();
         this.tableSchema = tableSchema;
-        String tableName = dialect.extractTableName(tablePath);
+        String tableName = dialect.quoteIdentifier(dialect.extractTableName(tablePath));
         String columns =
                 Arrays.stream(tableSchema.getFieldNames())
                         .map(dialect::quoteIdentifier)
