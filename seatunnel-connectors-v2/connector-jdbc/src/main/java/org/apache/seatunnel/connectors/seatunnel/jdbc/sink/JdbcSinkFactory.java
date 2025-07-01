@@ -65,6 +65,7 @@ import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.DRIVER;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.ENABLE_TO_DATE;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.ENABLE_UPSERT;
+import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.ENABLE_UPSERT_BY_SELECT_EXIST;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.GENERATE_SINK_SQL;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.IS_EXACTLY_ONCE;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.IS_PRIMARY_KEY_UPDATED;
@@ -291,6 +292,7 @@ public class JdbcSinkFactory implements TableSinkFactory {
                         GENERATE_SINK_SQL,
                         AUTO_COMMIT,
                         ENABLE_UPSERT,
+                        ENABLE_UPSERT_BY_SELECT_EXIST,
                         PRIMARY_KEYS,
                         COMPATIBLE_MODE,
                         SUPPORT_UPSERT_BY_INSERT_ONLY,

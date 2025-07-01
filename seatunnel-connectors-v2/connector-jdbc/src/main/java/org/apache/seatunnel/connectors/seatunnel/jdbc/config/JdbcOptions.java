@@ -164,6 +164,13 @@ public interface JdbcOptions {
                     .booleanType()
                     .defaultValue(true)
                     .withDescription("enable upsert by primary_keys exist");
+
+    Option<Boolean> ENABLE_UPSERT_BY_SELECT_EXIST =
+            Options.key("enable_upsert_by_select_exist")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("enable upsert by select exist statement");
+
     Option<Boolean> IS_PRIMARY_KEY_UPDATED =
             Options.key("is_primary_key_updated")
                     .booleanType()

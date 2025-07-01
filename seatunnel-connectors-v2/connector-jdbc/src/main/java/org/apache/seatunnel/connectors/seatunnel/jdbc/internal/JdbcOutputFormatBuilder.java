@@ -94,6 +94,7 @@ public class JdbcOutputFormatBuilder {
                                     databaseTableSchema,
                                     primaryKeys.toArray(new String[0]),
                                     jdbcSinkConfig.isEnableUpsert(),
+                                    jdbcSinkConfig.isEnableUpsertBySelectExist(),
                                     jdbcSinkConfig.isPrimaryKeyUpdated(),
                                     jdbcSinkConfig.isSupportUpsertByInsertOnly());
         }
@@ -126,6 +127,7 @@ public class JdbcOutputFormatBuilder {
                             databaseTableSchema,
                             primaryKeys.toArray(new String[0]),
                             jdbcSinkConfig.isEnableUpsert(),
+                            jdbcSinkConfig.isEnableUpsertBySelectExist(),
                             jdbcSinkConfig.isPrimaryKeyUpdated(),
                             jdbcSinkConfig.isSupportUpsertByInsertOnly());
         }
@@ -170,6 +172,7 @@ public class JdbcOutputFormatBuilder {
             TableSchema databaseTableSchema,
             String[] pkNames,
             boolean enableUpsert,
+            boolean enableUpsertBySelectExist,
             boolean isPrimaryKeyUpdated,
             boolean supportUpsertByInsertOnly) {
         int[] pkFields =
@@ -201,6 +204,7 @@ public class JdbcOutputFormatBuilder {
                         pkSchema,
                         keyExtractor,
                         enableUpsert,
+                        enableUpsertBySelectExist,
                         isPrimaryKeyUpdated,
                         supportUpsertByInsertOnly);
         return new BufferReducedBatchStatementExecutor(
@@ -217,11 +221,24 @@ public class JdbcOutputFormatBuilder {
             TableSchema pkTableSchema,
             Function<SeaTunnelRow, SeaTunnelRow> keyExtractor,
             boolean enableUpsert,
+            boolean enableUpsertBySelectExist,
             boolean isPrimaryKeyUpdated,
             boolean supportUpsertByInsertOnly) {
         if (supportUpsertByInsertOnly) {
             return createInsertOnlyExecutor(
                     dialect, database, table, tableSchema, databaseTableSchema);
+        }
+        if (enableUpsertBySelectExist) {
+            return createInsertOrUpdateByQueryExecutor(
+                    dialect,
+                    database,
+                    table,
+                    tableSchema,
+                    databaseTableSchema,
+                    pkNames,
+                    pkTableSchema,
+                    keyExtractor,
+                    isPrimaryKeyUpdated);
         }
         if (enableUpsert) {
             List<? extends SeaTunnelDataType<?>> columnTypeList =

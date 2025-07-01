@@ -29,6 +29,7 @@ import java.util.List;
 
 import static org.apache.seatunnel.api.sink.SinkReplaceNameConstant.REPLACE_TARGET_TABLE_NAME_KEY;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.ENABLE_UPSERT;
+import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.ENABLE_UPSERT_BY_SELECT_EXIST;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.IS_PRIMARY_KEY_UPDATED;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.SUPPORT_UPSERT_BY_INSERT_ONLY;
 
@@ -44,6 +45,7 @@ public class JdbcSinkConfig implements Serializable {
     private String table;
     private List<String> primaryKeys;
     private boolean enableUpsert;
+    private boolean enableUpsertBySelectExist;
     @Builder.Default private boolean isPrimaryKeyUpdated = true;
     private boolean supportUpsertByInsertOnly;
     private WriteMode writeMode;
@@ -59,6 +61,7 @@ public class JdbcSinkConfig implements Serializable {
         config.getOptional(JdbcOptions.DATABASE).ifPresent(builder::database);
         config.getOptional(JdbcOptions.TABLE).ifPresent(builder::table);
         builder.enableUpsert(config.get(ENABLE_UPSERT));
+        builder.enableUpsertBySelectExist(config.get(ENABLE_UPSERT_BY_SELECT_EXIST));
         builder.isPrimaryKeyUpdated(config.get(IS_PRIMARY_KEY_UPDATED));
         builder.supportUpsertByInsertOnly(config.get(SUPPORT_UPSERT_BY_INSERT_ONLY));
         builder.simpleSql(config.get(JdbcOptions.QUERY));
