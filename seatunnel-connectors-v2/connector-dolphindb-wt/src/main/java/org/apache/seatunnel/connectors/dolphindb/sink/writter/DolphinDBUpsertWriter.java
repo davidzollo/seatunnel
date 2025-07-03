@@ -70,7 +70,27 @@ public class DolphinDBUpsertWriter implements DolphinDBWriter {
             }
             finalFields[i] = fields[i];
         }
-        ErrorCodeInfo errorCodeInfo = multithreadedTableWriter.insert(finalFields);
+
+        ErrorCodeInfo errorCodeInfo;
+        try {
+            errorCodeInfo = multithreadedTableWriter.insert(finalFields);
+
+        } catch (RuntimeException e) {
+            log.error(
+                    "RuntimeException while inserting data into DolphinDB table: {},  status: {}",
+                    catalogTable.getTableId().getTableName(),
+                    multithreadedTableWriter.getStatus(),
+                    e);
+
+            throw new DolphinDBConnectorException(
+                    DolphinDBErrorCode.WRITE_DATA_ERROR,
+                    multithreadedTableWriter.getStatus().toString(),
+                    e);
+        } catch (Exception e) {
+            throw new DolphinDBConnectorException(
+                    DolphinDBErrorCode.WRITE_DATA_ERROR, e.getMessage(), e);
+        }
+
         if (errorCodeInfo.hasError()) {
             throw new DolphinDBConnectorException(
                     DolphinDBErrorCode.WRITE_DATA_ERROR, errorCodeInfo.toString());
@@ -81,7 +101,10 @@ public class DolphinDBUpsertWriter implements DolphinDBWriter {
     public Optional<Void> prepareCommit() throws Exception {
         MultithreadedTableWriter.Status status = multithreadedTableWriter.getStatus();
         if (StringUtils.isNotEmpty(status.getErrorCode())) {
-            log.error("MultithreadedTableWriter write data error: {}", status.getErrorCode());
+            log.error(
+                    "MultithreadedTableWriter write data error for table {}: {}",
+                    catalogTable.getTableId().getTableName(),
+                    status.getErrorCode());
             throw new DolphinDBConnectorException(
                     DolphinDBErrorCode.WRITE_DATA_ERROR, status.getErrorCode());
         }
