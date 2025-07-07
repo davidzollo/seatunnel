@@ -52,7 +52,8 @@ public class InformixSourceConfig extends JdbcSourceConfig {
             long connectTimeoutMillis,
             int connectMaxRetries,
             int connectionPoolSize,
-            boolean exactlyOnce) {
+            boolean exactlyOnce,
+            String whereCondition) {
         super(
                 startupConfig,
                 stopConfig,
@@ -76,7 +77,8 @@ public class InformixSourceConfig extends JdbcSourceConfig {
                 connectTimeoutMillis,
                 connectMaxRetries,
                 connectionPoolSize,
-                exactlyOnce);
+                exactlyOnce,
+                whereCondition);
     }
 
     @Override

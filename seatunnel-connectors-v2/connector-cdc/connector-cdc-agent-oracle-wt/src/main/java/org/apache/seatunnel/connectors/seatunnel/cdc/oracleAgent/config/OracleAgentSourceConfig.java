@@ -60,7 +60,8 @@ public class OracleAgentSourceConfig extends JdbcSourceConfig {
             long connectTimeoutMillis,
             int connectMaxRetries,
             int connectionPoolSize,
-            boolean exactlyOnce) {
+            boolean exactlyOnce,
+            String whereCondition) {
         super(
                 startupConfig,
                 stopConfig,
@@ -84,7 +85,8 @@ public class OracleAgentSourceConfig extends JdbcSourceConfig {
                 connectTimeoutMillis,
                 connectMaxRetries,
                 connectionPoolSize,
-                exactlyOnce);
+                exactlyOnce,
+                whereCondition);
         this.oracleAgentHost = oracle9BridgeHost;
         this.oracleAgentPort = oracle9BridgePort;
     }

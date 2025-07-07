@@ -414,15 +414,16 @@ public class SeaTunnelRowDebeziumDeserializationConverters implements Serializab
             @Override
             public Object convert(Object dbzObj, Schema schema) {
                 if (dbzObj instanceof Long) {
+                    long val = (Long) dbzObj;
                     switch (schema.name()) {
                         case Timestamp.SCHEMA_NAME:
-                            return toLocalDateTime((Long) dbzObj, 0);
+                            return toLocalDateTime(val, 0);
                         case MicroTimestamp.SCHEMA_NAME:
-                            long micro = (long) dbzObj;
-                            return toLocalDateTime(micro / 1000, (int) (micro % 1000 * 1000));
+                            return toLocalDateTime(val / 1_000, (int) (val % 1_000) * 1_000_000);
                         case NanoTimestamp.SCHEMA_NAME:
-                            long nano = (long) dbzObj;
-                            return toLocalDateTime(nano / 1000_000, (int) (nano % 1000_000));
+                            return toLocalDateTime(val / 1_000_000, (int) (val % 1_000_000));
+                        case MicroTime.SCHEMA_NAME:
+                            return LocalTime.ofNanoOfDay(val * 1_000L);
                         default:
                     }
                 }

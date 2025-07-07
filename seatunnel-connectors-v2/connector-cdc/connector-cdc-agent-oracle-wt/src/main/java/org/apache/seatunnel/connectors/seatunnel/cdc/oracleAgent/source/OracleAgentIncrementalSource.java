@@ -22,8 +22,6 @@ import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.source.SeaTunnelSource;
 import org.apache.seatunnel.api.source.SupportParallelism;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
-import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
-import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.common.utils.SeaTunnelException;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.SourceConfig;
@@ -71,11 +69,8 @@ public class OracleAgentIncrementalSource<T> extends IncrementalSource<T, JdbcSo
 
     private OracleAgentSourceConfig sourceConfig;
 
-    public OracleAgentIncrementalSource(
-            ReadonlyConfig options,
-            SeaTunnelDataType<SeaTunnelRow> dataType,
-            List<CatalogTable> catalogTables) {
-        super(options, dataType, catalogTables);
+    public OracleAgentIncrementalSource(ReadonlyConfig options, List<CatalogTable> catalogTables) {
+        super(options, catalogTables);
     }
 
     @Override
@@ -117,13 +112,10 @@ public class OracleAgentIncrementalSource<T> extends IncrementalSource<T, JdbcSo
                             config.get(DEBEZIUM_PROPERTIES), tableIdStructMap);
         }
 
-        // TODO: support multi-table
-        SeaTunnelDataType<SeaTunnelRow> physicalRowType = dataType;
         String zoneId = config.get(JdbcSourceOptions.SERVER_TIME_ZONE);
         return (DebeziumDeserializationSchema<T>)
                 SeaTunnelRowDebeziumDeserializeSchema.builder()
-                        .setPhysicalRowType(physicalRowType)
-                        .setResultTypeInfo(physicalRowType)
+                        .setTables(catalogTables)
                         .setServerTimeZone(ZoneId.of(zoneId))
                         .setTableIdTableChangeMap(tableIdStructMap)
                         .build();

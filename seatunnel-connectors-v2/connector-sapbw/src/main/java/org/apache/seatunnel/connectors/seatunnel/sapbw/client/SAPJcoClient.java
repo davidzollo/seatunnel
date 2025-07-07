@@ -17,7 +17,7 @@
 
 package org.apache.seatunnel.connectors.seatunnel.sapbw.client;
 
-import org.apache.seatunnel.connectors.seatunnel.sapbw.config.SAPBWSourceConfig;
+import org.apache.seatunnel.connectors.seatunnel.sapbw.config.SAPCommonConfig;
 
 import com.sap.conn.jco.JCoDestination;
 import com.sap.conn.jco.JCoDestinationManager;
@@ -41,7 +41,7 @@ public class SAPJcoClient implements AutoCloseable {
         }
     }
 
-    public static SAPJcoClient createClient(SAPBWSourceConfig config) {
+    public static SAPJcoClient createClient(SAPCommonConfig config) {
         Properties connectProperties = new Properties();
         connectProperties.setProperty(
                 DestinationDataProvider.JCO_ASHOST, config.getApplicationServerHost());

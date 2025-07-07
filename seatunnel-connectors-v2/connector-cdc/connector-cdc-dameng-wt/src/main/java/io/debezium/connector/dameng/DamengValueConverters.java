@@ -17,6 +17,8 @@
 
 package io.debezium.connector.dameng;
 
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -55,6 +57,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -316,8 +319,10 @@ public class DamengValueConverters extends JdbcValueConverters {
                     data = "";
                 } else if (((String) data).startsWith("0x0")) {
                     data = ((String) data).substring(3);
+                    return hexToFixedLengthBytes((String) data, column.length());
                 } else if (((String) data).startsWith("0x")) {
                     data = ((String) data).substring(2);
+                    return hexToFixedLengthBytes((String) data, column.length());
                 }
             } else if (data instanceof BlobChunkList) {
                 if (!lobEnabled) {
@@ -333,9 +338,18 @@ public class DamengValueConverters extends JdbcValueConverters {
             }
 
             return super.convertBinary(column, fieldDefn, data, mode);
-        } catch (SQLException e) {
+        } catch (SQLException | DecoderException e) {
             throw new DebeziumException("Couldn't convert value for column " + column.name(), e);
         }
+    }
+
+    public static byte[] hexToFixedLengthBytes(String data, int length) throws DecoderException {
+        String s = data.trim();
+        if ((s.length() & 1) != 0) {
+            s = "0" + s;
+        }
+        byte[] decoded = Hex.decodeHex(s.toCharArray());
+        return Arrays.copyOf(decoded, length);
     }
 
     @Override

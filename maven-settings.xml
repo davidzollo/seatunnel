@@ -32,18 +32,6 @@
                 </repository>
             </repositories>
         </profile>
-        <profile>
-            <id>github</id>
-            <repositories>
-                <repository>
-                    <id>github</id>
-                    <url>https://maven.pkg.github.com/whaleops/*</url>
-                    <snapshots>
-                        <enabled>true</enabled>
-                    </snapshots>
-                </repository>
-            </repositories>
-        </profile>
     </profiles>
 
     <mirrors>

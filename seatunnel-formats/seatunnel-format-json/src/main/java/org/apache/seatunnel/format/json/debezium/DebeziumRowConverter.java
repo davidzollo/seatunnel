@@ -161,17 +161,7 @@ public class DebeziumRowConverter implements Serializable {
             case TIMESTAMP:
                 String timestampStr = value.asText();
                 if (value.canConvertToLong()) {
-                    long timestamp = Long.parseLong(value.toString());
-                    if (timestampStr.length() > 16) {
-                        timestamp = TimeUnit.NANOSECONDS.toMillis(timestamp);
-                    } else if (timestampStr.length() > 13) {
-                        timestamp = TimeUnit.MICROSECONDS.toMillis(timestamp);
-                    } else if (timestampStr.length() > 10) {
-                        // already in milliseconds
-                    } else {
-                        timestamp = TimeUnit.SECONDS.toMillis(timestamp);
-                    }
-                    return LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
+                    return parseLongToLocalDateTime(timestampStr);
                 }
 
                 DateTimeFormatter timestampFormatter = fieldFormatterMap.get(fieldName);
@@ -223,5 +213,25 @@ public class DebeziumRowConverter implements Serializable {
             default:
                 throw new UnsupportedOperationException("Unsupported type: " + sqlType);
         }
+    }
+
+    public static LocalDateTime parseLongToLocalDateTime(String timestampStr) {
+        long timestamp;
+        try {
+            timestamp = Long.parseLong(timestampStr.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Illegal timestamp string: " + timestampStr, e);
+        }
+
+        if (timestampStr.length() > 16) {
+            timestamp = TimeUnit.NANOSECONDS.toMillis(timestamp);
+        } else if (timestampStr.length() > 13) {
+            timestamp = TimeUnit.MICROSECONDS.toMillis(timestamp);
+        } else if (timestampStr.length() > 10) {
+            // already in milliseconds
+        } else {
+            timestamp = TimeUnit.SECONDS.toMillis(timestamp);
+        }
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
     }
 }

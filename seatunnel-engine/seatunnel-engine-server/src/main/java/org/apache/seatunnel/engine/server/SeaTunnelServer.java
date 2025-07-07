@@ -23,6 +23,7 @@ import org.apache.seatunnel.common.utils.RetryUtils;
 import org.apache.seatunnel.engine.common.Constant;
 import org.apache.seatunnel.engine.common.config.SeaTunnelConfig;
 import org.apache.seatunnel.engine.common.exception.SeaTunnelEngineException;
+import org.apache.seatunnel.engine.common.exception.SeaTunnelEngineRetryableException;
 import org.apache.seatunnel.engine.core.classloader.ClassLoaderService;
 import org.apache.seatunnel.engine.core.classloader.DefaultClassLoaderService;
 import org.apache.seatunnel.engine.server.execution.ExecutionState;
@@ -55,9 +56,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import static com.hazelcast.spi.properties.ClusterProperty.INVOCATION_MAX_RETRY_COUNT;
-import static com.hazelcast.spi.properties.ClusterProperty.INVOCATION_RETRY_PAUSE;
-
 public class SeaTunnelServer
         implements ManagedService, MembershipAwareService, LiveOperationsTracker {
 
@@ -84,6 +82,7 @@ public class SeaTunnelServer
     private TaskExecutionService taskExecutionService;
     private ClassLoaderService classLoaderService;
     private CoordinatorService coordinatorService;
+    @Getter private CheckpointService checkpointService;
     private ScheduledExecutorService monitorService;
 
     @Getter private SeaTunnelHealthMonitor seaTunnelHealthMonitor;
@@ -145,6 +144,8 @@ public class SeaTunnelServer
         coordinatorService =
                 new CoordinatorService(
                         nodeEngine, this, seaTunnelConfig.getEngineConfig(), classLoader);
+        checkpointService =
+                new CheckpointService(seaTunnelConfig.getEngineConfig().getCheckpointConfig());
         monitorService = Executors.newSingleThreadScheduledExecutor();
         monitorService.scheduleAtFixedRate(
                 this::printExecutionInfo,
@@ -209,29 +210,12 @@ public class SeaTunnelServer
     public CoordinatorService getCoordinatorService() {
         int retryCount = 0;
         if (isMasterNode()) {
-            // The hazelcast operator request invocation will retry, We must wait enough time to
-            // wait the invocation return.
-            String hazelcastInvocationMaxRetry =
-                    seaTunnelConfig
-                            .getHazelcastConfig()
-                            .getProperty(INVOCATION_MAX_RETRY_COUNT.getName());
-            int maxRetry =
-                    hazelcastInvocationMaxRetry == null
-                            ? 250 * 2
-                            : Integer.parseInt(hazelcastInvocationMaxRetry) * 2;
-
-            String hazelcastRetryPause =
-                    seaTunnelConfig
-                            .getHazelcastConfig()
-                            .getProperty(INVOCATION_RETRY_PAUSE.getName());
-
-            int retryPause =
-                    hazelcastRetryPause == null ? 500 : Integer.parseInt(hazelcastRetryPause);
-
-            while (isMasterNode()
-                    && !coordinatorService.isCoordinatorActive()
+            int maxRetry = 3;
+            int retryPause = 500;
+            while (isRunning
                     && retryCount < maxRetry
-                    && isRunning) {
+                    && !coordinatorService.isCoordinatorActive()
+                    && isMasterNode()) {
                 try {
                     LOGGER.warning(
                             "This is master node, waiting the coordinator service init finished");
@@ -248,8 +232,9 @@ public class SeaTunnelServer
             if (!isMasterNode()) {
                 throw new SeaTunnelEngineException("This is not a master node now.");
             }
-
-            throw new SeaTunnelEngineException(
+            // Return retryable exception to retry from the worker node, because the coordinator is
+            // not ready yet. By this way, we can release the operation thread and retry later.
+            throw new SeaTunnelEngineRetryableException(
                     "Can not get coordinator service from an active master node.");
         } else {
             throw new SeaTunnelEngineException(

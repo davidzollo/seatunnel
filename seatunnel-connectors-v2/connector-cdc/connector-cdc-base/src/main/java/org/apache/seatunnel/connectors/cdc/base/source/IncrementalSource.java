@@ -26,8 +26,6 @@ import org.apache.seatunnel.api.source.SourceSplitEnumerator;
 import org.apache.seatunnel.api.source.SupportCoordinate;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.CatalogTableUtil;
-import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
-import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.connectors.cdc.base.config.SourceConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.StartupConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.StopConfig;
@@ -109,13 +107,7 @@ public abstract class IncrementalSource<T, C extends SourceConfig>
     protected StopMode stopMode;
     protected DebeziumDeserializationSchema<T> deserializationSchema;
 
-    protected SeaTunnelDataType<SeaTunnelRow> dataType;
-
-    protected IncrementalSource(
-            ReadonlyConfig options,
-            SeaTunnelDataType<SeaTunnelRow> dataType,
-            List<CatalogTable> catalogTables) {
-        this.dataType = dataType;
+    protected IncrementalSource(ReadonlyConfig options, List<CatalogTable> catalogTables) {
         this.catalogTables = catalogTables;
         this.readonlyConfig = options;
         this.startupConfig = getStartupConfig(readonlyConfig);
@@ -153,7 +145,10 @@ public abstract class IncrementalSource<T, C extends SourceConfig>
                 readonlyConfig.get(JdbcSourceOptions.FORMAT))) {
             return Collections.singletonList(
                     CatalogTableUtil.getCatalogTable(
-                            "default.default",
+                            "schema",
+                            "default",
+                            "default",
+                            "default",
                             CompatibleDebeziumJsonDeserializationSchema.DEBEZIUM_DATA_ROW_TYPE));
         }
         return catalogTables;

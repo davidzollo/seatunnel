@@ -23,6 +23,7 @@ import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.common.utils.SeaTunnelException;
 import org.apache.seatunnel.connectors.cdc.base.source.offset.Offset;
 import org.apache.seatunnel.connectors.cdc.base.utils.SourceRecordUtils;
+import org.apache.seatunnel.connectors.cdc.base.utils.SqlPostHook;
 import org.apache.seatunnel.connectors.seatunnel.cdc.postgres.source.offset.LsnOffset;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.SQLUtils;
@@ -318,8 +319,23 @@ public class PostgresUtils {
             boolean isLastSplit,
             Object[] splitEnd,
             boolean isNull) {
-        return buildSplitQuery(
-                table, rowType, isFirstSplit, isLastSplit, splitEnd, -1, true, isNull);
+        return buildSplitScanQuery(
+                table, rowType, isFirstSplit, isLastSplit, splitEnd, isNull, SqlPostHook.NO_OP);
+    }
+
+    /** Get split scan query for the given table. */
+    public static String buildSplitScanQuery(
+            Table table,
+            SeaTunnelRowType rowType,
+            boolean isFirstSplit,
+            boolean isLastSplit,
+            Object[] splitEnd,
+            boolean isNull,
+            SqlPostHook sqlPostHook) {
+        String query =
+                buildSplitQuery(
+                        table, rowType, isFirstSplit, isLastSplit, splitEnd, -1, true, isNull);
+        return sqlPostHook.apply(query);
     }
 
     /** Get table split data PreparedStatement. */

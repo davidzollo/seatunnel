@@ -26,6 +26,7 @@ import org.apache.seatunnel.engine.core.dag.logical.LogicalDag;
 import org.apache.seatunnel.engine.core.job.AbstractJobEnvironment;
 import org.apache.seatunnel.engine.core.job.ConnectorJarIdentifier;
 import org.apache.seatunnel.engine.core.job.JobImmutableInformation;
+import org.apache.seatunnel.engine.core.job.JobPipelineCheckpointData;
 import org.apache.seatunnel.engine.core.parse.MultipleTableJobConfigParser;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -63,8 +64,13 @@ public class ClientJobExecutionEnvironment extends AbstractJobEnvironment {
         this.seaTunnelHazelcastClient = seaTunnelHazelcastClient;
         this.jobClient = new JobClient(seaTunnelHazelcastClient);
         this.seaTunnelConfig = seaTunnelConfig;
-        this.jobConfig.setJobContext(
-                new JobContext(isStartWithSavePoint ? jobId : jobClient.getNewJobId()));
+        Long finalJobId;
+        if (isStartWithSavePoint || jobId != null) {
+            finalJobId = jobId;
+        } else {
+            finalJobId = jobClient.getNewJobId();
+        }
+        this.jobConfig.setJobContext(new JobContext(finalJobId));
         this.connectorPackageClient = new ConnectorPackageClient(seaTunnelHazelcastClient);
     }
 
@@ -79,8 +85,20 @@ public class ClientJobExecutionEnvironment extends AbstractJobEnvironment {
     /** Search all jars in SEATUNNEL_HOME/plugins */
     @Override
     protected MultipleTableJobConfigParser getJobConfigParser() {
+        List<JobPipelineCheckpointData> pipelineCheckpoints = Collections.emptyList();
+        if (isStartWithSavePoint) {
+            LOGGER.info("Start with savePoint, get checkpoint state from jobClient");
+            pipelineCheckpoints =
+                    jobClient.getCheckpointData(
+                            Long.parseLong(jobConfig.getJobContext().getJobId()));
+        }
         return new MultipleTableJobConfigParser(
-                jobFilePath, idGenerator, jobConfig, commonPluginJars, isStartWithSavePoint);
+                jobFilePath,
+                idGenerator,
+                jobConfig,
+                commonPluginJars,
+                isStartWithSavePoint,
+                pipelineCheckpoints);
     }
 
     @Override

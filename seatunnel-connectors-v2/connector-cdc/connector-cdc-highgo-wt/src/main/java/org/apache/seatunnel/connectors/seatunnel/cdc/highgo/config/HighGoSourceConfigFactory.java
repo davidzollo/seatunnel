@@ -111,6 +111,7 @@ public class HighGoSourceConfigFactory extends JdbcSourceConfigFactory {
                 connectTimeoutMillis,
                 connectMaxRetries,
                 connectionPoolSize,
-                SUPPORTED_EXACTLY_ONCE);
+                SUPPORTED_EXACTLY_ONCE,
+                whereCondition);
     }
 }

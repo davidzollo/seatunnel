@@ -26,8 +26,6 @@ import org.apache.seatunnel.api.table.connector.TableSource;
 import org.apache.seatunnel.api.table.factory.Factory;
 import org.apache.seatunnel.api.table.factory.TableSourceFactory;
 import org.apache.seatunnel.api.table.factory.TableSourceFactoryContext;
-import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
-import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.connectors.cdc.base.option.SourceOptions;
 import org.apache.seatunnel.connectors.cdc.base.option.StartupMode;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceOptions;
@@ -61,7 +59,8 @@ public class MongodbIncrementalSourceFactory implements TableSourceFactory {
                         MongodbSourceOptions.HEARTBEAT_INTERVAL_MILLIS,
                         MongodbSourceOptions.INCREMENTAL_SNAPSHOT_CHUNK_SIZE_MB,
                         MongodbSourceOptions.STARTUP_MODE,
-                        MongodbSourceOptions.STOP_MODE)
+                        MongodbSourceOptions.STOP_MODE,
+                        MongodbSourceOptions.WHERE_CONDITION)
                 .conditional(
                         MongodbSourceOptions.STARTUP_MODE,
                         StartupMode.TIMESTAMP,
@@ -82,10 +81,8 @@ public class MongodbIncrementalSourceFactory implements TableSourceFactory {
             List<CatalogTable> catalogTables =
                     CatalogTableUtil.getCatalogTables(
                             context.getOptions(), context.getClassLoader());
-            SeaTunnelDataType<SeaTunnelRow> dataType =
-                    CatalogTableUtil.convertToMultipleRowType(catalogTables);
             return (SeaTunnelSource<T, SplitT, StateT>)
-                    new MongodbIncrementalSource<>(context.getOptions(), dataType, catalogTables);
+                    new MongodbIncrementalSource<>(context.getOptions(), catalogTables);
         };
     }
 }

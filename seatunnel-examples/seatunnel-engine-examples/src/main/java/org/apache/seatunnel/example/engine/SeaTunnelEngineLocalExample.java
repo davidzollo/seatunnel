@@ -22,34 +22,39 @@ import org.apache.seatunnel.core.starter.enums.MasterType;
 import org.apache.seatunnel.core.starter.exception.CommandException;
 import org.apache.seatunnel.core.starter.seatunnel.args.ClientCommandArgs;
 
+import lombok.SneakyThrows;
+
 import java.io.FileNotFoundException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Paths;
 
-public class SeaTunnelEngineExample {
+public class SeaTunnelEngineLocalExample {
 
-    private static String SEATUNNEL_LICENCE_HOME_KEY = "SEATUNNEL_LICENCE_HOME";
+    static {
+        // https://logging.apache.org/log4j/2.x/manual/simple-logger.html#isThreadContextMapInheritable
+        System.setProperty("log4j2.isThreadContextMapInheritable", "true");
+        System.setProperty(
+                "SEATUNNEL_LICENCE_HOME", getTestConfigFile("/license/whaletunnel.license"));
+    }
 
     public static void main(String[] args)
             throws FileNotFoundException, URISyntaxException, CommandException {
         String configurePath = args.length > 0 ? args[0] : "/examples/fake_to_console.conf";
-        System.setProperty(
-                SEATUNNEL_LICENCE_HOME_KEY, getTestConfigFile("/license/whaletunnel.license"));
         String configFile = getTestConfigFile(configurePath);
         ClientCommandArgs clientCommandArgs = new ClientCommandArgs();
         clientCommandArgs.setConfigFile(configFile);
         clientCommandArgs.setCheckConfig(false);
         clientCommandArgs.setJobName(Paths.get(configFile).getFileName().toString());
         // Change Execution Mode to CLUSTER to use client mode, before do this, you should start
-        // SeaTunnelEngineServerExample
+        // SeaTunnelEngineClusterServerExample
         clientCommandArgs.setMasterType(MasterType.LOCAL);
         SeaTunnel.run(clientCommandArgs.buildCommand());
     }
 
-    public static String getTestConfigFile(String configFile)
-            throws FileNotFoundException, URISyntaxException {
-        URL resource = SeaTunnelEngineExample.class.getResource(configFile);
+    @SneakyThrows
+    public static String getTestConfigFile(String configFile) {
+        URL resource = SeaTunnelEngineLocalExample.class.getResource(configFile);
         if (resource == null) {
             throw new FileNotFoundException("Can't find config file: " + configFile);
         }

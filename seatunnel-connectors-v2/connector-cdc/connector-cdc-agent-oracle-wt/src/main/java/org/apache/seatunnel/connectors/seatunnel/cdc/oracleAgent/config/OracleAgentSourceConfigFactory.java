@@ -140,7 +140,8 @@ public class OracleAgentSourceConfigFactory extends JdbcSourceConfigFactory {
                 connectTimeoutMillis,
                 connectMaxRetries,
                 connectionPoolSize,
-                exactlyOnce);
+                exactlyOnce,
+                whereCondition);
     }
 
     private void validateConfig() throws IllegalArgumentException {

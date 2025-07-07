@@ -33,6 +33,7 @@ public class CompletedSnapshotSplitInfo implements Serializable {
     private final Object[] splitStart;
     private final Object[] splitEnd;
     private final SnapshotSplitWatermark watermark;
+    private final String whereConditionClause;
 
     public CompletedSnapshotSplitInfo(
             String splitId,
@@ -40,13 +41,15 @@ public class CompletedSnapshotSplitInfo implements Serializable {
             SeaTunnelRowType splitKeyType,
             Object[] splitStart,
             Object[] splitEnd,
-            SnapshotSplitWatermark watermark) {
+            SnapshotSplitWatermark watermark,
+            String whereConditionClause) {
         this.splitId = splitId;
         this.tableId = tableId;
         this.splitKeyType = splitKeyType;
         this.splitStart = splitStart;
         this.splitEnd = splitEnd;
         this.watermark = watermark;
+        this.whereConditionClause = whereConditionClause;
     }
 
     public SnapshotSplit asSnapshotSplit() {
@@ -58,6 +61,7 @@ public class CompletedSnapshotSplitInfo implements Serializable {
                 splitEnd,
                 watermark.getLowWatermark(),
                 watermark.getHighWatermark(),
-                false);
+                false,
+                whereConditionClause);
     }
 }

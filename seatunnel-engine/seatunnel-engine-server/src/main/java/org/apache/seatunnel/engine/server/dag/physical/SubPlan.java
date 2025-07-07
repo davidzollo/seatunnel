@@ -604,7 +604,7 @@ public class SubPlan {
                 break;
             case SCHEDULED:
                 try {
-                    ResourceUtils.applyResourceForPipeline(jobMaster.getResourceManager(), this);
+                    ResourceUtils.applyResourceForPipeline(jobMaster, this);
                     log.debug(
                             "slotProfiles: {}, PipelineLocation: {}",
                             slotProfiles,
@@ -652,6 +652,7 @@ public class SubPlan {
             case CANCELED:
                 if (checkNeedRestore(state) && prepareRestorePipeline()) {
                     jobMaster.releasePipelineResource(this);
+                    jobMaster.preApplyResources();
                     restorePipeline();
                     return;
                 }

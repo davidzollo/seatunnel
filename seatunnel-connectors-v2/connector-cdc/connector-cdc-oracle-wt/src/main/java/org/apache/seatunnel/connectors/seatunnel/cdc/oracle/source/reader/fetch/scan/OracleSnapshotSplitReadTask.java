@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.oracle.source.reader.fetch
 import org.apache.seatunnel.connectors.cdc.base.relational.JdbcSourceEventDispatcher;
 import org.apache.seatunnel.connectors.cdc.base.source.split.SnapshotSplit;
 import org.apache.seatunnel.connectors.cdc.base.source.split.wartermark.WatermarkKind;
+import org.apache.seatunnel.connectors.cdc.base.utils.WhereConditionClauseHook;
 import org.apache.seatunnel.connectors.seatunnel.cdc.oracle.source.offset.RedoLogOffset;
 import org.apache.seatunnel.connectors.seatunnel.cdc.oracle.utils.OracleConnectionUtils;
 import org.apache.seatunnel.connectors.seatunnel.cdc.oracle.utils.OracleUtils;
@@ -200,7 +201,8 @@ public class OracleSnapshotSplitReadTask extends AbstractSnapshotChangeEventSour
                         snapshotSplit.getSplitStart() == null,
                         snapshotSplit.getSplitEnd() == null,
                         snapshotSplit.getSplitEnd(),
-                        snapshotSplit.isNull());
+                        snapshotSplit.isNull(),
+                        new WhereConditionClauseHook(snapshotSplit.getWhereConditionClause()));
         LOG.info(
                 "For split '{}' of table {} using select statement: '{}'",
                 snapshotSplit.splitId(),

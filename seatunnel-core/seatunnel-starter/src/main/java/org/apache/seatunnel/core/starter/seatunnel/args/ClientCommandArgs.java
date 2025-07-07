@@ -96,6 +96,11 @@ public class ClientCommandArgs extends AbstractCommandArgs {
     private boolean async = false;
 
     @Parameter(
+            names = {"--set-job-id"},
+            description = "Set custom job id for job")
+    private String customJobId;
+
+    @Parameter(
             names = {"-cj", "--close-job"},
             description = "Close client the task will also be closed")
     private boolean closeJob = true;

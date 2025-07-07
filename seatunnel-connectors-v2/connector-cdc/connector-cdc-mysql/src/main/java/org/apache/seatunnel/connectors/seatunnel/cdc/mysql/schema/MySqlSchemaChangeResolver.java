@@ -17,10 +17,10 @@
 
 package org.apache.seatunnel.connectors.seatunnel.cdc.mysql.schema;
 
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.schema.event.SchemaChangeEvent;
 import org.apache.seatunnel.api.table.schema.event.TableEvent;
-import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.connectors.cdc.base.schema.SchemaChangeResolver;
 import org.apache.seatunnel.connectors.cdc.base.utils.SourceRecordUtils;
 import org.apache.seatunnel.connectors.cdc.debezium.ConnectTableChangeSerializer;
@@ -66,7 +66,7 @@ public class MySqlSchemaChangeResolver implements SchemaChangeResolver {
     }
 
     @Override
-    public SchemaChangeEvent resolve(SourceRecord record, SeaTunnelDataType dataType) {
+    public SchemaChangeEvent resolve(SourceRecord record, List<CatalogTable> catalogTables) {
         Struct value = (Struct) record.value();
         String ddl = value.getString(HistoryRecord.Fields.DDL_STATEMENTS);
         List<Struct> tableChangesStruct =
@@ -84,7 +84,7 @@ public class MySqlSchemaChangeResolver implements SchemaChangeResolver {
 
         TablePath tablePath = SourceRecordUtils.getTablePath(record);
         SchemaChangeEvent schemaChangeEvent =
-                resolveTableChanges(ddl, tableChange, tablePath, dataType);
+                resolveTableChanges(ddl, tableChange, tablePath, catalogTables);
         if (schemaChangeEvent instanceof TableEvent) {
             ((TableEvent) schemaChangeEvent).setStatement(ddl);
         }
@@ -95,7 +95,7 @@ public class MySqlSchemaChangeResolver implements SchemaChangeResolver {
             String ddl,
             TableChanges.TableChange tableChange,
             TablePath tablePath,
-            SeaTunnelDataType dataType) {
+            List<CatalogTable> catalogTables) {
         SchemaChanges schemaChanges = ddlParser.getSchemaChanges();
         schemaChanges.reset();
         ddlParser.setCurrentDatabase(tablePath.getDatabaseName());

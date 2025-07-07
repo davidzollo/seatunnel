@@ -113,9 +113,6 @@ public class ReplicationMessageColumnValueResolver {
             case "text":
                 return value.asString();
 
-            case "date":
-                return value.asLocalDate();
-
             case "timestamp with time zone":
             case "timestamptz":
                 return value.asOffsetDateTimeAtUtc();
@@ -123,6 +120,10 @@ public class ReplicationMessageColumnValueResolver {
             case "timestamp":
             case "timestamp without time zone":
             case "smalldatetime":
+                if ("date".equalsIgnoreCase(fullType)) {
+                    // hg's date implementation has been expanded
+                    return value.asLocalDate();
+                }
                 return value.asInstant();
 
             case "time":
@@ -187,6 +188,15 @@ public class ReplicationMessageColumnValueResolver {
             case "int4range":
             case "numrange":
             case "int8range":
+            case "ltree":
+            case "isbn":
+                return value.asString();
+
+                // PgVector types are string encoded values
+                // ValueConverter turns them into the correct types
+            case "vector":
+            case "halfvec":
+            case "sparsevec":
                 return value.asString();
 
                 // catch-all for other known/builtin PG types

@@ -63,16 +63,17 @@ public class TaskTest extends AbstractSeaTunnelServerTest {
 
     @Test
     public void testTask() throws MalformedURLException {
-        JobContext jobContext = new JobContext();
+        Long jobId = 1L;
+        JobContext jobContext = new JobContext(jobId);
         jobContext.setJobMode(JobMode.BATCH);
-        LogicalDag testLogicalDag = TestUtils.getTestLogicalDag(jobContext);
-
         JobConfig config = new JobConfig();
         config.setName("test");
+        config.setJobContext(jobContext);
+        LogicalDag testLogicalDag = TestUtils.getTestLogicalDag(jobContext, config);
 
         JobImmutableInformation jobImmutableInformation =
                 new JobImmutableInformation(
-                        1,
+                        jobId,
                         "Test",
                         nodeEngine.getSerializationService(),
                         testLogicalDag,
@@ -85,7 +86,8 @@ public class TaskTest extends AbstractSeaTunnelServerTest {
                                 jobImmutableInformation.getJobId(),
                                 nodeEngine
                                         .getSerializationService()
-                                        .toData(jobImmutableInformation));
+                                        .toData(jobImmutableInformation),
+                                jobImmutableInformation.isStartWithSavePoint());
 
         Assertions.assertNotNull(voidPassiveCompletableFuture);
     }

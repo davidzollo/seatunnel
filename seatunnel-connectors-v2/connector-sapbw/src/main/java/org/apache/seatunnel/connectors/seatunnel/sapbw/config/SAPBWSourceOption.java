@@ -22,38 +22,7 @@ import org.apache.seatunnel.api.configuration.Options;
 
 import java.util.List;
 
-public class SAPBWSourceOption {
-    public static final Option<String> APPLICATION_SERVER_HOST =
-            Options.key("ashost")
-                    .stringType()
-                    .noDefaultValue()
-                    .withDescription("SAP Business Warehouse application server host");
-    public static final Option<String> SYSTEM_NUMBER =
-            Options.key("sysnr")
-                    .stringType()
-                    .defaultValue("00")
-                    .withDescription("SAP Business Warehouse system number");
-    public static final Option<String> CLIENT =
-            Options.key("client")
-                    .stringType()
-                    .noDefaultValue()
-                    .withDescription("SAP Business Warehouse client");
-    public static final Option<String> USER =
-            Options.key("user")
-                    .stringType()
-                    .noDefaultValue()
-                    .withDescription("SAP Business Warehouse user");
-    public static final Option<String> PASSWORD =
-            Options.key("password")
-                    .stringType()
-                    .noDefaultValue()
-                    .withDescription("SAP Business Warehouse password");
-    public static final Option<String> LANGUAGE =
-            Options.key("lang")
-                    .stringType()
-                    .defaultValue("EN")
-                    .withDescription("SAP Business Warehouse language");
-
+public class SAPBWSourceOption extends SAPCommonOption {
     public static final Option<String> CATEGORY =
             Options.key("category")
                     .stringType()

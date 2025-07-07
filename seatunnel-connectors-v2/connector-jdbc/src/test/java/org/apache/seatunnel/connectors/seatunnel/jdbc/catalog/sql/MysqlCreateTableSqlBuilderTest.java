@@ -112,7 +112,7 @@ public class MysqlCreateTableSqlBuilderTest {
 
         String createTableSql =
                 MysqlCreateTableSqlBuilder.builder(
-                                tablePath, catalogTable, MySqlTypeConverter.DEFAULT_INSTANCE)
+                                tablePath, catalogTable, MySqlTypeConverter.DEFAULT_INSTANCE, null)
                         .build(DatabaseIdentifier.MYSQL);
         // create table sql is change; The old unit tests are no longer applicable
         String expect =
@@ -130,5 +130,29 @@ public class MysqlCreateTableSqlBuilderTest {
         CONSOLE.println(expect);
         System.out.println(createTableSql);
         Assertions.assertEquals(expect, createTableSql);
+
+        String createTableSqlWithRowFormat =
+                MysqlCreateTableSqlBuilder.builder(
+                                tablePath,
+                                catalogTable,
+                                MySqlTypeConverter.DEFAULT_INSTANCE,
+                                "DYNAMIC")
+                        .build(DatabaseIdentifier.MYSQL);
+        // create table sql is change; The old unit tests are no longer applicable
+        String expectWithRowFormat =
+                "CREATE TABLE IF NOT EXISTS `test_table` (\n"
+                        + "\t`id` BIGINT NOT NULL COMMENT 'id', \n"
+                        + "\t`name` VARCHAR(128) NOT NULL COMMENT 'name', \n"
+                        + "\t`age` INT NULL COMMENT 'age', \n"
+                        + "\t`blob_v` LONGBLOB NULL COMMENT 'blob_v', \n"
+                        + "\t`createTime` DATETIME NULL COMMENT 'createTime', \n"
+                        + "\t`lastUpdateTime` DATETIME NULL COMMENT 'lastUpdateTime', \n"
+                        + "\tPRIMARY KEY (`id`), \n"
+                        + "\tKEY `name` (`name`), \n"
+                        + "\tKEY `blob_v` (`blob_v`(255))\n"
+                        + ") ROW_FORMAT =DYNAMIC COMMENT = 'User table';";
+        CONSOLE.println(expectWithRowFormat);
+        System.out.println(createTableSqlWithRowFormat);
+        Assertions.assertEquals(expectWithRowFormat, createTableSqlWithRowFormat);
     }
 }

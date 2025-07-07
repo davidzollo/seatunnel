@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.cdc.dameng.utils;
 import org.apache.seatunnel.api.table.type.BasicType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.connectors.cdc.base.utils.SourceRecordUtils;
+import org.apache.seatunnel.connectors.cdc.base.utils.SqlPostHook;
 
 import io.debezium.config.Configuration;
 import io.debezium.connector.dameng.DamengConnection;
@@ -202,8 +203,22 @@ public class DamengConncetionUtils {
             boolean isLastSplit,
             Object[] splitEnd,
             boolean isNull) {
-        return buildSplitQuery(
-                tableId, rowType, isFirstSplit, isLastSplit, splitEnd, -1, true, isNull);
+        return buildSplitScanQuery(
+                tableId, rowType, isFirstSplit, isLastSplit, splitEnd, isNull, SqlPostHook.NO_OP);
+    }
+
+    public static String buildSplitScanQuery(
+            TableId tableId,
+            SeaTunnelRowType rowType,
+            boolean isFirstSplit,
+            boolean isLastSplit,
+            Object[] splitEnd,
+            boolean isNull,
+            SqlPostHook sqlPostHook) {
+        String query =
+                buildSplitQuery(
+                        tableId, rowType, isFirstSplit, isLastSplit, splitEnd, -1, true, isNull);
+        return sqlPostHook.apply(query);
     }
 
     private static String buildSplitQuery(

@@ -22,28 +22,16 @@ import org.apache.seatunnel.api.table.catalog.TablePath;
 
 import lombok.Getter;
 
-import java.io.Serializable;
 import java.util.Map;
 
 @Getter
-public class SAPBWSourceConfig implements Serializable {
+public class SAPBWSourceConfig extends SAPCommonConfig {
 
     private static final long serialVersionUID = 1L;
-    private final String applicationServerHost;
-    private final String systemNumber;
-    private final String client;
-    private final String user;
-    private final String password;
-    private final String language;
     private final Map<TablePath, QueryTableConfig> queryTableConfigs;
 
     public SAPBWSourceConfig(ReadonlyConfig readonlyConfig) {
-        this.applicationServerHost = readonlyConfig.get(SAPBWSourceOption.APPLICATION_SERVER_HOST);
-        this.systemNumber = readonlyConfig.get(SAPBWSourceOption.SYSTEM_NUMBER);
-        this.client = readonlyConfig.get(SAPBWSourceOption.CLIENT);
-        this.user = readonlyConfig.get(SAPBWSourceOption.USER);
-        this.password = readonlyConfig.get(SAPBWSourceOption.PASSWORD);
-        this.language = readonlyConfig.get(SAPBWSourceOption.LANGUAGE);
+        super(readonlyConfig);
         queryTableConfigs = QueryTableConfig.of(readonlyConfig);
     }
 }

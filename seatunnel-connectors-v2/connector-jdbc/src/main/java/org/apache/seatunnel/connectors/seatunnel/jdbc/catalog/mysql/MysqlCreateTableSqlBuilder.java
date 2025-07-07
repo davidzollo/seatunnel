@@ -53,6 +53,7 @@ public class MysqlCreateTableSqlBuilder {
     private String engine;
     private String charset;
     private String collate;
+    private String rowFormat;
 
     private PrimaryKey primaryKey;
 
@@ -69,7 +70,10 @@ public class MysqlCreateTableSqlBuilder {
     }
 
     public static MysqlCreateTableSqlBuilder builder(
-            TablePath tablePath, CatalogTable catalogTable, MySqlTypeConverter typeConverter) {
+            TablePath tablePath,
+            CatalogTable catalogTable,
+            MySqlTypeConverter typeConverter,
+            String rowFormat) {
         checkNotNull(tablePath, "tablePath must not be null");
         checkNotNull(catalogTable, "catalogTable must not be null");
 
@@ -78,9 +82,10 @@ public class MysqlCreateTableSqlBuilder {
 
         return new MysqlCreateTableSqlBuilder(tablePath.getTableName(), typeConverter)
                 .comment(catalogTable.getComment())
-                // todo: set charset and collate
+                // todo: set charset and collate and user set format
                 .engine(null)
                 .charset(null)
+                .rowFormat(rowFormat)
                 .primaryKey(tableSchema.getPrimaryKey())
                 .constraintKeys(tableSchema.getConstraintKeys())
                 .addColumn(tableSchema.getColumns())
@@ -123,6 +128,11 @@ public class MysqlCreateTableSqlBuilder {
         return this;
     }
 
+    public MysqlCreateTableSqlBuilder rowFormat(String rowFormat) {
+        this.rowFormat = rowFormat;
+        return this;
+    }
+
     public MysqlCreateTableSqlBuilder comment(String comment) {
         this.comment = comment;
         return this;
@@ -143,6 +153,9 @@ public class MysqlCreateTableSqlBuilder {
         }
         if (collate != null) {
             sqls.add("COLLATE = " + collate);
+        }
+        if (rowFormat != null) {
+            sqls.add("ROW_FORMAT = " + rowFormat);
         }
         if (comment != null) {
             sqls.add("COMMENT = '" + comment.replace("'", "''").replace("\\", "\\\\") + "'");

@@ -21,6 +21,7 @@ import org.apache.seatunnel.api.table.type.BasicType;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.common.utils.SeaTunnelException;
+import org.apache.seatunnel.connectors.cdc.base.utils.SqlPostHook;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mysql.source.offset.BinlogOffset;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.SQLUtils;
 
@@ -240,8 +241,23 @@ public class MySqlUtils {
             boolean isLastSplit,
             Object[] splitEnd,
             boolean isNull) {
-        return buildSplitQuery(
-                tableId, rowType, isFirstSplit, isLastSplit, splitEnd, -1, true, isNull);
+
+        return buildSplitScanQuery(
+                tableId, rowType, isFirstSplit, isLastSplit, splitEnd, isNull, sql -> sql);
+    }
+
+    public static String buildSplitScanQuery(
+            TableId tableId,
+            SeaTunnelRowType rowType,
+            boolean isFirstSplit,
+            boolean isLastSplit,
+            Object[] splitEnd,
+            boolean isNull,
+            SqlPostHook sqlPostHook) {
+        String query =
+                buildSplitQuery(
+                        tableId, rowType, isFirstSplit, isLastSplit, splitEnd, -1, true, isNull);
+        return sqlPostHook.apply(query);
     }
 
     private static String buildSplitQuery(

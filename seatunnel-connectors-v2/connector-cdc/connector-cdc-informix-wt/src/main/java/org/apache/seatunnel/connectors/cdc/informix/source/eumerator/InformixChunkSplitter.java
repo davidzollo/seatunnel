@@ -86,7 +86,7 @@ public class InformixChunkSplitter extends AbstractJdbcSourceChunkSplitter {
             boolean isLastSplit,
             Object[] splitEnd,
             boolean isNull) {
-        return InformixConnectionUtils.buildSplitQuery(
+        return InformixConnectionUtils.buildSplitScanQuery(
                 table.id(), splitKeyType, isFirstSplit, isLastSplit, splitEnd, isNull);
     }
 

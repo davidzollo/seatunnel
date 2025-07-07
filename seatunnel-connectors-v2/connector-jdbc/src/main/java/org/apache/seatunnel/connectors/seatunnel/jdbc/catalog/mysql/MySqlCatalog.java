@@ -192,8 +192,44 @@ public class MySqlCatalog extends AbstractJdbcCatalog {
 
     @Override
     protected String getCreateTableSql(TablePath tablePath, CatalogTable table) {
-        return MysqlCreateTableSqlBuilder.builder(tablePath, table, typeConverter)
+        return MysqlCreateTableSqlBuilder.builder(tablePath, table, typeConverter, null)
                 .build(table.getCatalogName());
+    }
+
+    @Override
+    protected void createTableInternal(TablePath tablePath, CatalogTable table)
+            throws CatalogException {
+        String dbUrl = getUrlFromDatabaseName(tablePath.getDatabaseName());
+        try {
+            final List<String> createTableSqlList = getCreateTableSqls(tablePath, table);
+            for (String sql : createTableSqlList) {
+                executeInternal(dbUrl, sql);
+            }
+        } catch (Exception e) {
+            if (e instanceof SQLException && ((SQLException) e).getErrorCode() == 1118) {
+                // ROW SIZE TOO LARGE
+                handleSQLException(dbUrl, tablePath, table);
+            } else {
+                throw new CatalogException(
+                        String.format("Failed creating table %s", tablePath.getFullName()), e);
+            }
+        }
+    }
+
+    private void handleSQLException(String dbUrl, TablePath tablePath, CatalogTable table) {
+        try {
+            executeInternal(
+                    dbUrl,
+                    MysqlCreateTableSqlBuilder.builder(
+                                    tablePath,
+                                    table,
+                                    typeConverter,
+                                    version.isAtOrBefore(MySqlVersion.V_5_7) ? "DYNAMIC" : null)
+                            .build(table.getCatalogName()));
+        } catch (Exception ex) {
+            throw new CatalogException(
+                    String.format("Failed creating table %s", tablePath.getFullName()), ex);
+        }
     }
 
     @Override

@@ -30,7 +30,7 @@ public class InformixConnectionUtilsTest {
     @Test
     public void testSplitQuery() {
         String splitScanSQL =
-                InformixConnectionUtils.buildSplitQuery(
+                InformixConnectionUtils.buildSplitScanQuery(
                         TableId.parse("db1.schema1.table1"),
                         new SeaTunnelRowType(
                                 new String[] {"id"}, new SeaTunnelDataType[] {BasicType.LONG_TYPE}),
@@ -43,7 +43,7 @@ public class InformixConnectionUtilsTest {
                 splitScanSQL);
 
         splitScanSQL =
-                InformixConnectionUtils.buildSplitQuery(
+                InformixConnectionUtils.buildSplitScanQuery(
                         TableId.parse("db1.schema1.table1"),
                         new SeaTunnelRowType(
                                 new String[] {"id"}, new SeaTunnelDataType[] {BasicType.LONG_TYPE}),
@@ -54,7 +54,7 @@ public class InformixConnectionUtilsTest {
         Assertions.assertEquals("SELECT * FROM db1:schema1.table1", splitScanSQL);
 
         splitScanSQL =
-                InformixConnectionUtils.buildSplitQuery(
+                InformixConnectionUtils.buildSplitScanQuery(
                         TableId.parse("db1.schema1.table1"),
                         new SeaTunnelRowType(
                                 new String[] {"id"}, new SeaTunnelDataType[] {BasicType.LONG_TYPE}),
@@ -67,7 +67,7 @@ public class InformixConnectionUtilsTest {
                 splitScanSQL);
 
         splitScanSQL =
-                InformixConnectionUtils.buildSplitQuery(
+                InformixConnectionUtils.buildSplitScanQuery(
                         TableId.parse("db1.schema1.table1"),
                         new SeaTunnelRowType(
                                 new String[] {"id"}, new SeaTunnelDataType[] {BasicType.LONG_TYPE}),
@@ -77,7 +77,7 @@ public class InformixConnectionUtilsTest {
                         false);
         Assertions.assertEquals("SELECT * FROM db1:schema1.table1 WHERE id  >= ? ", splitScanSQL);
         splitScanSQL =
-                InformixConnectionUtils.buildSplitQuery(
+                InformixConnectionUtils.buildSplitScanQuery(
                         TableId.parse("db1.schema1.table1"),
                         new SeaTunnelRowType(
                                 new String[] {"id"}, new SeaTunnelDataType[] {BasicType.LONG_TYPE}),
@@ -88,7 +88,7 @@ public class InformixConnectionUtilsTest {
         Assertions.assertEquals("SELECT * FROM db1:schema1.table1 WHERE id IS NULL", splitScanSQL);
 
         splitScanSQL =
-                InformixConnectionUtils.buildSplitQuery(
+                InformixConnectionUtils.buildSplitScanQuery(
                         TableId.parse("db1.schema1.table1"),
                         new SeaTunnelRowType(
                                 new String[] {"name"},
@@ -101,7 +101,7 @@ public class InformixConnectionUtilsTest {
                 "SELECT * FROM db1:schema1.table1 WHERE name IS NULL", splitScanSQL);
 
         splitScanSQL =
-                InformixConnectionUtils.buildSplitQuery(
+                InformixConnectionUtils.buildSplitScanQuery(
                         TableId.parse("db1.schema1.table1"),
                         new SeaTunnelRowType(
                                 new String[] {"name"},
@@ -115,7 +115,7 @@ public class InformixConnectionUtilsTest {
         Assertions.assertThrowsExactly(
                 UnsupportedOperationException.class,
                 () -> {
-                    InformixConnectionUtils.buildSplitQuery(
+                    InformixConnectionUtils.buildSplitScanQuery(
                             TableId.parse("db1.schema1.table1"),
                             new SeaTunnelRowType(
                                     new String[] {"name"},

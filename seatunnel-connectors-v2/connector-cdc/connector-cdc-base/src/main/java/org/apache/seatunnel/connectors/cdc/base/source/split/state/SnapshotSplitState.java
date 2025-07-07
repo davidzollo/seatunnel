@@ -46,6 +46,7 @@ public class SnapshotSplitState extends SourceSplitStateBase {
                 snapshotSplit.getSplitEnd(),
                 getLowWatermark(),
                 getHighWatermark(),
-                snapshotSplit.isNull());
+                snapshotSplit.isNull(),
+                snapshotSplit.getWhereConditionClause());
     }
 }

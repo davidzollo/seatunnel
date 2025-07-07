@@ -15,16 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.seatunnel.example.engine;
+package org.apache.seatunnel.engine.common.exception;
 
-import org.apache.seatunnel.core.starter.SeaTunnel;
-import org.apache.seatunnel.core.starter.exception.CommandException;
-import org.apache.seatunnel.core.starter.seatunnel.args.ServerCommandArgs;
+import com.hazelcast.spi.exception.RetryableException;
 
-public class SeaTunnelEngineServerExample {
-    public static void main(String[] args) throws CommandException {
-        ServerCommandArgs serverCommandArgs = new ServerCommandArgs();
-        serverCommandArgs.setClusterName("seatunnel");
-        SeaTunnel.run(serverCommandArgs.buildCommand());
+public class SeaTunnelEngineRetryableException extends SeaTunnelEngineException
+        implements RetryableException {
+
+    public SeaTunnelEngineRetryableException() {
+        super();
+    }
+
+    public SeaTunnelEngineRetryableException(String message) {
+        super(message);
+    }
+
+    public SeaTunnelEngineRetryableException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    @Override
+    public Throwable createException(String s, Throwable throwable) {
+        return new SeaTunnelEngineRetryableException(s, throwable);
     }
 }

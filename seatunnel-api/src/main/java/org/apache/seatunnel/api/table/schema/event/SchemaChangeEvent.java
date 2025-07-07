@@ -18,6 +18,7 @@
 package org.apache.seatunnel.api.table.schema.event;
 
 import org.apache.seatunnel.api.event.Event;
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 
@@ -39,4 +40,18 @@ public interface SchemaChangeEvent extends Event {
      * @return
      */
     TableIdentifier tableIdentifier();
+
+    /**
+     * Get the table struct after the change
+     *
+     * @return
+     */
+    CatalogTable getChangeAfter();
+
+    /**
+     * Set the table struct after the change
+     *
+     * @param table
+     */
+    void setChangeAfter(CatalogTable table);
 }

@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.api.table.schema.event;
 
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 
@@ -34,6 +35,7 @@ public abstract class TableEvent implements SchemaChangeEvent {
     @Getter @Setter private String jobId;
     @Getter @Setter private String statement;
     @Getter @Setter protected String sourceDialectName;
+    @Getter @Setter private CatalogTable changeAfter;
 
     @Override
     public TableIdentifier tableIdentifier() {

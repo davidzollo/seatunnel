@@ -20,9 +20,11 @@ package org.apache.seatunnel.engine.common.config;
 import org.apache.seatunnel.engine.common.config.server.CheckpointConfig;
 import org.apache.seatunnel.engine.common.config.server.ConnectorJarStorageConfig;
 import org.apache.seatunnel.engine.common.config.server.QueueType;
+import org.apache.seatunnel.engine.common.config.server.ScheduleStrategy;
 import org.apache.seatunnel.engine.common.config.server.ServerConfigOptions;
 import org.apache.seatunnel.engine.common.config.server.SlotServiceConfig;
 import org.apache.seatunnel.engine.common.config.server.ThreadShareMode;
+import org.apache.seatunnel.engine.common.runtime.ExecutionMode;
 
 import lombok.Data;
 
@@ -66,12 +68,21 @@ public class EngineConfig {
     private String eventReportHttpApi;
     private Map<String, String> eventReportHttpHeaders = Collections.emptyMap();
 
+    private ExecutionMode mode = ExecutionMode.CLUSTER;
+
+    private ScheduleStrategy scheduleStrategy =
+            ServerConfigOptions.JOB_SCHEDULE_STRATEGY.defaultValue();
+
     private String licenseGetHttpApi;
     private Map<String, String> licenseGetHttpHeaders = Collections.emptyMap();
 
     public void setBackupCount(int newBackupCount) {
         checkBackupCount(newBackupCount, 0);
         this.backupCount = newBackupCount;
+    }
+
+    public void setScheduleStrategy(ScheduleStrategy scheduleStrategy) {
+        this.scheduleStrategy = scheduleStrategy;
     }
 
     public void setPrintExecutionInfoInterval(int printExecutionInfoInterval) {

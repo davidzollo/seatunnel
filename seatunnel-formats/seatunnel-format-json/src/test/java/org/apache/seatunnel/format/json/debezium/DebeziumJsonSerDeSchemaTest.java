@@ -39,6 +39,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -624,6 +625,34 @@ public class DebeziumJsonSerDeSchemaTest {
                         "{\"before\":null,\"after\":{\"id\":111,\"name\":\"scooter\",\"description\":\"Big 2-wheel scooter \",\"weight\":5.17},\"op\":\"c\"}",
                         "{\"before\":{\"id\":111,\"name\":\"scooter\",\"description\":\"Big 2-wheel scooter \",\"weight\":5.17},\"after\":null,\"op\":\"d\"}");
         assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testParseLongToLocalDateTime() {
+        LocalDateTime dt1 = DebeziumRowConverter.parseLongToLocalDateTime("1718793600");
+        Assertions.assertEquals(LocalDateTime.of(2024, 6, 19, 10, 40), dt1);
+
+        LocalDateTime dt2 = DebeziumRowConverter.parseLongToLocalDateTime("1718793600000");
+        Assertions.assertEquals(LocalDateTime.of(2024, 6, 19, 10, 40), dt2);
+
+        LocalDateTime dt3 = DebeziumRowConverter.parseLongToLocalDateTime("1718793600000000");
+        Assertions.assertEquals(LocalDateTime.of(2024, 6, 19, 10, 40), dt3);
+
+        LocalDateTime dt4 = DebeziumRowConverter.parseLongToLocalDateTime("1718793600000000000");
+        Assertions.assertEquals(LocalDateTime.of(2024, 6, 19, 10, 40), dt4);
+        LocalDateTime dt5 = DebeziumRowConverter.parseLongToLocalDateTime("4417977600000");
+        Assertions.assertEquals(LocalDateTime.of(2110, 1, 1, 0, 0), dt5);
+        LocalDateTime dt6 = DebeziumRowConverter.parseLongToLocalDateTime("9999999000000");
+        Assertions.assertEquals(LocalDateTime.of(2286, 11, 20, 17, 30), dt6);
+
+        LocalDateTime dt7 = DebeziumRowConverter.parseLongToLocalDateTime("10000000000000");
+        Assertions.assertEquals(LocalDateTime.of(1970, 4, 26, 17, 46, 40), dt7);
+
+        Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> {
+                    DebeziumRowConverter.parseLongToLocalDateTime("abc");
+                });
     }
     // --------------------------------------------------------------------------------------------
     // Utilities

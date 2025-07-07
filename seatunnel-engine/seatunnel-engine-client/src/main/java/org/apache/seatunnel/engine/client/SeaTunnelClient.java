@@ -62,6 +62,16 @@ public class SeaTunnelClient implements SeaTunnelClientInstance, AutoCloseable {
     }
 
     @Override
+    public ClientJobExecutionEnvironment createExecutionContext(
+            @NonNull String filePath,
+            @NonNull JobConfig jobConfig,
+            @NonNull SeaTunnelConfig seaTunnelConfig,
+            Long jobId) {
+        return new ClientJobExecutionEnvironment(
+                jobConfig, filePath, hazelcastClient, seaTunnelConfig, false, jobId);
+    }
+
+    @Override
     public ClientJobExecutionEnvironment restoreExecutionContext(
             @NonNull String filePath,
             @NonNull JobConfig jobConfig,
@@ -147,34 +157,53 @@ public class SeaTunnelClient implements SeaTunnelClientInstance, AutoCloseable {
         return jobClient.getJobMetricsSummary(jobId);
     }
 
+    public String getHealthMetrics(String address) {
+        Set<Member> members = hazelcastClient.getHazelcastInstance().getCluster().getMembers();
+        Member member =
+                members.stream()
+                        .filter(
+                                m ->
+                                        (m.getAddress().getHost() + ":" + m.getAddress().getPort())
+                                                .equals(address))
+                        .findFirst()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "Member with address "
+                                                        + address
+                                                        + " not found in the cluster."));
+
+        return getMetricsByMember(member);
+    }
+
+    private String getMetricsByMember(Member member) {
+        Map<String, String> kvMap = new LinkedHashMap<>();
+        if (FAKE_HOST.equals(member.getAddress().getHost())) {
+            return JsonUtils.toJsonString(kvMap);
+        }
+        String metrics =
+                hazelcastClient.requestAndDecodeResponse(
+                        member.getUuid(),
+                        SeaTunnelGetClusterHealthMetricsCodec.encodeRequest(),
+                        SeaTunnelGetClusterHealthMetricsCodec::decodeResponse);
+        String[] split = metrics.split(",");
+        Arrays.stream(split)
+                .forEach(
+                        kv -> {
+                            String[] kvArr = kv.split("=");
+                            kvMap.put(kvArr[0], kvArr[1]);
+                        });
+        return JsonUtils.toJsonString(kvMap);
+    }
+
     public Map<String, String> getClusterHealthMetrics() {
         Set<Member> members = hazelcastClient.getHazelcastInstance().getCluster().getMembers();
         Map<String, String> healthMetricsMap = new HashMap<>();
-        members.stream()
-                .forEach(
-                        member -> {
-                            Map<String, String> kvMap = new LinkedHashMap<>();
-                            if (FAKE_HOST.equals(member.getAddress().getHost())) {
-                                healthMetricsMap.put(
-                                        member.getAddress().toString(),
-                                        JsonUtils.toJsonString(kvMap));
-                                return;
-                            }
-                            String metrics =
-                                    hazelcastClient.requestAndDecodeResponse(
-                                            member.getUuid(),
-                                            SeaTunnelGetClusterHealthMetricsCodec.encodeRequest(),
-                                            SeaTunnelGetClusterHealthMetricsCodec::decodeResponse);
-                            String[] split = metrics.split(",");
-                            Arrays.stream(split)
-                                    .forEach(
-                                            kv -> {
-                                                String[] kvArr = kv.split("=");
-                                                kvMap.put(kvArr[0], kvArr[1]);
-                                            });
-                            healthMetricsMap.put(
-                                    member.getAddress().toString(), JsonUtils.toJsonString(kvMap));
-                        });
+        members.forEach(
+                member -> {
+                    healthMetricsMap.put(
+                            member.getAddress().toString(), getMetricsByMember(member));
+                });
 
         return healthMetricsMap;
     }

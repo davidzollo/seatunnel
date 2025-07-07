@@ -18,7 +18,7 @@
 package org.apache.seatunnel.connectors.cdc.debezium;
 
 import org.apache.seatunnel.api.source.Collector;
-import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.connectors.cdc.base.schema.SchemaChangeResolver;
 
 import org.apache.kafka.connect.source.SourceRecord;
@@ -26,6 +26,7 @@ import org.apache.kafka.connect.source.SourceRecord;
 import io.debezium.relational.TableId;
 
 import java.io.Serializable;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -39,9 +40,7 @@ public interface DebeziumDeserializationSchema<T> extends Serializable {
     /** Deserialize the Debezium record, it is represented in Kafka {@link SourceRecord}. */
     void deserialize(SourceRecord record, Collector<T> out) throws Exception;
 
-    SeaTunnelDataType<T> getProducedType();
-
-    default void restoreCheckpointProducedType(SeaTunnelDataType<T> checkpointDataType) {}
+    List<CatalogTable> getProducedType();
 
     default SchemaChangeResolver getSchemaChangeResolver() {
         return null;

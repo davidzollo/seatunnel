@@ -431,7 +431,6 @@ public class InformixTypeConverterTest {
                         .dataType("DATETIME YEAR TO FRACTION")
                         .build();
         Column column = InformixTypeConverter.INSTANCE.convert(typeDefine);
-
         Assertions.assertEquals(typeDefine.getName(), column.getName());
         Assertions.assertEquals(LocalTimeType.LOCAL_DATE_TIME_TYPE, column.getDataType());
         Assertions.assertEquals(typeDefine.getColumnType(), column.getSourceType());
@@ -444,10 +443,31 @@ public class InformixTypeConverterTest {
                         .scale(5)
                         .build();
         column = InformixTypeConverter.INSTANCE.convert(typeDefine);
-
         Assertions.assertEquals(typeDefine.getName(), column.getName());
         Assertions.assertEquals(LocalTimeType.LOCAL_DATE_TIME_TYPE, column.getDataType());
         Assertions.assertEquals(typeDefine.getScale(), column.getScale());
+        Assertions.assertEquals(typeDefine.getColumnType(), column.getSourceType());
+
+        typeDefine =
+                BasicTypeDefine.builder()
+                        .name("test")
+                        .columnType("DATETIME YEAR TO DAY")
+                        .dataType("DATETIME YEAR TO DAY")
+                        .build();
+        column = InformixTypeConverter.INSTANCE.convert(typeDefine);
+        Assertions.assertEquals(typeDefine.getName(), column.getName());
+        Assertions.assertEquals(LocalTimeType.LOCAL_DATE_TYPE, column.getDataType());
+        Assertions.assertEquals(typeDefine.getColumnType(), column.getSourceType());
+
+        typeDefine =
+                BasicTypeDefine.builder()
+                        .name("test")
+                        .columnType("DATETIME HOUR TO FRACTION")
+                        .dataType("DATETIME HOUR TO FRACTION")
+                        .build();
+        column = InformixTypeConverter.INSTANCE.convert(typeDefine);
+        Assertions.assertEquals(typeDefine.getName(), column.getName());
+        Assertions.assertEquals(LocalTimeType.LOCAL_TIME_TYPE, column.getDataType());
         Assertions.assertEquals(typeDefine.getColumnType(), column.getSourceType());
     }
 

@@ -29,13 +29,17 @@ import org.apache.seatunnel.engine.core.job.JobResult;
 import org.apache.seatunnel.engine.core.job.JobStatus;
 import org.apache.seatunnel.engine.core.job.PipelineExecutionState;
 import org.apache.seatunnel.engine.core.job.PipelineStatus;
+import org.apache.seatunnel.engine.server.execution.TaskGroupLocation;
 import org.apache.seatunnel.engine.server.master.JobMaster;
+import org.apache.seatunnel.engine.server.resourcemanager.resource.SlotProfile;
 
 import com.hazelcast.map.IMap;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -74,6 +78,9 @@ public class PhysicalPlan {
     private final long jobId;
 
     private JobMaster jobMaster;
+
+    private Map<TaskGroupLocation, CompletableFuture<SlotProfile>> preApplyResourceFutures =
+            new HashMap<>();
 
     /** Whether we make the job end when pipeline turn to end state. */
     private boolean makeJobEndWhenPipelineEnded = true;
@@ -192,7 +199,13 @@ public class PhysicalPlan {
             return;
         }
 
-        updateJobState(JobStatus.CANCELING);
+        if (runningJobStateIMap.get(jobId) == JobStatus.PENDING) {
+            // The pending task needs to be directly set to 'cancelled' status because it has not
+            // started running yet
+            updateJobState(JobStatus.CANCELED);
+        } else {
+            updateJobState(JobStatus.CANCELING);
+        }
     }
 
     public void savepointJob() {
@@ -303,6 +316,7 @@ public class PhysicalPlan {
             case CREATED:
                 updateJobState(JobStatus.SCHEDULED);
                 break;
+            case PENDING:
             case SCHEDULED:
                 getPipelineList()
                         .forEach(
@@ -332,5 +346,18 @@ public class PhysicalPlan {
             default:
                 throw new IllegalArgumentException("Unknown Job State: " + getJobStatus());
         }
+    }
+
+    public void completeJobEndFuture(JobResult jobResult) {
+        jobEndFuture.complete(jobResult);
+    }
+
+    public Map<TaskGroupLocation, CompletableFuture<SlotProfile>> getPreApplyResourceFutures() {
+        return preApplyResourceFutures;
+    }
+
+    public void setPreApplyResourceFutures(
+            Map<TaskGroupLocation, CompletableFuture<SlotProfile>> preApplyResourceFutures) {
+        this.preApplyResourceFutures = preApplyResourceFutures;
     }
 }

@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.cdc.informix.utils;
 import org.apache.seatunnel.api.table.type.BasicType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.connectors.cdc.base.utils.SourceRecordUtils;
+import org.apache.seatunnel.connectors.cdc.base.utils.SqlPostHook;
 
 import com.informix.jdbc.IfxPreparedStatement;
 import com.informix.jdbc.IfxSqliConnect;
@@ -133,7 +134,31 @@ public class InformixConnectionUtils {
                 });
     }
 
-    public static String buildSplitQuery(
+    public static String buildSplitScanQuery(
+            TableId tableId,
+            SeaTunnelRowType rowType,
+            boolean isFirstSplit,
+            boolean isLastSplit,
+            Object[] splitEnd,
+            boolean isNull) {
+        return buildSplitScanQuery(
+                tableId, rowType, isFirstSplit, isLastSplit, splitEnd, isNull, SqlPostHook.NO_OP);
+    }
+
+    public static String buildSplitScanQuery(
+            TableId tableId,
+            SeaTunnelRowType rowType,
+            boolean isFirstSplit,
+            boolean isLastSplit,
+            Object[] splitEnd,
+            boolean isNull,
+            SqlPostHook sqlPostHook) {
+        String query =
+                buildSplitQuery(tableId, rowType, isFirstSplit, isLastSplit, splitEnd, isNull);
+        return sqlPostHook.apply(query);
+    }
+
+    private static String buildSplitQuery(
             TableId tableId,
             SeaTunnelRowType rowType,
             boolean isFirstSplit,

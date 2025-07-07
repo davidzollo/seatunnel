@@ -78,7 +78,15 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                                     tableId));
                 }
                 SnapshotSplit singleSplit =
-                        createSnapshotSplit(jdbc, tableId, 0, null, null, null, false);
+                        createSnapshotSplit(
+                                jdbc,
+                                tableId,
+                                0,
+                                null,
+                                null,
+                                null,
+                                false,
+                                sourceConfig.getWhereConditionClause());
                 splits.add(singleSplit);
                 log.warn(
                         "No evenly split column found for table {}, use single split {}",
@@ -102,7 +110,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                                         getSplitType(splitColumn),
                                         null,
                                         null,
-                                        false));
+                                        false,
+                                        sourceConfig.getWhereConditionClause()));
                         return splits;
                     }
                 }
@@ -127,7 +136,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                                     splitType,
                                     chunk.getChunkStart(),
                                     chunk.getChunkEnd(),
-                                    false);
+                                    false,
+                                    sourceConfig.getWhereConditionClause());
                     if (split.getSplitStart() == null && split.getSplitEnd() == null) {
                         includeKeyNullValue = true;
                     }
@@ -142,7 +152,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                                     splitType,
                                     null,
                                     null,
-                                    true));
+                                    true,
+                                    sourceConfig.getWhereConditionClause()));
                 }
             }
 
@@ -191,7 +202,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                             getSplitType(splitColumn),
                             new Object[] {i},
                             new Object[] {shardCount},
-                            false);
+                            false,
+                            sourceConfig.getWhereConditionClause());
             splits.add(split);
         }
         // add null split
@@ -202,7 +214,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                         getSplitType(splitColumn),
                         null,
                         null,
-                        true));
+                        true,
+                        sourceConfig.getWhereConditionClause()));
         return splits;
     }
 
@@ -561,12 +574,19 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
             SeaTunnelRowType splitKeyType,
             Object chunkStart,
             Object chunkEnd,
-            boolean isNull) {
+            boolean isNull,
+            String whereConditionClause) {
         // currently, we only support single split column
         Object[] splitStart = chunkStart == null ? null : new Object[] {chunkStart};
         Object[] splitEnd = chunkEnd == null ? null : new Object[] {chunkEnd};
         return new SnapshotSplit(
-                splitId(tableId, chunkId), tableId, splitKeyType, splitStart, splitEnd, isNull);
+                splitId(tableId, chunkId),
+                tableId,
+                splitKeyType,
+                splitStart,
+                splitEnd,
+                isNull,
+                whereConditionClause);
     }
 
     protected Column getSplitColumn(

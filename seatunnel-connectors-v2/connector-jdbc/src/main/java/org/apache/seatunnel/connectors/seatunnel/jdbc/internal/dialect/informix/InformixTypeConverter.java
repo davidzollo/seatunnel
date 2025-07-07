@@ -33,6 +33,11 @@ import com.google.auto.service.AutoService;
 import com.mysql.cj.MysqlType;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 // reference https://www.ibm.com/docs/en/informix-servers/14.10?topic=types-summary-data
 @Slf4j
 @AutoService(TypeConverter.class)
@@ -81,6 +86,11 @@ public class InformixTypeConverter implements TypeConverter<BasicTypeDefine> {
 
     public static final InformixTypeConverter INSTANCE = new InformixTypeConverter();
 
+    public static final Pattern p =
+            Pattern.compile(
+                    "DATETIME\\s+(\\w+)\\s+TO\\s+(\\w+)(?:\\((\\d+)\\))?",
+                    Pattern.CASE_INSENSITIVE);
+
     @Override
     public String identifier() {
         return DatabaseIdentifier.INFORMIX;
@@ -98,12 +108,33 @@ public class InformixTypeConverter implements TypeConverter<BasicTypeDefine> {
 
         String dataType = typeDefine.getDataType().toUpperCase();
         if (dataType.startsWith(DATETIME)) {
-            builder.dataType(LocalTimeType.LOCAL_DATE_TIME_TYPE);
-            builder.scale(typeDefine.getScale());
-            if (dataType.endsWith(")")) {
-                String scale =
-                        dataType.substring(dataType.lastIndexOf("(") + 1, dataType.length() - 1);
-                builder.scale(Integer.parseInt(scale));
+            Matcher m = p.matcher(dataType);
+            String start = null, end = null;
+            int fractionScale = -1;
+            if (m.find()) {
+                start = m.group(1).toUpperCase();
+                end = m.group(2).toUpperCase();
+                if ("FRACTION".equals(end) && m.group(3) != null) {
+                    fractionScale = Integer.parseInt(m.group(3));
+                }
+            }
+
+            List<String> dateFields = Arrays.asList("YEAR", "MONTH", "DAY");
+            List<String> timeFields = Arrays.asList("HOUR", "MINUTE", "SECOND", "FRACTION");
+
+            boolean hasDate = dateFields.contains(start);
+            boolean hasTime = timeFields.contains(end);
+
+            if (hasDate && !hasTime) {
+                builder.dataType(LocalTimeType.LOCAL_DATE_TYPE);
+            } else if (!hasDate && hasTime) {
+                builder.dataType(LocalTimeType.LOCAL_TIME_TYPE);
+            } else {
+                builder.dataType(LocalTimeType.LOCAL_DATE_TIME_TYPE);
+            }
+
+            if (fractionScale > 0) {
+                builder.scale(fractionScale);
             }
             return builder.build();
         }

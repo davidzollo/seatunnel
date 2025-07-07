@@ -66,11 +66,8 @@ public class MongodbIncrementalSource<T> extends IncrementalSource<T, MongodbSou
 
     static final String IDENTIFIER = "MongoDB-CDC";
 
-    public MongodbIncrementalSource(
-            ReadonlyConfig options,
-            SeaTunnelDataType<SeaTunnelRow> dataType,
-            List<CatalogTable> catalogTables) {
-        super(options, dataType, catalogTables);
+    public MongodbIncrementalSource(ReadonlyConfig options, List<CatalogTable> catalogTables) {
+        super(options, catalogTables);
     }
 
     @Override
@@ -117,6 +114,8 @@ public class MongodbIncrementalSource<T> extends IncrementalSource<T, MongodbSou
                 .ifPresent(builder::splitSizeMB);
         Optional.ofNullable(startupConfig).ifPresent(builder::startupOptions);
         Optional.ofNullable(stopConfig).ifPresent(builder::stopOptions);
+        Optional.ofNullable(config.get(MongodbSourceOptions.WHERE_CONDITION))
+                .ifPresent(builder::whereConditionClause);
         return builder;
     }
 
@@ -135,17 +134,8 @@ public class MongodbIncrementalSource<T> extends IncrementalSource<T, MongodbSou
         }
 
         SeaTunnelDataType<SeaTunnelRow> physicalRowType;
-        if (dataType == null) {
-            return (DebeziumDeserializationSchema<T>)
-                    new DebeziumJsonDeserializeSchema(
-                            config.get(JdbcSourceOptions.DEBEZIUM_PROPERTIES),
-                            tableIdTableChangeMap);
-        } else {
-            physicalRowType = dataType;
-            return (DebeziumDeserializationSchema<T>)
-                    new MongoDBConnectorDeserializationSchema(
-                            physicalRowType, physicalRowType, tableIdTableChangeMap);
-        }
+        return (DebeziumDeserializationSchema<T>)
+                new MongoDBConnectorDeserializationSchema(catalogTables, tableIdTableChangeMap);
     }
 
     @Override

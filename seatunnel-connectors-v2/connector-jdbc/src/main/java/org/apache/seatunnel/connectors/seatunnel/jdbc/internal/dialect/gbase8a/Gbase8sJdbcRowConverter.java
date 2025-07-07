@@ -20,9 +20,36 @@ package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.gbase8a;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.informix.InformixJdbcRowConverter;
 
+import javax.annotation.Nullable;
+
+import java.io.ByteArrayInputStream;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+
 public class Gbase8sJdbcRowConverter extends InformixJdbcRowConverter {
     @Override
     public String converterName() {
         return DatabaseIdentifier.GBASE_8S;
+    }
+
+    @Override
+    protected void handleBytesType(
+            Object value,
+            PreparedStatement statement,
+            int statementIndex,
+            @Nullable String sourceType)
+            throws SQLException {
+        byte[] bytes = (byte[]) value;
+
+        if ("BLOB".equalsIgnoreCase(sourceType)) {
+            // For BLOB types, use setBinaryStream for better performance with large data
+            statement.setBinaryStream(
+                    statementIndex, new ByteArrayInputStream(bytes), bytes.length);
+        } else if ("CLOB".equalsIgnoreCase(sourceType)) {
+            statement.setAsciiStream(statementIndex, new ByteArrayInputStream(bytes), bytes.length);
+        } else {
+            // For BYTE types, use setBytes
+            statement.setBytes(statementIndex, bytes);
+        }
     }
 }

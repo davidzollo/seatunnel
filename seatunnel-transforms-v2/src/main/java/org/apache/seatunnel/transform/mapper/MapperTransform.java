@@ -163,12 +163,15 @@ public class MapperTransform extends MultipleFieldOutputTransform {
             for (MapperConfig.Column conditionColumn : specificModified.getColumns()) {
                 switch (conditionColumn.getAction()) {
                     case ADD:
-                        collect.add(
+                        ColumnWrapper acw =
                                 ColumnWrapper.of(
                                         MapperConfig.Column.builder()
                                                 .inputName(conditionColumn.getInputName())
                                                 .outputName(conditionColumn.getOutputName())
-                                                .position(position.getAndIncrement())
+                                                .position(
+                                                        conditionColumn.getPosition() == null
+                                                                ? position.getAndIncrement()
+                                                                : conditionColumn.getPosition())
                                                 .dataType(conditionColumn.getDataType())
                                                 .dateFormat(conditionColumn.getDateFormat())
                                                 .length(conditionColumn.getLength())
@@ -178,7 +181,11 @@ public class MapperTransform extends MultipleFieldOutputTransform {
                                                 .comment(conditionColumn.getComment())
                                                 .sinkType(conditionColumn.getSinkType())
                                                 .sqlFunction(conditionColumn.getSqlFunction())
-                                                .build()));
+                                                .build());
+                        if (StringUtils.isBlank(conditionColumn.getSqlFunction())) {
+                            acw.setAllowNull(true);
+                        }
+                        collect.add(acw);
                         break;
 
                     case MODIFY:
@@ -373,11 +380,20 @@ public class MapperTransform extends MultipleFieldOutputTransform {
                                                                     ref.getOutputName());
                                                 }
 
-                                            } else {
+                                            } else if (StringUtils.isNotBlank(ref.getInputName())
+                                                    && !ref.getInputName()
+                                                            .equals(ref.getOutputName())) {
                                                 fname =
                                                         ref.getInputName()
                                                                 + " AS "
                                                                 + ref.getOutputName();
+                                            } else if (cw.isAllowNull()
+                                                    && StringUtils.isBlank(ref.getInputName())
+                                                    && StringUtils.isNotBlank(
+                                                            ref.getOutputName())) {
+                                                fname = null + " AS " + ref.getOutputName();
+                                            } else {
+                                                fname = ref.getInputName();
                                             }
                                             break;
                                         }
@@ -588,7 +604,7 @@ public class MapperTransform extends MultipleFieldOutputTransform {
             ColumnWrapper cw = outputColumns.get(i);
             boolean typeMatches = fieldType.getSqlType() == cw.column.getDataType();
             boolean nameMatches = Objects.equals(fieldName, cw.column.getOutputName());
-            if (!typeMatches || !nameMatches) {
+            if (fieldType.getSqlType() != SqlType.NULL && (!typeMatches || !nameMatches)) {
                 Map<String, String> detail = new LinkedHashMap<>();
                 detail.put("specify_type", cw.column.getDataType().toString());
                 detail.put("actual_type", fieldType.getSqlType().toString());
@@ -634,6 +650,7 @@ public class MapperTransform extends MultipleFieldOutputTransform {
         private MapperConfig.Column column;
         private SeaTunnelDataType<?> dataType;
         private boolean typeChanged = false;
+        private boolean allowNull = false;
 
         public static ColumnWrapper of(MapperConfig.Column column) {
             ColumnWrapper cw = new ColumnWrapper();

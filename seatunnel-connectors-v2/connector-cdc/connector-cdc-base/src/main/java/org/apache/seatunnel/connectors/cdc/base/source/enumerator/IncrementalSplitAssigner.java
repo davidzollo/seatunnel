@@ -19,7 +19,7 @@ package org.apache.seatunnel.connectors.cdc.base.source.enumerator;
 
 import org.apache.seatunnel.shade.com.google.common.annotations.VisibleForTesting;
 
-import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.connectors.cdc.base.config.SourceConfig;
 import org.apache.seatunnel.connectors.cdc.base.source.enumerator.state.IncrementalPhaseState;
 import org.apache.seatunnel.connectors.cdc.base.source.event.SnapshotSplitWatermark;
@@ -75,7 +75,7 @@ public class IncrementalSplitAssigner<C extends SourceConfig> implements SplitAs
     private final Map<String, IncrementalSplit> assignedSplits = new HashMap<>();
 
     private boolean startWithSnapshotMinimumOffset = true;
-    private SeaTunnelDataType checkpointDataType;
+    private List<CatalogTable> checkpointTables;
 
     private Map<TableId, byte[]> historyTableChanges;
 
@@ -160,7 +160,7 @@ public class IncrementalSplitAssigner<C extends SourceConfig> implements SplitAs
                                 }
                                 tableWatermarks.put(tableId, startupOffset);
                             }
-                            checkpointDataType = incrementalSplit.getCheckpointDataType();
+                            checkpointTables = incrementalSplit.getCheckpointTables();
                             historyTableChanges = incrementalSplit.getHistoryTableChanges();
                         });
         if (!tableWatermarks.isEmpty()) {
@@ -249,7 +249,8 @@ public class IncrementalSplitAssigner<C extends SourceConfig> implements SplitAs
                             split.getSplitKeyType(),
                             split.getSplitStart(),
                             split.getSplitEnd(),
-                            splitWatermark));
+                            splitWatermark,
+                            split.getWhereConditionClause()));
         }
         for (TableId tableId : capturedTables) {
             Offset watermark = tableWatermarks.get(tableId);
@@ -271,7 +272,7 @@ public class IncrementalSplitAssigner<C extends SourceConfig> implements SplitAs
                 incrementalSplitStartOffset,
                 sourceConfig.getStopConfig().getStopOffset(offsetFactory),
                 completedSnapshotSplitInfos,
-                checkpointDataType,
+                checkpointTables,
                 historyTableChanges);
     }
 

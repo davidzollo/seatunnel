@@ -164,7 +164,7 @@ public class InformixJdbcRowConverter extends AbstractJdbcRowConverter {
     }
 
     /** Handle Informix BYTE and BLOB types with proper stream handling. */
-    private void handleBytesType(
+    protected void handleBytesType(
             Object value,
             PreparedStatement statement,
             int statementIndex,

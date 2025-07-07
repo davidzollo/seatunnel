@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.cdc.informix.source.reader.fetch.snapsho
 import org.apache.seatunnel.connectors.cdc.base.relational.JdbcSourceEventDispatcher;
 import org.apache.seatunnel.connectors.cdc.base.source.split.SnapshotSplit;
 import org.apache.seatunnel.connectors.cdc.base.source.split.wartermark.WatermarkKind;
+import org.apache.seatunnel.connectors.cdc.base.utils.WhereConditionClauseHook;
 import org.apache.seatunnel.connectors.cdc.informix.source.InformixDialect;
 import org.apache.seatunnel.connectors.cdc.informix.source.offset.InformixOffset;
 import org.apache.seatunnel.connectors.cdc.informix.utils.InformixConnectionUtils;
@@ -180,13 +181,14 @@ public class InformixSnapshotSplitReadTask extends AbstractSnapshotChangeEventSo
         log.info("Exporting data from split '{}' of table {}", snapshotSplit.splitId(), table.id());
 
         String selectSql =
-                InformixConnectionUtils.buildSplitQuery(
+                InformixConnectionUtils.buildSplitScanQuery(
                         snapshotSplit.getTableId(),
                         snapshotSplit.getSplitKeyType(),
                         snapshotSplit.getSplitStart() == null,
                         snapshotSplit.getSplitEnd() == null,
                         snapshotSplit.getSplitEnd(),
-                        snapshotSplit.isNull());
+                        snapshotSplit.isNull(),
+                        new WhereConditionClauseHook(snapshotSplit.getWhereConditionClause()));
         log.info(
                 "For split '{}' of table {} using select statement: '{}'",
                 snapshotSplit.splitId(),

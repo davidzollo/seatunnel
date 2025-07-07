@@ -185,6 +185,19 @@ public class MapperTransformTest {
                                                 .inputName("key5")
                                                 .outputName("key5s")
                                                 .action(MapperConfig.Action.MODIFY)
+                                                .build(),
+                                        MapperConfig.Column.builder()
+                                                .position(6)
+                                                .outputName("new_col_1")
+                                                .dataType(SqlType.STRING)
+                                                .action(MapperConfig.Action.ADD)
+                                                .build(),
+                                        MapperConfig.Column.builder()
+                                                .position(7)
+                                                .outputName("new_col_2")
+                                                .dataType(SqlType.STRING)
+                                                .sqlFunction("UPPER(key2)")
+                                                .action(MapperConfig.Action.ADD)
                                                 .build()),
                                 new MapperConfig.Primarykey(
                                         "pk_id",
@@ -219,7 +232,7 @@ public class MapperTransformTest {
                 "default.schema.table",
                 mapperTransform.transformTableIdentifier().toTablePath().getFullName());
         Assertions.assertIterableEquals(
-                Arrays.asList("name", "id", "time1", "time2", "key5s"),
+                Arrays.asList("name", "id", "time1", "time2", "key5s", "new_col_1", "new_col_2"),
                 Arrays.asList(
                         Arrays.stream(mapperTransform.getOutputColumns())
                                 .map(Column::getName)
@@ -230,7 +243,9 @@ public class MapperTransformTest {
                         1,
                         "2000_10_29_10_29_11_111111",
                         LocalDateTime.of(2000, 10, 29, 10, 29, 0, 0),
-                        "value5"),
+                        "value5",
+                        null,
+                        "VALUE2"),
                 Arrays.asList(
                         mapperTransform.getOutputFieldValues(new SeaTunnelRowAccessor(inputRow))));
     }

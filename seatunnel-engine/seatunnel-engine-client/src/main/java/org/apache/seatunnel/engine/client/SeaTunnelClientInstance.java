@@ -31,6 +31,12 @@ public interface SeaTunnelClientInstance {
             @NonNull JobConfig config,
             @NonNull SeaTunnelConfig seaTunnelConfig);
 
+    ClientJobExecutionEnvironment createExecutionContext(
+            @NonNull String filePath,
+            @NonNull JobConfig config,
+            @NonNull SeaTunnelConfig seaTunnelConfig,
+            Long jobId);
+
     ClientJobExecutionEnvironment restoreExecutionContext(
             @NonNull String filePath,
             @NonNull JobConfig config,
