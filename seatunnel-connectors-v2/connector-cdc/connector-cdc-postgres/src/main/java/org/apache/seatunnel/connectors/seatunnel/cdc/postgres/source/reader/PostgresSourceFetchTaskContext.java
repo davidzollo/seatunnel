@@ -189,7 +189,8 @@ public class PostgresSourceFetchTaskContext extends JdbcSourceFetchTaskContext {
                         replicationConnection.createReplicationSlot().orElse(null);
                     } catch (SQLException ex) {
                         String message = "Creation of replication slot failed";
-                        if (ex.getMessage().contains("already exists")) {
+                        if (ex.getMessage().contains("already exists")
+                                || ex.getMessage().contains("已经存在")) {
                             message +=
                                     "; when setting up multiple connectors for the same database host, please make sure to use a distinct replication slot name for each.";
                             log.warn(message);
