@@ -30,6 +30,8 @@ import java.util.List;
 import java.util.Map;
 
 public class BaseSourceConfigOptions {
+    public static final String DEFAULT_ROW_DELIMITER = "\n";
+
     public static final Option<FileFormat> FILE_FORMAT_TYPE =
             Options.key("file_format_type")
                     .objectType(FileFormat.class)
@@ -49,6 +51,13 @@ public class BaseSourceConfigOptions {
                     .stringType()
                     .noDefaultValue()
                     .withDescription("The file path of source files");
+
+    public static final Option<String> ROW_DELIMITER =
+            Options.key("row_delimiter")
+                    .stringType()
+                    .defaultValue(DEFAULT_ROW_DELIMITER)
+                    .withDescription(
+                            "The separator between rows in a file. Only needed by `text` file format");
 
     public static final Option<String> FIELD_DELIMITER =
             Options.key("field_delimiter")

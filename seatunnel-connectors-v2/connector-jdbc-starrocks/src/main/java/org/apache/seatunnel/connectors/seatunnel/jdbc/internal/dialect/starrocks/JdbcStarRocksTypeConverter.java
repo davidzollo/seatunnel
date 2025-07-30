@@ -471,38 +471,39 @@ public class JdbcStarRocksTypeConverter implements TypeConverter<BasicTypeDefine
         PhysicalColumn.PhysicalColumnBuilder builder = getPhysicalColumnBuilder(typeDefine);
         String starRocksColumnType = getStarRocksColumnName(typeDefine);
 
-        switch (starRocksColumnType) {
-            case STARROCKS_DATE:
-                builder.dataType(LocalTimeType.LOCAL_DATE_TYPE);
-                break;
-            case STARROCKS_DATETIME:
-                builder.dataType(LocalTimeType.LOCAL_DATE_TIME_TYPE);
-                builder.scale(typeDefine.getScale() == null ? 0 : typeDefine.getScale());
-                break;
-            case STARROCKS_DECIMAL:
-                Long p = MAX_PRECISION;
-                int scale = MAX_SCALE;
-                if (typeDefine.getPrecision() != null && typeDefine.getPrecision() > 0) {
-                    p = typeDefine.getPrecision();
-                }
+        if (starRocksColumnType.toUpperCase(Locale.ROOT).startsWith(STARROCKS_ARRAY_DECIMAL_PRE)) {
+            Long p = MAX_PRECISION;
+            int scale = MAX_SCALE;
+            if (typeDefine.getPrecision() != null && typeDefine.getPrecision() > 0) {
+                p = typeDefine.getPrecision();
+            }
 
-                if (typeDefine.getScale() != null && typeDefine.getScale() > 0) {
-                    scale = typeDefine.getScale();
-                }
-                DecimalType decimalType;
-                decimalType = new DecimalType(p.intValue(), scale);
-                builder.dataType(decimalType);
-                builder.columnLength(p);
-                builder.scale(scale);
-                break;
-            case STARROCKS_ARRAY:
-                convertArray(typeDefine.getColumnType(), builder, typeDefine.getName());
-                break;
-            case STARROCKS_MAP:
-                convertMap(typeDefine.getColumnType(), builder, typeDefine.getName());
-                break;
-            default:
-                sampleTypeConverter(builder, typeDefine, starRocksColumnType);
+            if (typeDefine.getScale() != null && typeDefine.getScale() > 0) {
+                scale = typeDefine.getScale();
+            }
+            DecimalType decimalType;
+            decimalType = new DecimalType(p.intValue(), scale);
+            builder.dataType(decimalType);
+            builder.columnLength(p);
+            builder.scale(scale);
+        } else {
+            switch (starRocksColumnType) {
+                case STARROCKS_DATE:
+                    builder.dataType(LocalTimeType.LOCAL_DATE_TYPE);
+                    break;
+                case STARROCKS_DATETIME:
+                    builder.dataType(LocalTimeType.LOCAL_DATE_TIME_TYPE);
+                    builder.scale(typeDefine.getScale() == null ? 0 : typeDefine.getScale());
+                    break;
+                case STARROCKS_ARRAY:
+                    convertArray(typeDefine.getColumnType(), builder, typeDefine.getName());
+                    break;
+                case STARROCKS_MAP:
+                    convertMap(typeDefine.getColumnType(), builder, typeDefine.getName());
+                    break;
+                default:
+                    sampleTypeConverter(builder, typeDefine, starRocksColumnType);
+            }
         }
 
         return builder.build();
