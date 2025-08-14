@@ -36,7 +36,6 @@ import org.apache.seatunnel.api.table.catalog.exception.TableNotExistException;
 import org.apache.seatunnel.common.exception.CommonError;
 import org.apache.seatunnel.common.exception.CommonErrorCode;
 import org.apache.seatunnel.common.exception.SeaTunnelRuntimeException;
-import org.apache.seatunnel.common.utils.ExceptionUtils;
 import org.apache.seatunnel.common.utils.JdbcUrlUtil;
 import org.apache.seatunnel.common.utils.SeaTunnelException;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.utils.CatalogUtils;
@@ -57,6 +56,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -164,86 +164,35 @@ public abstract class AbstractJdbcCatalog implements Catalog {
                 tablePath.getTableName());
     }
 
+    @Override
     public CatalogTable getTable(TablePath tablePath)
             throws CatalogException, TableNotExistException {
-        if (!tableExists(tablePath)) {
-            throw new TableNotExistException(catalogName, tablePath);
-        }
-
-        String dbUrl;
-        if (StringUtils.isNotBlank(tablePath.getDatabaseName())) {
-            dbUrl = getUrlFromDatabaseName(tablePath.getDatabaseName());
-        } else {
-            dbUrl = getUrlFromDatabaseName(defaultDatabase);
-        }
-        Connection conn = getConnection(dbUrl);
-        try {
-            DatabaseMetaData metaData = conn.getMetaData();
-            Optional<PrimaryKey> primaryKey = getPrimaryKey(metaData, tablePath);
-            List<ConstraintKey> constraintKeys = getConstraintKeys(metaData, tablePath);
-            constraintKeys = filterDuplicateConstraintKeys(constraintKeys, primaryKey);
-            String tableComment = getTableComment(metaData, tablePath);
-            try (PreparedStatement ps = conn.prepareStatement(getSelectColumnsSql(tablePath));
-                    ResultSet resultSet = ps.executeQuery()) {
-
-                TableSchema.Builder builder = TableSchema.builder();
-                buildColumnsWithErrorCheck(tablePath, resultSet, builder);
-                // add primary key
-                primaryKey.ifPresent(builder::primaryKey);
-                // filter constraint key
-                List<String> columnNames = builder.build().getColumnNames();
-                constraintKeys =
-                        constraintKeys.stream()
-                                .filter(
-                                        key -> {
-                                            boolean valid =
-                                                    key.getColumnNames().stream()
-                                                            .allMatch(
-                                                                    column ->
-                                                                            columnNames.contains(
-                                                                                    column
-                                                                                            .getColumnName()));
-                                            if (!valid) {
-                                                log.warn(
-                                                        "The table {} constraint key [{}] is not supported. {}",
-                                                        tablePath,
-                                                        key.getConstraintName(),
-                                                        key);
-                                            }
-                                            return valid;
-                                        })
-                                .collect(Collectors.toList());
-                // add constraint key
-                constraintKeys.forEach(builder::constraintKey);
-                TableIdentifier tableIdentifier = getTableIdentifier(tablePath);
-                return CatalogTable.of(
-                        tableIdentifier,
-                        builder.build(),
-                        buildConnectorOptions(tablePath),
-                        Collections.emptyList(),
-                        tableComment,
-                        catalogName);
-            }
-        } catch (SeaTunnelRuntimeException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new CatalogException(
-                    String.format("Failed getting table %s", tablePath.getFullName()), e);
-        }
+        return getTableInternal(tablePath, null, false);
     }
 
+    @Override
     public CatalogTable getTableIgnoreUnSupportColumn(TablePath tablePath)
+            throws CatalogException, TableNotExistException {
+        return getTableInternal(tablePath, null, true);
+    }
+
+    @Override
+    public CatalogTable getTable(TablePath tablePath, List<String> fieldNames)
+            throws CatalogException, TableNotExistException {
+        return getTableInternal(tablePath, fieldNames, false);
+    }
+
+    private CatalogTable getTableInternal(
+            TablePath tablePath, List<String> fieldNames, boolean ignoreUnsupported)
             throws CatalogException, TableNotExistException {
         if (!tableExists(tablePath)) {
             throw new TableNotExistException(catalogName, tablePath);
         }
 
-        String dbUrl;
-        if (StringUtils.isNotBlank(tablePath.getDatabaseName())) {
-            dbUrl = getUrlFromDatabaseName(tablePath.getDatabaseName());
-        } else {
-            dbUrl = getUrlFromDatabaseName(defaultDatabase);
-        }
+        String dbUrl =
+                StringUtils.isNotBlank(tablePath.getDatabaseName())
+                        ? getUrlFromDatabaseName(tablePath.getDatabaseName())
+                        : getUrlFromDatabaseName(defaultDatabase);
         Connection conn = getConnection(dbUrl);
         try {
             DatabaseMetaData metaData = conn.getMetaData();
@@ -255,21 +204,40 @@ public abstract class AbstractJdbcCatalog implements Catalog {
                     ResultSet resultSet = ps.executeQuery()) {
 
                 TableSchema.Builder builder = TableSchema.builder();
-                try {
-                    buildColumnsWithErrorCheck(tablePath, resultSet, builder);
-                } catch (SeaTunnelRuntimeException e) {
-                    if (e.getSeaTunnelErrorCode() != null
-                            && CommonErrorCode.GET_CATALOG_TABLE_WITH_UNSUPPORTED_TYPE_ERROR.equals(
-                                    e.getSeaTunnelErrorCode())) {
-                        log.debug(ExceptionUtils.getMessage(e));
-                    } else {
-                        throw e;
+                Map<String, String> unsupported = new LinkedHashMap<>();
+                while (resultSet.next()) {
+                    try {
+                        Column column = buildColumn(resultSet);
+                        if (fieldNames == null || fieldNames.contains(column.getName())) {
+                            builder.column(column);
+                        }
+                    } catch (SeaTunnelRuntimeException e) {
+                        if (e.getSeaTunnelErrorCode() != null
+                                && CommonErrorCode.CONVERT_TO_SEATUNNEL_TYPE_ERROR_SIMPLE.equals(
+                                        e.getSeaTunnelErrorCode())) {
+                            if (ignoreUnsupported) {
+                            } else {
+                                String field = e.getParams().get("field");
+                                if (fieldNames == null || fieldNames.contains(field)) {
+                                    unsupported.put(field, e.getParams().get("dataType"));
+                                }
+                            }
+                        } else {
+                            throw e;
+                        }
                     }
                 }
+                if (!ignoreUnsupported && !unsupported.isEmpty()) {
+                    throw CommonError.getCatalogTableWithUnsupportedType(
+                            catalogName, tablePath.getFullName(), unsupported);
+                }
+                Set<String> columnNames = new HashSet<>(builder.build().getColumnNames());
                 // add primary key
-                primaryKey.ifPresent(builder::primaryKey);
+                if (primaryKey.isPresent()
+                        && columnNames.containsAll(primaryKey.get().getColumnNames())) {
+                    builder.primaryKey(primaryKey.get());
+                }
                 // filter constraint key
-                List<String> columnNames = builder.build().getColumnNames();
                 constraintKeys =
                         constraintKeys.stream()
                                 .filter(

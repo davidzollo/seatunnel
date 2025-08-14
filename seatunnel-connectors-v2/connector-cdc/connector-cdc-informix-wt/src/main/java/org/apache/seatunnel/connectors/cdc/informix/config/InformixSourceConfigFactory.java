@@ -20,6 +20,8 @@ package org.apache.seatunnel.connectors.cdc.informix.config;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfigFactory;
 import org.apache.seatunnel.connectors.cdc.debezium.EmbeddedDatabaseHistory;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.util.Properties;
 import java.util.UUID;
 
@@ -61,6 +63,12 @@ public class InformixSourceConfigFactory extends JdbcSourceConfigFactory {
             props.setProperty("database.serverTimezone", serverTimeZone);
         }
 
+        String colIncludeRegex =
+                buildColumnIncludeList(readColumnsMap, databaseList, tableList, true);
+        if (StringUtils.isNotBlank(colIncludeRegex)) {
+            props.setProperty("column.include.list", colIncludeRegex);
+        }
+
         if (dbzProperties != null) {
             props.putAll(dbzProperties);
         }
@@ -89,6 +97,7 @@ public class InformixSourceConfigFactory extends JdbcSourceConfigFactory {
                 connectMaxRetries,
                 connectionPoolSize,
                 SUPPORTED_EXACTLY_ONCE,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 }

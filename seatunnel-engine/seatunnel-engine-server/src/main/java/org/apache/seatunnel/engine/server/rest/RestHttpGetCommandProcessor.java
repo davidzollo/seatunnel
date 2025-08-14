@@ -36,6 +36,9 @@ import org.apache.seatunnel.engine.server.master.JobHistoryService.JobState;
 import org.apache.seatunnel.engine.server.operation.GetClusterHealthMetricsOperation;
 import org.apache.seatunnel.engine.server.operation.GetJobMetricsOperation;
 import org.apache.seatunnel.engine.server.operation.GetJobStatusOperation;
+import org.apache.seatunnel.engine.server.telemetry.log.LogoutService;
+import org.apache.seatunnel.engine.server.telemetry.log.operation.PackageJobLogsOperation;
+import org.apache.seatunnel.engine.server.telemetry.log.operation.PackageZetaLogsOperation;
 import org.apache.seatunnel.engine.server.utils.NodeEngineUtil;
 
 import com.hazelcast.cluster.Address;
@@ -55,6 +58,8 @@ import com.hazelcast.map.IMap;
 import com.hazelcast.spi.impl.NodeEngine;
 
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
@@ -63,8 +68,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
+import static com.hazelcast.internal.ascii.rest.HttpStatusCode.SC_200;
 import static com.hazelcast.internal.ascii.rest.HttpStatusCode.SC_500;
 import static org.apache.seatunnel.engine.server.rest.RestConstant.FINISHED_JOBS_INFO;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.PACKAGE_ALL_LOGS_URL;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.PACKAGE_JOB_LOGS_URL;
 import static org.apache.seatunnel.engine.server.rest.RestConstant.RUNNING_JOBS_URL;
 import static org.apache.seatunnel.engine.server.rest.RestConstant.RUNNING_JOB_URL;
 import static org.apache.seatunnel.engine.server.rest.RestConstant.SYSTEM_MONITORING_INFORMATION;
@@ -104,6 +112,10 @@ public class RestHttpGetCommandProcessor extends HttpCommandProcessor<HttpGetCom
                 handleJobInfoById(httpGetCommand, uri);
             } else if (uri.startsWith(SYSTEM_MONITORING_INFORMATION)) {
                 getSystemMonitoringInformation(httpGetCommand);
+            } else if (uri.startsWith(PACKAGE_JOB_LOGS_URL)) {
+                handlePackageJobLogs(httpGetCommand, uri);
+            } else if (uri.startsWith(PACKAGE_ALL_LOGS_URL)) {
+                handlePackageZetaLogs(httpGetCommand, uri);
             } else {
                 original.handle(httpGetCommand);
             }
@@ -410,5 +422,127 @@ public class RestHttpGetCommandProcessor extends HttpCommandProcessor<HttpGetCom
                 .add(RestConstant.METRICS, JsonUtil.toJsonObject(getJobMetrics(jobMetrics)));
 
         return jobInfoJson;
+    }
+
+    private void handlePackageJobLogs(HttpGetCommand command, String uri) {
+        try {
+            String jobIdStr = uri.substring(PACKAGE_JOB_LOGS_URL.length() + 1);
+            Long jobId = Long.parseLong(jobIdStr);
+
+            SeaTunnelServer seaTunnelServer = getSeaTunnelServer(false);
+            byte[] zipBytes;
+            if (seaTunnelServer == null) {
+                zipBytes =
+                        (byte[])
+                                NodeEngineUtil.sendOperationToMasterNode(
+                                                getNode().nodeEngine,
+                                                new PackageJobLogsOperation(jobId))
+                                        .join();
+            } else {
+                LogoutService logOutService = new LogoutService(seaTunnelServer);
+                zipBytes = logOutService.packageJobLogs(jobId);
+            }
+
+            String fileName =
+                    String.format(
+                            "job_%d_logs_%s.zip",
+                            jobId, new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
+            Map<String, Object> headers = new HashMap<>();
+            headers.put("Content-Type", "application/zip");
+            headers.put("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+            command.setResponseWithHeaders(SC_200, headers, zipBytes);
+        } catch (Exception e) {
+            logger.severe("Failed to package job logs", e);
+            prepareResponse(SC_500, command, "Failed to package job logs: " + e.getMessage());
+            textCommandService.sendResponse(command);
+        }
+    }
+
+    private void handlePackageZetaLogs(HttpGetCommand command, String uri) {
+        try {
+            String[] params = uri.substring(PACKAGE_ALL_LOGS_URL.length()).split("\\?");
+            String dateParam = null;
+            String hostParam = null;
+            if (params.length > 1) {
+                String[] queryParams = params[1].split("&");
+                for (String param : queryParams) {
+                    String[] keyValue = param.split("=");
+                    if (keyValue.length == 2) {
+                        if ("date".equals(keyValue[0])) {
+                            dateParam = keyValue[1];
+                        } else if ("host".equals(keyValue[0])) {
+                            hostParam = keyValue[1];
+                        }
+                    }
+                }
+            }
+
+            PackageZetaLogsOperation operation;
+
+            if (dateParam != null && !dateParam.trim().isEmpty()) {
+                if (hostParam != null && !hostParam.trim().isEmpty()) {
+                    operation = new PackageZetaLogsOperation(dateParam, hostParam);
+                } else {
+                    operation = new PackageZetaLogsOperation(dateParam);
+                }
+            } else {
+                if (hostParam != null && !hostParam.trim().isEmpty()) {
+                    operation = new PackageZetaLogsOperation(LocalDate.now(), hostParam);
+                } else {
+                    operation = new PackageZetaLogsOperation();
+                }
+            }
+
+            SeaTunnelServer seaTunnelServer = getSeaTunnelServer(false);
+            byte[] zipBytes;
+            if (seaTunnelServer == null) {
+                zipBytes =
+                        (byte[])
+                                NodeEngineUtil.sendOperationToMasterNode(
+                                                getNode().nodeEngine, operation)
+                                        .join();
+            } else {
+                LogoutService logOutService = new LogoutService(seaTunnelServer);
+                if (dateParam != null && !dateParam.trim().isEmpty()) {
+                    try {
+                        LocalDate date =
+                                LocalDate.parse(
+                                        dateParam, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                        if (hostParam != null && !hostParam.trim().isEmpty()) {
+                            zipBytes = logOutService.packageZetaLogs(date, hostParam);
+                        } else {
+                            zipBytes = logOutService.packageZetaLogs(date);
+                        }
+                    } catch (Exception e) {
+                        logger.warning(
+                                "Invalid date format: " + dateParam + ", using current date", e);
+                        if (hostParam != null && !hostParam.trim().isEmpty()) {
+                            zipBytes = logOutService.packageZetaLogs(LocalDate.now(), hostParam);
+                        } else {
+                            zipBytes = logOutService.packageZetaLogs();
+                        }
+                    }
+                } else {
+                    if (hostParam != null && !hostParam.trim().isEmpty()) {
+                        zipBytes = logOutService.packageZetaLogs(LocalDate.now(), hostParam);
+                    } else {
+                        zipBytes = logOutService.packageZetaLogs();
+                    }
+                }
+            }
+
+            String fileName =
+                    String.format(
+                            "all_logs_%s.zip",
+                            new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
+            Map<String, Object> headers = new HashMap<>();
+            headers.put("Content-Type", "application/zip");
+            headers.put("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+            command.setResponseWithHeaders(SC_200, headers, zipBytes);
+        } catch (Exception e) {
+            logger.severe("Failed to package all logs", e);
+            prepareResponse(SC_500, command, "Failed to package all logs: " + e.getMessage());
+            textCommandService.sendResponse(command);
+        }
     }
 }

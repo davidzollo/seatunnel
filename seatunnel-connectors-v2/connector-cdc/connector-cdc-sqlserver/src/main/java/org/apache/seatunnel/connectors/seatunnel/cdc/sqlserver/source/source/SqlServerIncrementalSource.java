@@ -20,11 +20,13 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.sqlserver.source.source;
 import org.apache.seatunnel.api.configuration.Option;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.source.SeaTunnelSource;
+import org.apache.seatunnel.api.source.SupportColumnProjection;
 import org.apache.seatunnel.api.source.SupportParallelism;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.common.utils.JdbcUrlUtil;
 import org.apache.seatunnel.common.utils.SeaTunnelException;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfig;
+import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceTableConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.SourceConfig;
 import org.apache.seatunnel.connectors.cdc.base.dialect.DataSourceDialect;
 import org.apache.seatunnel.connectors.cdc.base.option.JdbcSourceOptions;
@@ -45,6 +47,8 @@ import org.apache.kafka.connect.data.Struct;
 
 import com.google.auto.service.AutoService;
 import io.debezium.jdbc.JdbcConnection;
+import io.debezium.relational.Column;
+import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 import io.debezium.relational.history.ConnectTableChangeSerializer;
 import io.debezium.relational.history.TableChanges;
@@ -54,6 +58,7 @@ import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -64,7 +69,7 @@ import java.util.stream.Collectors;
 @NoArgsConstructor
 @AutoService(SeaTunnelSource.class)
 public class SqlServerIncrementalSource<T> extends IncrementalSource<T, JdbcSourceConfig>
-        implements SupportParallelism {
+        implements SupportParallelism, SupportColumnProjection {
 
     static final String IDENTIFIER = "SqlServer-CDC";
 
@@ -108,7 +113,18 @@ public class SqlServerIncrementalSource<T> extends IncrementalSource<T, JdbcSour
     @Override
     public DebeziumDeserializationSchema<T> createDebeziumDeserializationSchema(
             ReadonlyConfig config) {
-        Map<TableId, Struct> tableIdStructMap = tableChanges();
+        Map<String, List<String>> readColumnsMap =
+                JdbcSourceTableConfig.toReadColumnsMap(
+                        config.get(JdbcSourceOptions.TABLE_NAMES_CONFIG));
+        readColumnsMap =
+                readColumnsMap.entrySet().stream()
+                        .collect(
+                                Collectors.toMap(
+                                        e -> e.getKey().replace("[", "").replace("]", ""),
+                                        Map.Entry::getValue,
+                                        (v1, v2) -> v1,
+                                        LinkedHashMap::new));
+        Map<TableId, Struct> tableIdStructMap = tableChanges(readColumnsMap);
         if (DeserializeFormat.COMPATIBLE_DEBEZIUM_JSON.equals(
                 config.get(JdbcSourceOptions.FORMAT))) {
             return (DebeziumDeserializationSchema<T>)
@@ -117,11 +133,13 @@ public class SqlServerIncrementalSource<T> extends IncrementalSource<T, JdbcSour
         }
 
         String zoneId = config.get(JdbcSourceOptions.SERVER_TIME_ZONE);
+
         return (DebeziumDeserializationSchema<T>)
                 SeaTunnelRowDebeziumDeserializeSchema.builder()
                         .setTables(catalogTables)
                         .setTableIdTableChangeMap(tableIdStructMap)
                         .setServerTimeZone(ZoneId.of(zoneId))
+                        .setReadColumnsMap(readColumnsMap)
                         .build();
     }
 
@@ -154,7 +172,7 @@ public class SqlServerIncrementalSource<T> extends IncrementalSource<T, JdbcSour
         }
     }
 
-    private Map<TableId, Struct> tableChanges() {
+    private Map<TableId, Struct> tableChanges(Map<String, List<String>> readColumnsMap) {
         JdbcSourceConfig jdbcSourceConfig = configFactory.create(0);
         SqlServerDialect dialect =
                 new SqlServerDialect((SqlServerSourceConfigFactory) configFactory, catalogTables);
@@ -168,9 +186,15 @@ public class SqlServerIncrementalSource<T> extends IncrementalSource<T, JdbcSour
                                     Function.identity(),
                                     (tableId) -> {
                                         TableChanges tableChanges = new TableChanges();
-                                        tableChanges.create(
+                                        Table originalTable =
                                                 dialect.queryTableSchema(jdbcConnection, tableId)
-                                                        .getTable());
+                                                        .getTable();
+
+                                        Table filteredTable =
+                                                filterTableColumns(
+                                                        originalTable, tableId, readColumnsMap);
+
+                                        tableChanges.create(filteredTable);
                                         return connectTableChangeSerializer
                                                 .serialize(tableChanges)
                                                 .get(0);
@@ -178,6 +202,32 @@ public class SqlServerIncrementalSource<T> extends IncrementalSource<T, JdbcSour
         } catch (Exception e) {
             throw new SeaTunnelException(e);
         }
+    }
+
+    private Table filterTableColumns(
+            Table originalTable, TableId tableId, Map<String, List<String>> readColumnsMap) {
+        String tableKey = tableId.toString();
+        List<String> readColumns = readColumnsMap.get(tableKey);
+
+        if (readColumns == null || readColumns.isEmpty()) {
+            return originalTable;
+        }
+
+        List<Column> filteredColumns =
+                originalTable.columns().stream()
+                        .filter(column -> readColumns.contains(column.name()))
+                        .collect(Collectors.toList());
+
+        List<String> filteredPrimaryKeyNames =
+                originalTable.primaryKeyColumnNames().stream()
+                        .filter(readColumns::contains)
+                        .collect(Collectors.toList());
+
+        return Table.editor()
+                .tableId(tableId)
+                .addColumns(filteredColumns)
+                .setPrimaryKeyNames(filteredPrimaryKeyNames)
+                .create();
     }
 
     @Override

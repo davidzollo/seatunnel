@@ -48,6 +48,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,13 +74,17 @@ public final class SeaTunnelRowDebeziumDeserializeSchema
     private List<CatalogTable> tables;
     private Map<String, SeaTunnelRowDebeziumDeserializationConverters> tableRowConverters;
 
+    private final Map<String, Boolean> selectAllMap;
+    private final Map<String, List<String>> readColumnsMap;
+
     SeaTunnelRowDebeziumDeserializeSchema(
             MetadataConverter[] metadataConverters,
             List<CatalogTable> tables,
             ZoneId serverTimeZone,
             DebeziumDeserializationConverterFactory userDefinedConverterFactory,
             SchemaChangeResolver schemaChangeResolver,
-            Map<TableId, Struct> tableIdTableChangeMap) {
+            Map<TableId, Struct> tableIdTableChangeMap,
+            Map<String, List<String>> readColumnsMap) {
         super(tableIdTableChangeMap);
         this.metadataConverters = metadataConverters;
         this.serverTimeZone = serverTimeZone;
@@ -90,6 +95,20 @@ public final class SeaTunnelRowDebeziumDeserializeSchema
         this.tableRowConverters =
                 createTableRowConverters(
                         tables, metadataConverters, serverTimeZone, userDefinedConverterFactory);
+        this.selectAllMap =
+                tables.stream()
+                        .map(CatalogTable::getTablePath)
+                        .collect(
+                                HashMap::new,
+                                (map, tablePath) ->
+                                        map.put(
+                                                tablePath.toString(),
+                                                readColumnsMap == null
+                                                        || readColumnsMap.isEmpty()
+                                                        || readColumnsMap.get(tablePath.toString())
+                                                                == null),
+                                HashMap::putAll);
+        this.readColumnsMap = readColumnsMap;
     }
 
     @Override
@@ -212,22 +231,34 @@ public final class SeaTunnelRowDebeziumDeserializeSchema
             SeaTunnelRow insert = extractAfterRow(converters, record, messageStruct, valueSchema);
             insert.setRowKind(RowKind.INSERT);
             insert.setTableId(tableId);
-            collector.collect(insert);
+            SeaTunnelRow filteredInsert = filterFields(insert, tableId);
+            if (filteredInsert != null) {
+                collector.collect(filteredInsert);
+            }
         } else if (operation == Envelope.Operation.DELETE) {
             SeaTunnelRow delete = extractBeforeRow(converters, record, messageStruct, valueSchema);
             delete.setRowKind(RowKind.DELETE);
             delete.setTableId(tableId);
-            collector.collect(delete);
+            SeaTunnelRow filteredDelete = filterFields(delete, tableId);
+            if (filteredDelete != null) {
+                collector.collect(filteredDelete);
+            }
         } else {
             SeaTunnelRow before = extractBeforeRow(converters, record, messageStruct, valueSchema);
             before.setRowKind(RowKind.UPDATE_BEFORE);
             before.setTableId(tableId);
-            collector.collect(before);
+            SeaTunnelRow filteredBefore = filterFields(before, tableId);
+            if (filteredBefore != null) {
+                collector.collect(filteredBefore);
+            }
 
             SeaTunnelRow after = extractAfterRow(converters, record, messageStruct, valueSchema);
             after.setRowKind(RowKind.UPDATE_AFTER);
             after.setTableId(tableId);
-            collector.collect(after);
+            SeaTunnelRow filteredAfter = filterFields(after, tableId);
+            if (filteredAfter != null) {
+                collector.collect(filteredAfter);
+            }
         }
     }
 
@@ -253,6 +284,60 @@ public final class SeaTunnelRowDebeziumDeserializeSchema
         Schema beforeSchema = valueSchema.field(Envelope.FieldName.BEFORE).schema();
         Struct before = value.getStruct(Envelope.FieldName.BEFORE);
         return runtimeConverter.convert(record, before, beforeSchema);
+    }
+
+    private SeaTunnelRow filterFields(SeaTunnelRow row, String tableId) {
+        if (selectAllMap.get(tableId)) {
+            return row;
+        }
+
+        if (readColumnsMap == null || readColumnsMap.isEmpty()) {
+            return row;
+        }
+
+        CatalogTable table = findTableByTableId(tableId);
+        if (table == null) {
+            log.warn("Table not found for tableId: {}", tableId);
+            return row;
+        }
+
+        List<String> allFieldNames = table.getTableSchema().getColumnNames();
+        List<Integer> selectedIndices = new ArrayList<>();
+
+        List<String> readColumns = readColumnsMap.get(tableId);
+
+        for (String col : readColumns) {
+            int index = allFieldNames.indexOf(col);
+            if (index >= 0) {
+                selectedIndices.add(index);
+            } else {
+                log.warn("Selected field '{}' not found in table '{}'", col, tableId);
+            }
+        }
+
+        if (selectedIndices.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No valid selected fields found for table：" + tableId);
+        }
+
+        SeaTunnelRow filteredRow = new SeaTunnelRow(selectedIndices.size());
+        filteredRow.setRowKind(row.getRowKind());
+        filteredRow.setTableId(row.getTableId());
+
+        for (int i = 0; i < selectedIndices.size(); i++) {
+            filteredRow.setField(i, row.getField(selectedIndices.get(i)));
+        }
+
+        return filteredRow;
+    }
+
+    private CatalogTable findTableByTableId(String tableId) {
+        for (CatalogTable table : tables) {
+            if (table.getTablePath().toString().equals(tableId)) {
+                return table;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -311,6 +396,7 @@ public final class SeaTunnelRowDebeziumDeserializeSchema
                 DebeziumDeserializationConverterFactory.DEFAULT;
         private SchemaChangeResolver schemaChangeResolver;
         private Map<TableId, Struct> tableIdTableChangeMap;
+        private Map<String, List<String>> readColumnsMap;;
 
         public SeaTunnelRowDebeziumDeserializeSchema build() {
             return new SeaTunnelRowDebeziumDeserializeSchema(
@@ -319,7 +405,8 @@ public final class SeaTunnelRowDebeziumDeserializeSchema
                     serverTimeZone,
                     userDefinedConverterFactory,
                     schemaChangeResolver,
-                    tableIdTableChangeMap);
+                    tableIdTableChangeMap,
+                    readColumnsMap);
         }
     }
 }

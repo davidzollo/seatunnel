@@ -96,8 +96,8 @@ public class SinkConfig extends CommonConfig {
     public static final Option<Boolean> TABLE_UPSERT_MODE_ENABLED_PROP =
             Options.key("iceberg.table.upsert-mode-enabled")
                     .booleanType()
-                    .defaultValue(false)
-                    .withDescription("Set to `true` to enable upsert mode, default is `false`");
+                    .defaultValue(true)
+                    .withDescription("Set to `true` to enable upsert mode, default is `true`");
 
     public static final Option<SchemaSaveMode> SCHEMA_SAVE_MODE =
             Options.key("schema_save_mode")

@@ -276,15 +276,22 @@ public interface JdbcOptions {
                     .noDefaultValue()
                     .withDescription("additional connection configuration parameters");
 
-    Option<String> DATE_FORMAT =
-            Options.key("date_format")
+    Option<String> DAMENG_WRAP_TIME_BY_TO_DATE_DATE_FORMAT =
+            Options.key("dameng.wrap_time_by_to_date.date_format")
                     .stringType()
                     .defaultValue("YYYY-MM-DD HH24:MI:SS")
-                    .withDescription("date format to date");
+                    .withDescription(
+                            "The date format used when wrapping the time type by to_date function. "
+                                    + "This option is only valid for Dameng database, and it is used to solve the problem of "
+                                    + "inability to parse the time type in the JDBC driver. If set, the time type will be wrapped by to_date function with this format.");
 
-    Option<Boolean> ENABLE_TO_DATE =
-            Options.key("enable_to_date")
+    Option<Boolean> DAMENG_WRAP_TIME_BY_TO_DATE =
+            Options.key("dameng.wrap_time_by_to_date")
                     .booleanType()
                     .defaultValue(false)
-                    .withDescription("enable to date");
+                    .withFallbackKeys("enable_to_date")
+                    .withDescription(
+                            "Whether to wrap the time type by to_date function, default is false. "
+                                    + "This option is only valid for Dameng database, and it is used to solve the problem of "
+                                    + "inability to parse the time type in the JDBC driver. If set to true, the time type will be wrapped by to_date function.");
 }

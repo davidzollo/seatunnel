@@ -20,10 +20,32 @@ package org.apache.seatunnel.connectors.cdc.base.config;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Data
 public class JdbcSourceTableConfig implements Serializable {
     private String table;
     private List<String> primaryKeys;
+    private List<String> readColumns;
+
+    public static Map<String, List<String>> toReadColumnsMap(
+            List<JdbcSourceTableConfig> tableConfigs) {
+        if (tableConfigs == null || tableConfigs.isEmpty()) {
+            return new HashMap<>();
+        }
+        return tableConfigs.stream()
+                .filter(
+                        tableConfig ->
+                                tableConfig.getTable() != null
+                                        && !tableConfig.getTable().isEmpty()
+                                        && tableConfig.getReadColumns() != null
+                                        && !tableConfig.getReadColumns().isEmpty())
+                .collect(
+                        Collectors.toMap(
+                                JdbcSourceTableConfig::getTable,
+                                JdbcSourceTableConfig::getReadColumns));
+    }
 }

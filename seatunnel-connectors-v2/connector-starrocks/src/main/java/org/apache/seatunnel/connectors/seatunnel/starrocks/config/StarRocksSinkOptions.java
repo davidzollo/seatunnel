@@ -120,7 +120,7 @@ public interface StarRocksSinkOptions {
     Option<Boolean> ENABLE_UPSERT_DELETE =
             Options.key("enable_upsert_delete")
                     .booleanType()
-                    .defaultValue(false)
+                    .defaultValue(true)
                     .withDescription(
                             "Whether to enable upsert/delete, only supports PrimaryKey model.");
 

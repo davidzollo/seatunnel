@@ -147,7 +147,7 @@ public class MongodbConfig {
     public static final Option<Boolean> UPSERT_ENABLE =
             Options.key("upsert-enable")
                     .booleanType()
-                    .defaultValue(false)
+                    .defaultValue(true)
                     .withDescription("Whether to write documents via upsert mode.");
 
     public static final Option<List<String>> PRIMARY_KEY =

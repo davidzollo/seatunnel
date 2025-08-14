@@ -57,4 +57,8 @@ public class RestConstant {
             "/hazelcast/rest/maps/system-monitoring-information";
 
     public static final String STOP_JOB_URL = "/hazelcast/rest/maps/stop-job";
+
+    public static final String PACKAGE_JOB_LOGS_URL = "/hazelcast/rest/maps/package-job-logs";
+
+    public static final String PACKAGE_ALL_LOGS_URL = "/hazelcast/rest/maps/package-zeta-logs";
 }

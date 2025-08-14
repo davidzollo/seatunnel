@@ -25,6 +25,7 @@ import io.debezium.connector.highgo.HighGoConnectorConfig;
 import io.debezium.relational.RelationalTableFilters;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 public class HighGoSourceConfig extends JdbcSourceConfig {
@@ -54,7 +55,8 @@ public class HighGoSourceConfig extends JdbcSourceConfig {
             int connectMaxRetries,
             int connectionPoolSize,
             boolean exactlyOnce,
-            String whereCondition) {
+            String whereCondition,
+            Map<String, List<String>> readColumnsMap) {
         super(
                 startupConfig,
                 stopConfig,
@@ -79,7 +81,8 @@ public class HighGoSourceConfig extends JdbcSourceConfig {
                 connectMaxRetries,
                 connectionPoolSize,
                 exactlyOnce,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 
     @Override

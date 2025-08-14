@@ -151,6 +151,7 @@ public class IncrementalSplitStateTest {
                 null,
                 null,
                 new SnapshotSplitWatermark(null, lowWatermark, highWatermark),
+                null,
                 null);
     }
 

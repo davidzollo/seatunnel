@@ -20,6 +20,8 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.mysql.config;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfigFactory;
 import org.apache.seatunnel.connectors.cdc.debezium.EmbeddedDatabaseHistory;
 
+import org.apache.commons.lang3.StringUtils;
+
 import io.debezium.config.Configuration;
 import io.debezium.connector.mysql.MySqlConnectorConfig;
 
@@ -103,6 +105,12 @@ public class MySqlSourceConfigFactory extends JdbcSourceConfigFactory {
             props.setProperty("database.serverTimezone", serverTimeZone);
         }
 
+        String colIncludeRegex =
+                buildColumnIncludeList(readColumnsMap, databaseList, tableList, false);
+        if (StringUtils.isNotBlank(colIncludeRegex)) {
+            props.setProperty("column.include.list", colIncludeRegex);
+        }
+
         // override the user-defined debezium properties
         if (dbzProperties != null) {
             dbzProperties.forEach(props::put);
@@ -134,6 +142,7 @@ public class MySqlSourceConfigFactory extends JdbcSourceConfigFactory {
                 connectMaxRetries,
                 connectionPoolSize,
                 exactlyOnce,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 }

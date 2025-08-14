@@ -58,12 +58,12 @@ import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.COMPATIBLE_MODE;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.CONNECTION_CHECK_TIMEOUT_SEC;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.CUSTOM_SQL;
+import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.DAMENG_WRAP_TIME_BY_TO_DATE;
+import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.DAMENG_WRAP_TIME_BY_TO_DATE_DATE_FORMAT;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.DATABASE;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.DATABASE_SCHEMA;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.DATA_SAVE_MODE;
-import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.DATE_FORMAT;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.DRIVER;
-import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.ENABLE_TO_DATE;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.ENABLE_UPSERT;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.ENABLE_UPSERT_BY_SELECT_EXIST;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.GENERATE_SINK_SQL;
@@ -299,7 +299,7 @@ public class JdbcSinkFactory implements TableSinkFactory {
                         IS_PRIMARY_KEY_UPDATED,
                         MULTI_TABLE_SINK_REPLICA,
                         MULTI_TABLE_SINK_TTL_SEC,
-                        ENABLE_TO_DATE,
+                        DAMENG_WRAP_TIME_BY_TO_DATE,
                         WRITE_MODE,
                         MAX_RETRIES)
                 .conditional(
@@ -311,7 +311,8 @@ public class JdbcSinkFactory implements TableSinkFactory {
                 .conditional(GENERATE_SINK_SQL, true, DATABASE)
                 .conditional(GENERATE_SINK_SQL, false, QUERY)
                 .conditional(DATA_SAVE_MODE, DataSaveMode.CUSTOM_PROCESSING, CUSTOM_SQL)
-                .conditional(ENABLE_TO_DATE, true, DATE_FORMAT)
+                .conditional(
+                        DAMENG_WRAP_TIME_BY_TO_DATE, true, DAMENG_WRAP_TIME_BY_TO_DATE_DATE_FORMAT)
                 .conditional(
                         WRITE_MODE,
                         JdbcSinkConfig.WriteMode.MERGE,

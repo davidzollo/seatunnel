@@ -26,6 +26,7 @@ import io.debezium.connector.dameng.DamengConnectorConfig;
 import io.debezium.relational.RelationalTableFilters;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 public class DamengSourceConfig extends JdbcSourceConfig {
@@ -54,7 +55,8 @@ public class DamengSourceConfig extends JdbcSourceConfig {
             int connectMaxRetries,
             int connectionPoolSize,
             boolean exactlyOnce,
-            String whereCondition) {
+            String whereCondition,
+            Map<String, List<String>> readColumnsMap) {
         super(
                 startupConfig,
                 stopConfig,
@@ -79,7 +81,8 @@ public class DamengSourceConfig extends JdbcSourceConfig {
                 connectMaxRetries,
                 connectionPoolSize,
                 exactlyOnce,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 
     @Override

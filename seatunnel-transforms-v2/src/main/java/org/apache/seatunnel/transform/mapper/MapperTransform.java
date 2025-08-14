@@ -149,6 +149,7 @@ public class MapperTransform extends MultipleFieldOutputTransform {
                                                     .scale(column.getScale())
                                                     .nullable(column.isNullable())
                                                     .sinkType(column.getSinkType())
+                                                    .sourceType(column.getSourceType())
                                                     .defaultValue(column.getDefaultValue())
                                                     .comment(column.getComment())
                                                     .build();
@@ -494,7 +495,8 @@ public class MapperTransform extends MultipleFieldOutputTransform {
                                     col.isNullable(),
                                     col.getDefaultValue(),
                                     col.getComment(),
-                                    col.getSinkType());
+                                    col.getSinkType(),
+                                    col.getSourceType());
                         })
                 .toArray(Column[]::new);
     }

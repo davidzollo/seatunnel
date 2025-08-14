@@ -32,6 +32,8 @@ import org.apache.seatunnel.engine.server.operation.SavePointJobOperation;
 import org.apache.seatunnel.engine.server.operation.SubmitJobOperation;
 import org.apache.seatunnel.engine.server.operation.UploadConnectorJarOperation;
 import org.apache.seatunnel.engine.server.operation.WaitForJobCompleteOperation;
+import org.apache.seatunnel.engine.server.telemetry.log.operation.PackageJobLogsOperation;
+import org.apache.seatunnel.engine.server.telemetry.log.operation.PackageZetaLogsOperation;
 
 import com.hazelcast.internal.serialization.DataSerializerHook;
 import com.hazelcast.internal.serialization.impl.FactoryIdHelper;
@@ -69,6 +71,10 @@ public final class ClientToServerOperationDataSerializerHook implements DataSeri
     public static final int UPLOAD_CONNECTOR_JAR_OPERATION = 11;
 
     public static final int GET_JOB_CHECKPOINT_OPERATION = 12;
+
+    public static final int PACKAGE_JOB_LOGS_OPERATION = 13;
+
+    public static final int PACKAGE_ZETA_LOGS_OPERATION = 14;
 
     public static final int REFRESH_LICENSE_OPERATION = 100;
 
@@ -117,6 +123,10 @@ public final class ClientToServerOperationDataSerializerHook implements DataSeri
                     return new UploadConnectorJarOperation();
                 case GET_JOB_CHECKPOINT_OPERATION:
                     return new GetJobCheckpointOperation();
+                case PACKAGE_JOB_LOGS_OPERATION:
+                    return new PackageJobLogsOperation();
+                case PACKAGE_ZETA_LOGS_OPERATION:
+                    return new PackageZetaLogsOperation();
                 case REFRESH_LICENSE_OPERATION:
                     return new RefreshLicenseOperation();
                 default:

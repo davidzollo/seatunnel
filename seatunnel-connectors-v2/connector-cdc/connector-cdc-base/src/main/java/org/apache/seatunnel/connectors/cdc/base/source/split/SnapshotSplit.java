@@ -24,6 +24,9 @@ import io.debezium.relational.TableId;
 import lombok.Getter;
 import lombok.ToString;
 
+import java.util.List;
+import java.util.Map;
+
 @Getter
 @ToString(callSuper = true)
 public class SnapshotSplit extends SourceSplitBase {
@@ -40,6 +43,8 @@ public class SnapshotSplit extends SourceSplitBase {
 
     private final String whereConditionClause;
 
+    private final Map<TableId, List<String>> readColumnsMap;
+
     public SnapshotSplit(
             String splitId,
             TableId tableId,
@@ -47,7 +52,7 @@ public class SnapshotSplit extends SourceSplitBase {
             Object[] splitStart,
             Object[] splitEnd,
             boolean isNull) {
-        this(splitId, tableId, splitKeyType, splitStart, splitEnd, null, null, isNull, null);
+        this(splitId, tableId, splitKeyType, splitStart, splitEnd, null, null, isNull, null, null);
     }
 
     public SnapshotSplit(
@@ -67,7 +72,30 @@ public class SnapshotSplit extends SourceSplitBase {
                 null,
                 null,
                 isNull,
-                whereConditionClause);
+                whereConditionClause,
+                null);
+    }
+
+    public SnapshotSplit(
+            String splitId,
+            TableId tableId,
+            SeaTunnelRowType splitKeyType,
+            Object[] splitStart,
+            Object[] splitEnd,
+            boolean isNull,
+            String whereConditionClause,
+            Map<TableId, List<String>> readColumnsMap) {
+        this(
+                splitId,
+                tableId,
+                splitKeyType,
+                splitStart,
+                splitEnd,
+                null,
+                null,
+                isNull,
+                whereConditionClause,
+                readColumnsMap);
     }
 
     public SnapshotSplit(
@@ -79,7 +107,8 @@ public class SnapshotSplit extends SourceSplitBase {
             Offset lowWatermark,
             Offset highWatermark,
             boolean isNull,
-            String whereConditionClause) {
+            String whereConditionClause,
+            Map<TableId, List<String>> readColumnsMap) {
         super(splitId);
         this.tableId = tableId;
         this.splitKeyType = splitKeyType;
@@ -89,6 +118,7 @@ public class SnapshotSplit extends SourceSplitBase {
         this.highWatermark = highWatermark;
         this.isNull = isNull;
         this.whereConditionClause = whereConditionClause;
+        this.readColumnsMap = readColumnsMap;
     }
 
     @Override

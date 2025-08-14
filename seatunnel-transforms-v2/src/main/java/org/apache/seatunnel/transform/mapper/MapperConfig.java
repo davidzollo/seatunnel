@@ -104,6 +104,9 @@ public class MapperConfig implements Serializable {
         @JsonAlias("sink_type")
         private String sinkType;
 
+        @JsonAlias("source_type")
+        private String sourceType;
+
         @JsonAlias("default_value")
         private Object defaultValue;
 

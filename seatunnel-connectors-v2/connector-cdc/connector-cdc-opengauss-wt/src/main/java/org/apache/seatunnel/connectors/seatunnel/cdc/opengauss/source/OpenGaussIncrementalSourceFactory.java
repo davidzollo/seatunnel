@@ -37,8 +37,12 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.JdbcCatalogOptions
 import com.google.auto.service.AutoService;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+
+import static org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceTableConfig.toReadColumnsMap;
 
 @AutoService(Factory.class)
 public class OpenGaussIncrementalSourceFactory implements TableSourceFactory {
@@ -87,11 +91,14 @@ public class OpenGaussIncrementalSourceFactory implements TableSourceFactory {
             } catch (ClassNotFoundException e) {
                 throw new RuntimeException("OpenGauss driver not found.", e);
             }
-            List<CatalogTable> catalogTables =
-                    CatalogTableUtil.getCatalogTables(
-                            context.getOptions(), context.getClassLoader());
             Optional<List<JdbcSourceTableConfig>> tableConfigs =
                     context.getOptions().getOptional(JdbcSourceOptions.TABLE_NAMES_CONFIG);
+            Map<String, List<String>> readColumnsMap =
+                    toReadColumnsMap(tableConfigs.orElseGet(ArrayList::new));
+            List<CatalogTable> catalogTables =
+                    CatalogTableUtil.getCatalogTables(
+                            context.getOptions(), context.getClassLoader(), readColumnsMap);
+
             if (tableConfigs.isPresent()) {
                 catalogTables =
                         CatalogTableUtils.mergeCatalogTableConfig(

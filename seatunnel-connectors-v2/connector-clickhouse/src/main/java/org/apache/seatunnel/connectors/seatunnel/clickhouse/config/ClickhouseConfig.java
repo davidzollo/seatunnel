@@ -108,7 +108,7 @@ public class ClickhouseConfig {
     public static final Option<Boolean> SUPPORT_UPSERT =
             Options.key("support_upsert")
                     .booleanType()
-                    .defaultValue(false)
+                    .defaultValue(true)
                     .withDescription("Support upsert row by query primary key");
 
     public static final Option<Boolean> ALLOW_EXPERIMENTAL_LIGHTWEIGHT_DELETE =

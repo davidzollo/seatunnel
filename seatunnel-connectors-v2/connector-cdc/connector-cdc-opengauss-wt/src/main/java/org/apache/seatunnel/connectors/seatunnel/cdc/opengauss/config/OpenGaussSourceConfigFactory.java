@@ -22,6 +22,8 @@ import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfigFactory;
 import org.apache.seatunnel.connectors.cdc.debezium.EmbeddedDatabaseHistory;
 import org.apache.seatunnel.connectors.seatunnel.cdc.opengauss.option.OpenGaussOptions;
 
+import org.apache.commons.lang3.StringUtils;
+
 import io.debezium.connector.opengauss.OpengaussConnector;
 
 import java.util.Properties;
@@ -84,6 +86,12 @@ public class OpenGaussSourceConfigFactory extends JdbcSourceConfigFactory {
             props.setProperty("table.include.list", tableIncludeList);
         }
 
+        String colIncludeRegex =
+                buildColumnIncludeList(readColumnsMap, databaseList, tableList, true);
+        if (StringUtils.isNotBlank(colIncludeRegex)) {
+            props.setProperty("column.include.list", colIncludeRegex);
+        }
+
         if (dbzProperties != null) {
             props.putAll(dbzProperties);
         }
@@ -112,6 +120,7 @@ public class OpenGaussSourceConfigFactory extends JdbcSourceConfigFactory {
                 connectMaxRetries,
                 connectionPoolSize,
                 SUPPORTED_EXACTLY_ONCE,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 }

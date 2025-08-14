@@ -105,6 +105,13 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
 
     @Override
     public List<CatalogTable> getTables(ReadonlyConfig config) throws CatalogException {
+        return getTables(config, this::getTable);
+    }
+
+    @Override
+    public List<CatalogTable> getTables(
+            ReadonlyConfig config, CatalogTableFunction<TablePath> getTableFunction)
+            throws CatalogException {
         // Get the list of specified tables
         List<String> tableNames = config.get(CatalogOptions.TABLE_NAMES);
         if (tableNames != null && !tableNames.isEmpty()) {
@@ -129,7 +136,7 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
                                     })
                             .filter(this::tableExists)
                             .iterator();
-            return buildCatalogTablesWithErrorCheck(tablePaths);
+            return buildCatalogTablesWithErrorCheck(tablePaths, getTableFunction);
         }
 
         // Get the list of table pattern
@@ -151,7 +158,7 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
                         }
                     });
         }
-        return buildCatalogTablesWithErrorCheck(tablePaths.iterator());
+        return buildCatalogTablesWithErrorCheck(tablePaths.iterator(), getTableFunction);
     }
 
     @Override

@@ -33,7 +33,6 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseI
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectTypeMapper;
 
-import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;
@@ -101,8 +100,7 @@ public class DmdbDialect implements JdbcDialect {
                         .map(this::quoteIdentifier)
                         .collect(Collectors.joining(", "));
         StringBuilder stringBuilder = new StringBuilder();
-        Boolean enableToDate = config.get(JdbcOptions.ENABLE_TO_DATE);
-        String dateFormat = config.get(JdbcOptions.DATE_FORMAT);
+        String dateFormat = config.get(JdbcOptions.DAMENG_WRAP_TIME_BY_TO_DATE_DATE_FORMAT);
         for (int i = 0; i < fieldNames.length; i++) {
             final SeaTunnelDataType<?> seaTunnelDataType = columnTypeList.get(i);
             if (i != fieldNames.length - 1) {
@@ -138,7 +136,7 @@ public class DmdbDialect implements JdbcDialect {
                         .filter(fieldName -> !Arrays.asList(uniqueKeyFields).contains(fieldName))
                         .collect(Collectors.toList());
         StringBuilder stringBuilder = new StringBuilder();
-        String dateFormat = config.get(JdbcOptions.DATE_FORMAT);
+        String dateFormat = config.get(JdbcOptions.DAMENG_WRAP_TIME_BY_TO_DATE_DATE_FORMAT);
         for (int i = 0; i < fieldNames.length; i++) {
             String fieldName = fieldNames[i];
             final SeaTunnelDataType<?> seaTunnelDataType = columnTypeList.get(i);
@@ -224,8 +222,7 @@ public class DmdbDialect implements JdbcDialect {
     }
 
     private Boolean useToDate(SeaTunnelDataType<?> seaTunnelDataType) {
-        Boolean enableToDate = config.get(JdbcOptions.ENABLE_TO_DATE);
-        if (BooleanUtils.isNotTrue(enableToDate)) {
+        if (!config.get(JdbcOptions.DAMENG_WRAP_TIME_BY_TO_DATE)) {
             return false;
         }
         if (seaTunnelDataType instanceof LocalTimeType) {

@@ -20,6 +20,8 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.oracle.config;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfigFactory;
 import org.apache.seatunnel.connectors.cdc.debezium.EmbeddedDatabaseHistory;
 
+import org.apache.commons.lang3.StringUtils;
+
 import io.debezium.connector.oracle.OracleConnector;
 
 import java.sql.DriverManager;
@@ -116,6 +118,12 @@ public class OracleSourceConfigFactory extends JdbcSourceConfigFactory {
                             .collect(Collectors.joining(",")));
         }
 
+        String colIncludeRegex =
+                buildColumnIncludeList(readColumnsMap, databaseList, tableList, true);
+        if (StringUtils.isNotBlank(colIncludeRegex)) {
+            props.setProperty("column.include.list", colIncludeRegex);
+        }
+
         // override the user-defined debezium properties
         if (dbzProperties != null) {
             String debeziumSchemaChanges =
@@ -154,7 +162,8 @@ public class OracleSourceConfigFactory extends JdbcSourceConfigFactory {
                 connectMaxRetries,
                 connectionPoolSize,
                 exactlyOnce,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 
     private void validateConfig() throws IllegalArgumentException {

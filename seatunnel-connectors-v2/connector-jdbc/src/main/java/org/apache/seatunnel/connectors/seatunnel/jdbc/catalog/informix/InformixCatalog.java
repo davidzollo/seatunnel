@@ -29,6 +29,9 @@ import org.apache.seatunnel.api.table.catalog.exception.CatalogException;
 import org.apache.seatunnel.api.table.catalog.exception.DatabaseNotExistException;
 import org.apache.seatunnel.api.table.catalog.exception.TableNotExistException;
 import org.apache.seatunnel.api.table.converter.BasicTypeDefine;
+import org.apache.seatunnel.common.exception.CommonError;
+import org.apache.seatunnel.common.exception.CommonErrorCode;
+import org.apache.seatunnel.common.exception.SeaTunnelRuntimeException;
 import org.apache.seatunnel.common.utils.JdbcUrlUtil;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.AbstractJdbcCatalog;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.utils.CatalogUtils;
@@ -46,7 +49,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -109,6 +114,24 @@ public class InformixCatalog extends AbstractJdbcCatalog {
     @Override
     public CatalogTable getTable(TablePath tablePath)
             throws CatalogException, TableNotExistException {
+        return getTableInternal(tablePath, null, false);
+    }
+
+    @Override
+    public CatalogTable getTableIgnoreUnSupportColumn(TablePath tablePath)
+            throws CatalogException, TableNotExistException {
+        return getTableInternal(tablePath, null, true);
+    }
+
+    @Override
+    public CatalogTable getTable(TablePath tablePath, List<String> fieldNames)
+            throws CatalogException, TableNotExistException {
+        return getTableInternal(tablePath, fieldNames, false);
+    }
+
+    private CatalogTable getTableInternal(
+            TablePath tablePath, List<String> fieldNames, boolean ignoreUnsupported)
+            throws CatalogException, TableNotExistException {
         if (!tableExists(tablePath)) {
             throw new TableNotExistException(catalogName, tablePath);
         }
@@ -136,14 +159,40 @@ public class InformixCatalog extends AbstractJdbcCatalog {
                             tablePath.getTableName());
             constraintKeys = filterDuplicateConstraintKeys(constraintKeys, primaryKey);
             String tableComment = getTableComment(metaData, tablePath);
-            try (ResultSet resultSet =
+            try (ResultSet rs =
                     metaData.getColumns(
                             tablePath.getDatabaseName(),
                             tablePath.getSchemaName(),
                             tablePath.getTableName(),
                             null)) {
                 TableSchema.Builder builder = TableSchema.builder();
-                buildColumnsWithErrorCheck(tablePath, resultSet, builder);
+                Map<String, String> unsupported = new LinkedHashMap<>();
+                while (rs.next()) {
+                    try {
+                        Column col = buildColumn(rs);
+                        String name = col.getName();
+                        if (fieldNames == null || fieldNames.contains(name)) {
+                            builder.column(col);
+                        }
+                    } catch (SeaTunnelRuntimeException e) {
+                        boolean isConvertError =
+                                CommonErrorCode.CONVERT_TO_SEATUNNEL_TYPE_ERROR_SIMPLE.equals(
+                                        e.getSeaTunnelErrorCode());
+                        if (isConvertError && !ignoreUnsupported) {
+                            String fld = e.getParams().get("field");
+                            if (fieldNames == null || fieldNames.contains(fld)) {
+                                unsupported.put(fld, e.getParams().get("dataType"));
+                            }
+                        } else if (!isConvertError || !ignoreUnsupported) {
+                            throw e;
+                        }
+                    }
+                }
+
+                if (!ignoreUnsupported && !unsupported.isEmpty()) {
+                    throw CommonError.getCatalogTableWithUnsupportedType(
+                            catalogName, tablePath.getFullName(), unsupported);
+                }
                 // add primary key
                 primaryKey.ifPresent(builder::primaryKey);
                 // add constraint key
@@ -162,7 +211,8 @@ public class InformixCatalog extends AbstractJdbcCatalog {
                         tableComment,
                         catalogName);
             }
-
+        } catch (SeaTunnelRuntimeException e) {
+            throw e;
         } catch (Exception e) {
             throw new CatalogException(
                     String.format("Failed getting table %s", tablePath.getFullName()), e);

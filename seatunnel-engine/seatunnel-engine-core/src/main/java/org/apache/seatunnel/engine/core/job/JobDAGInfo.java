@@ -24,6 +24,7 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -32,4 +33,5 @@ public class JobDAGInfo implements Serializable {
     Long jobId;
     Map<Integer, List<Edge>> pipelineEdges;
     Map<Long, VertexInfo> vertexInfoMap;
+    Set<ExecutionAddress> historyExecutionPlan;
 }

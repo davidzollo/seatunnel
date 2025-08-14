@@ -207,4 +207,29 @@ public class SeaTunnelClient implements SeaTunnelClientInstance, AutoCloseable {
 
         return healthMetricsMap;
     }
+
+    public byte[] packageJobLogs(Long jobId) {
+        return jobClient.packageJobLogs(jobId);
+    }
+
+    /**
+     * Pack all log files for the specified date
+     *
+     * @param dateStr date string in yyyy-MM-dd
+     * @return byte array of the packed zip file
+     */
+    public byte[] packageAllLogs(String dateStr) {
+        return this.packageAllLogs(dateStr, null);
+    }
+
+    /**
+     * Pack all log files for the specified date and host
+     *
+     * @param dateStr date string in yyyy-MM-dd
+     * @param host target host, if null or empty, get logs from all nodes
+     * @return byte array of the packed zip file
+     */
+    public byte[] packageAllLogs(String dateStr, String host) {
+        return jobClient.packageZetaLogs(dateStr, host);
+    }
 }

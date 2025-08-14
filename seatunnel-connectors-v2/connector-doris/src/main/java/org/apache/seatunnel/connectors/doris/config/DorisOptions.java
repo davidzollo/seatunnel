@@ -184,7 +184,7 @@ public interface DorisOptions {
     Option<Boolean> SINK_ENABLE_DELETE =
             Options.key("sink.enable-delete")
                     .booleanType()
-                    .defaultValue(false)
+                    .defaultValue(true)
                     .withDescription("whether to enable the delete function");
 
     Option<Map<String, String>> DORIS_SINK_CONFIG_PREFIX =

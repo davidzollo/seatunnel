@@ -132,6 +132,21 @@ public interface Catalog extends AutoCloseable {
     CatalogTable getTable(TablePath tablePath) throws CatalogException, TableNotExistException;
 
     /**
+     * Return a {@link CatalogTable} identified by the given {@link TablePath}. The framework will
+     * resolve the metadata objects when necessary. If the table contains unsupported column types,
+     * it will return a CatalogTable with those columns ignored.
+     *
+     * @param tablePath Path of the table
+     * @return The requested table, ignoring unsupported columns
+     * @throws CatalogException in case of any runtime exception
+     */
+    default CatalogTable getTableIgnoreUnSupportColumn(TablePath tablePath)
+            throws CatalogException, TableNotExistException {
+        throw CommonError.unsupportedOperation(
+                name(), "get table with tablePath " + tablePath + ", ignore unsupported column");
+    }
+
+    /**
      * Return a {@link CatalogTable} identified by the given {@link TablePath} and field names. The
      * framework will resolve the metadata objects when necessary.
      *
@@ -147,12 +162,18 @@ public interface Catalog extends AutoCloseable {
     }
 
     default List<CatalogTable> getTables(ReadonlyConfig config) throws CatalogException {
+        return getTables(config, this::getTable);
+    }
+
+    default List<CatalogTable> getTables(
+            ReadonlyConfig config, CatalogTableFunction<TablePath> getTableFunction)
+            throws CatalogException {
         // Get the list of specified tables
         List<String> tableNames = config.get(CatalogOptions.TABLE_NAMES);
         if (tableNames != null && !tableNames.isEmpty()) {
             Iterator<TablePath> tablePaths =
                     tableNames.stream().map(TablePath::of).filter(this::tableExists).iterator();
-            return buildCatalogTablesWithErrorCheck(tablePaths);
+            return buildCatalogTablesWithErrorCheck(tablePaths, getTableFunction);
         }
 
         // Get the list of table pattern
@@ -174,15 +195,21 @@ public interface Catalog extends AutoCloseable {
                         }
                     });
         }
-        return buildCatalogTablesWithErrorCheck(tablePaths.iterator());
+        return buildCatalogTablesWithErrorCheck(tablePaths.iterator(), getTableFunction);
     }
 
     default List<CatalogTable> buildCatalogTablesWithErrorCheck(Iterator<TablePath> tablePaths) {
+        return buildCatalogTablesWithErrorCheck(tablePaths, this::getTable);
+    }
+
+    default List<CatalogTable> buildCatalogTablesWithErrorCheck(
+            Iterator<TablePath> tablePaths, CatalogTableFunction<TablePath> getTableFunction) {
         Map<String, Map<String, String>> unsupportedTable = new LinkedHashMap<>();
         List<CatalogTable> catalogTables = new ArrayList<>();
         while (tablePaths.hasNext()) {
+            TablePath tablePath = tablePaths.next();
             try {
-                catalogTables.add(getTable(tablePaths.next()));
+                catalogTables.add(getTableFunction.apply(tablePath));
             } catch (SeaTunnelRuntimeException e) {
                 if (e.getSeaTunnelErrorCode()
                         .equals(CommonErrorCode.GET_CATALOG_TABLE_WITH_UNSUPPORTED_TYPE_ERROR)) {
@@ -198,6 +225,16 @@ public interface Catalog extends AutoCloseable {
             throw CommonError.getCatalogTablesWithUnsupportedType(name(), unsupportedTable);
         }
         return catalogTables;
+    }
+
+    interface CatalogTableFunction<T> extends Function<T, CatalogTable> {
+        /**
+         * Apply the function to the given key and return a {@link CatalogTable}.
+         *
+         * @param key The key to apply the function to
+         * @return The resulting {@link CatalogTable}
+         */
+        CatalogTable apply(T key);
     }
 
     default <T> void buildColumnsWithErrorCheck(

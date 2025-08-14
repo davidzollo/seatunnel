@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.connectors.seatunnel.file.config;
 
+import org.apache.seatunnel.api.configuration.Option;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 
 import com.google.common.collect.Lists;
@@ -24,6 +25,7 @@ import lombok.Getter;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public abstract class BaseMultipleTableFileSourceConfig implements Serializable {
@@ -41,11 +43,36 @@ public abstract class BaseMultipleTableFileSourceConfig implements Serializable 
     }
 
     private void parseFromFileSourceConfigs(ReadonlyConfig fileSourceRootConfig) {
+        List<Map<String, Object>> rawTableConfigs =
+                fileSourceRootConfig.get(BaseSourceConfigOptions.TABLE_CONFIGS);
+
+        mergeOptionsToTableMaps(
+                rawTableConfigs,
+                fileSourceRootConfig,
+                Lists.newArrayList(BaseSourceConfigOptions.FILE_FILTER_PATTERN));
+
+        List<ReadonlyConfig> tableConfig =
+                rawTableConfigs.stream().map(ReadonlyConfig::fromMap).collect(Collectors.toList());
+
         this.fileSourceConfigs =
-                fileSourceRootConfig.get(BaseSourceConfigOptions.TABLE_CONFIGS).stream()
-                        .map(ReadonlyConfig::fromMap)
-                        .map(this::getBaseSourceConfig)
-                        .collect(Collectors.toList());
+                tableConfig.stream().map(this::getBaseSourceConfig).collect(Collectors.toList());
+    }
+
+    public static <T> void mergeOptionsToTableMaps(
+            List<Map<String, Object>> tableMaps,
+            ReadonlyConfig rootConfig,
+            List<Option<T>> optionKeys) {
+        for (Option<T> optionKey : optionKeys) {
+            if (!rootConfig.getOptional(optionKey).isPresent()) {
+                continue;
+            }
+            Object value = rootConfig.get(optionKey);
+            for (Map<String, Object> table : tableMaps) {
+                if (!table.containsKey(optionKey.key())) {
+                    table.put(optionKey.key(), value);
+                }
+            }
+        }
     }
 
     public abstract BaseFileSourceConfig getBaseSourceConfig(ReadonlyConfig readonlyConfig);

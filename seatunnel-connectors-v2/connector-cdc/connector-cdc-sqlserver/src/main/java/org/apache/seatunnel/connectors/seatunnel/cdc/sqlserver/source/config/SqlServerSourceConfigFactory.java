@@ -20,6 +20,8 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.sqlserver.source.config;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfigFactory;
 import org.apache.seatunnel.connectors.cdc.debezium.EmbeddedDatabaseHistory;
 
+import org.apache.commons.lang3.StringUtils;
+
 import io.debezium.connector.sqlserver.SqlServerConnector;
 
 import java.util.Properties;
@@ -89,6 +91,16 @@ public class SqlServerSourceConfigFactory extends JdbcSourceConfigFactory {
             props.setProperty("table.include.list", tableIncludeList);
         }
 
+        String colIncludeRegex =
+                buildColumnIncludeList(readColumnsMap, databaseList, tableList, true);
+        if (StringUtils.isNotBlank(colIncludeRegex)) {
+            // If there exists a ].[, remove all [] symbols
+            if (colIncludeRegex.contains("].[")) {
+                colIncludeRegex = colIncludeRegex.replaceAll("\\[", "").replaceAll("\\]", "");
+            }
+            props.setProperty("column.include.list", colIncludeRegex);
+        }
+
         if (dbzProperties != null) {
             dbzProperties.forEach(props::put);
         }
@@ -117,6 +129,7 @@ public class SqlServerSourceConfigFactory extends JdbcSourceConfigFactory {
                 connectMaxRetries,
                 connectionPoolSize,
                 exactlyOnce,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 }

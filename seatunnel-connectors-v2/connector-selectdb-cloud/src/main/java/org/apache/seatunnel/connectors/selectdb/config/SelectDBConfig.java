@@ -109,7 +109,7 @@ public class SelectDBConfig implements Serializable {
     public static final Option<Boolean> SINK_ENABLE_DELETE =
             Options.key("sink.enable-delete")
                     .booleanType()
-                    .defaultValue(false)
+                    .defaultValue(true)
                     .withDescription("whether to enable the delete function");
 
     public static final Option<SchemaSaveMode> SCHEMA_SAVE_MODE =

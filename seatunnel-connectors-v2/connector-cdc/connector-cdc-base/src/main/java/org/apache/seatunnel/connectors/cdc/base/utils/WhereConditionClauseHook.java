@@ -23,15 +23,32 @@ public class WhereConditionClauseHook implements SqlPostHook {
 
     private final String whereConditionClause;
 
+    private final List<String> fields;
+
     public WhereConditionClauseHook(String whereConditionClause) {
         this.whereConditionClause = whereConditionClause;
+        this.fields = null;
+    }
+
+    public WhereConditionClauseHook(String whereConditionClause, List<String> fields) {
+        this.whereConditionClause = whereConditionClause;
+        this.fields = fields;
     }
 
     @Override
     public String apply(String sql) {
+        if (whereConditionClause != null && fields != null) {
+            return applyWhereConditionClause(sql, whereConditionClause, fields);
+        }
         if (whereConditionClause != null) {
             return applyWhereConditionClause(sql, whereConditionClause);
         }
+
+        if (fields != null) {
+            String selectClause = String.join(", ", fields);
+            return String.format("SELECT %s FROM (%s) tmp", selectClause, sql);
+        }
+
         return sql;
     }
 
@@ -72,7 +89,6 @@ public class WhereConditionClauseHook implements SqlPostHook {
                     "SELECT %s FROM (%s) tmp %s", selectClause, sql, whereConditionClause);
         }
 
-        // If no WHERE condition, but fields are specified, still apply the field selection
         if (fields != null && !fields.isEmpty()) {
             String selectClause = String.join(", ", fields);
             return String.format("SELECT %s FROM (%s) tmp", selectClause, sql);

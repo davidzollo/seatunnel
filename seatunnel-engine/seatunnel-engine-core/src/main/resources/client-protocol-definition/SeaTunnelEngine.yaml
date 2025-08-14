@@ -313,6 +313,73 @@ methods:
           since: 2.0
           doc: ''
 
+  - id: 16
+    name: packageJobLogs
+    since: 2.0
+    doc: ''
+    request:
+      retryable: true
+      partitionIdentifier: -1
+      params:
+        - name: jobId
+          type: long
+          nullable: false
+          since: 2.0
+          doc: ''
+    response:
+      params:
+        - name: response
+          type: byteArray
+          nullable: false
+          since: 2.0
+          doc: ''
+
+  - id: 17
+    name: packageZetaLogs
+    since: 2.0
+    doc: ''
+    request:
+      retryable: true
+      partitionIdentifier: -1
+      params:
+        - name: date
+          type: String
+          nullable: true
+          since: 2.0
+          doc: ''
+        - name: host
+          type: String
+          nullable: true
+          since: 2.0
+          doc: ''
+    response:
+      params:
+        - name: response
+          type: byteArray
+          nullable: false
+          since: 2.0
+          doc: ''
+  - id: 18
+    name: listJobsByStatus
+    since: 2.0
+    doc: ''
+    request:
+      retryable: true
+      partitionIdentifier: -1
+      params:
+        - name: jobStatus
+          type: String
+          nullable: false
+          since: 2.0
+          doc: ''
+    response:
+      params:
+        - name: response
+          type: Data
+          nullable: false
+          since: 2.0
+          doc: ''
+
 # Inner API
   - id: 100
     name: refreshLicense
