@@ -98,8 +98,20 @@ public class PhysicalColumn extends Column {
             boolean nullable,
             Object defaultValue,
             String comment,
-            String sinkType) {
-        super(name, dataType, columnLength, scale, nullable, defaultValue, comment, sinkType);
+            String sinkType,
+            String sourceType,
+            Map<String, Object> options) {
+        super(
+                name,
+                dataType,
+                columnLength,
+                scale,
+                nullable,
+                defaultValue,
+                comment,
+                sinkType,
+                sourceType,
+                options);
     }
 
     @Builder
@@ -249,9 +261,19 @@ public class PhysicalColumn extends Column {
             boolean nullable,
             Object defaultValue,
             String comment,
-            String sinkType) {
+            String sinkType,
+            String sourceType) {
         return new PhysicalColumn(
-                name, dataType, columnLength, scale, nullable, defaultValue, comment, sinkType);
+                name,
+                dataType,
+                columnLength,
+                scale,
+                nullable,
+                defaultValue,
+                comment,
+                sinkType,
+                sourceType,
+                null);
     }
 
     @Deprecated

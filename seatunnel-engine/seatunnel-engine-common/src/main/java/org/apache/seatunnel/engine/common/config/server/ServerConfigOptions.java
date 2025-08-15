@@ -67,7 +67,7 @@ public class ServerConfigOptions {
     public static final Option<Integer> SLOT_NUM =
             Options.key("slot-num")
                     .intType()
-                    .defaultValue(2)
+                    .defaultValue(Runtime.getRuntime().availableProcessors() * 2)
                     .withDescription(
                             "The number of slots. Only valid when dynamic slot is disabled.");
 
@@ -210,6 +210,26 @@ public class ServerConfigOptions {
                     .defaultValue(false)
                     .withDescription(
                             "Whether to use classloader cache mode. With cache mode, all jobs share the same classloader if the jars are the same");
+
+    public static final Option<Boolean> TELEMETRY_LOGS_SCHEDULED_DELETION_ENABLE =
+            Options.key("scheduled-deletion-enable")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Enable scheduled cleanup, with default value of true. The system will automatically delete relevant log files when job expiration time, as defined by `history-job-expire-minutes`, is reached. "
+                                    + "If this feature is disabled, logs will remain permanently on disk, requiring manual management, which may affect disk space usage. It is recommended to configure this setting based on specific needs.");
+
+    public static final Option<TelemetryLogsConfig> TELEMETRY_LOGS =
+            Options.key("logs")
+                    .type(new TypeReference<TelemetryLogsConfig>() {})
+                    .defaultValue(new TelemetryLogsConfig())
+                    .withDescription("The telemetry logs configuration.");
+
+    public static final Option<TelemetryConfig> TELEMETRY =
+            Options.key("telemetry")
+                    .type(new TypeReference<TelemetryConfig>() {})
+                    .defaultValue(new TelemetryConfig())
+                    .withDescription("The telemetry configuration.");
 
     public static final String EVENT_REPORT_HTTP = "event-report-http";
     public static final String EVENT_REPORT_HTTP_URL = "url";

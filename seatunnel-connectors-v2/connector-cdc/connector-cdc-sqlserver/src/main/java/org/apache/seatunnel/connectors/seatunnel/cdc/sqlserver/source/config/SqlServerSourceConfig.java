@@ -25,6 +25,7 @@ import io.debezium.connector.sqlserver.SqlServerConnectorConfig;
 import io.debezium.relational.RelationalTableFilters;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -59,7 +60,8 @@ public class SqlServerSourceConfig extends JdbcSourceConfig {
             int connectMaxRetries,
             int connectionPoolSize,
             boolean exactlyOnce,
-            String whereCondition) {
+            String whereCondition,
+            Map<String, List<String>> readColumnsMap) {
         super(
                 startupConfig,
                 stopConfig,
@@ -84,7 +86,8 @@ public class SqlServerSourceConfig extends JdbcSourceConfig {
                 connectMaxRetries,
                 connectionPoolSize,
                 exactlyOnce,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 
     @Override

@@ -39,8 +39,14 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.JdbcCatalogOptions
 import com.google.auto.service.AutoService;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceTableConfig.toReadColumnsMap;
 
 @AutoService(Factory.class)
 public class SqlServerIncrementalSourceFactory implements TableSourceFactory {
@@ -109,11 +115,24 @@ public class SqlServerIncrementalSourceFactory implements TableSourceFactory {
             } catch (ClassNotFoundException e) {
                 throw new RuntimeException(e);
             }
-            List<CatalogTable> catalogTables =
-                    CatalogTableUtil.getCatalogTables(
-                            context.getOptions(), context.getClassLoader());
             Optional<List<JdbcSourceTableConfig>> tableConfigs =
                     context.getOptions().getOptional(JdbcSourceOptions.TABLE_NAMES_CONFIG);
+            Map<String, List<String>> readColumnsMap =
+                    toReadColumnsMap(tableConfigs.orElseGet(ArrayList::new));
+            // Sqlserver map key don't need prefix or suffix
+            // Rebuild readColumnsMap
+            readColumnsMap =
+                    readColumnsMap.entrySet().stream()
+                            .collect(
+                                    Collectors.toMap(
+                                            e -> e.getKey().replace("[", "").replace("]", ""),
+                                            Map.Entry::getValue,
+                                            (v1, v2) -> v1,
+                                            LinkedHashMap::new));
+            List<CatalogTable> catalogTables =
+                    CatalogTableUtil.getCatalogTables(
+                            context.getOptions(), context.getClassLoader(), readColumnsMap);
+
             if (tableConfigs.isPresent()) {
                 catalogTables =
                         CatalogTableUtils.mergeCatalogTableConfig(

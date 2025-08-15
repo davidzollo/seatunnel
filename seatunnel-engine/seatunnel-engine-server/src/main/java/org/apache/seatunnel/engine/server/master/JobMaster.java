@@ -35,6 +35,7 @@ import org.apache.seatunnel.engine.common.utils.PassiveCompletableFuture;
 import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.engine.core.dag.logical.LogicalDag;
 import org.apache.seatunnel.engine.core.job.ConnectorJarIdentifier;
+import org.apache.seatunnel.engine.core.job.ExecutionAddress;
 import org.apache.seatunnel.engine.core.job.JobDAGInfo;
 import org.apache.seatunnel.engine.core.job.JobImmutableInformation;
 import org.apache.seatunnel.engine.core.job.JobInfo;
@@ -80,6 +81,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -148,6 +150,8 @@ public class JobMaster {
     private final Map<Integer, List<SlotProfile>> releasedSlotWhenTaskGroupFinished;
 
     private final IMap<Long, JobInfo> runningJobInfoIMap;
+
+    @Getter private final Set<ExecutionAddress> historyExecutionAddress = new HashSet<>();
 
     private final IMap<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> metricsImap;
 
@@ -386,7 +390,17 @@ public class JobMaster {
                         == preApplyResourceFutures.size();
 
         if (enoughResource) {
-            // Adequate resources, pass on resources to the plan
+            for (Map.Entry<TaskGroupLocation, CompletableFuture<SlotProfile>> entry :
+                    preApplyResourceFutures.entrySet()) {
+                try {
+                    Address worker = entry.getValue().get().getWorker();
+                    historyExecutionAddress.add(
+                            new ExecutionAddress(worker.getHost(), worker.getPort()));
+
+                } catch (Exception e) {
+                    LOGGER.warning("history execution plan add worker failed", e);
+                }
+            }
             physicalPlan.setPreApplyResourceFutures(preApplyResourceFutures);
         } else {
             // Release the resource that has been applied
@@ -502,7 +516,11 @@ public class JobMaster {
         if (jobDAGInfo == null) {
             jobDAGInfo =
                     DAGUtils.getJobDAGInfo(
-                            logicalDag, jobImmutableInformation, engineConfig, isPhysicalDAGIInfo);
+                            logicalDag,
+                            jobImmutableInformation,
+                            engineConfig,
+                            isPhysicalDAGIInfo,
+                            historyExecutionAddress);
         }
         return jobDAGInfo;
     }
@@ -926,5 +944,9 @@ public class JobMaster {
 
     public void neverNeedRestore() {
         this.needRestore = false;
+    }
+
+    public EngineConfig getEngineConfig() {
+        return this.engineConfig;
     }
 }

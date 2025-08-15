@@ -24,6 +24,8 @@ import io.debezium.relational.TableId;
 import lombok.Getter;
 
 import java.io.Serializable;
+import java.util.List;
+import java.util.Map;
 
 @Getter
 public class CompletedSnapshotSplitInfo implements Serializable {
@@ -34,6 +36,7 @@ public class CompletedSnapshotSplitInfo implements Serializable {
     private final Object[] splitEnd;
     private final SnapshotSplitWatermark watermark;
     private final String whereConditionClause;
+    private final Map<TableId, List<String>> readColumnsMap;
 
     public CompletedSnapshotSplitInfo(
             String splitId,
@@ -42,7 +45,8 @@ public class CompletedSnapshotSplitInfo implements Serializable {
             Object[] splitStart,
             Object[] splitEnd,
             SnapshotSplitWatermark watermark,
-            String whereConditionClause) {
+            String whereConditionClause,
+            Map<TableId, List<String>> readColumnsMap) {
         this.splitId = splitId;
         this.tableId = tableId;
         this.splitKeyType = splitKeyType;
@@ -50,6 +54,7 @@ public class CompletedSnapshotSplitInfo implements Serializable {
         this.splitEnd = splitEnd;
         this.watermark = watermark;
         this.whereConditionClause = whereConditionClause;
+        this.readColumnsMap = readColumnsMap;
     }
 
     public SnapshotSplit asSnapshotSplit() {
@@ -62,6 +67,7 @@ public class CompletedSnapshotSplitInfo implements Serializable {
                 watermark.getLowWatermark(),
                 watermark.getHighWatermark(),
                 false,
-                whereConditionClause);
+                whereConditionClause,
+                readColumnsMap);
     }
 }

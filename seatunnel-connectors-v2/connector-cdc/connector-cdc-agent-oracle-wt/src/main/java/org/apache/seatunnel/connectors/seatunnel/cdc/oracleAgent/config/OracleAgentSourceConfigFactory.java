@@ -20,6 +20,8 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.oracleAgent.config;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfigFactory;
 import org.apache.seatunnel.connectors.cdc.debezium.EmbeddedDatabaseHistory;
 
+import org.apache.commons.lang3.StringUtils;
+
 import io.debezium.connector.oracle.OracleConnector;
 import lombok.Getter;
 
@@ -110,6 +112,12 @@ public class OracleAgentSourceConfigFactory extends JdbcSourceConfigFactory {
         // tombstones.on.delete is set to false to avoid tombstones being sent to the sink
         props.setProperty("tombstones.on.delete", String.valueOf(false));
 
+        String colIncludeRegex =
+                buildColumnIncludeList(readColumnsMap, databaseList, tableList, true);
+        if (StringUtils.isNotBlank(colIncludeRegex)) {
+            props.setProperty("column.include.list", colIncludeRegex);
+        }
+
         // override the user-defined debezium properties
         if (dbzProperties != null) {
             props.putAll(dbzProperties);
@@ -141,7 +149,8 @@ public class OracleAgentSourceConfigFactory extends JdbcSourceConfigFactory {
                 connectMaxRetries,
                 connectionPoolSize,
                 exactlyOnce,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 
     private void validateConfig() throws IllegalArgumentException {

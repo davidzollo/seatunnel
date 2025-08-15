@@ -31,6 +31,7 @@ import org.apache.seatunnel.engine.server.execution.TaskGroupLocation;
 import org.apache.seatunnel.engine.server.service.jar.ConnectorPackageService;
 import org.apache.seatunnel.engine.server.service.slot.DefaultSlotService;
 import org.apache.seatunnel.engine.server.service.slot.SlotService;
+import org.apache.seatunnel.engine.server.telemetry.log.TaskLogManagerService;
 
 import com.hazelcast.internal.services.ManagedService;
 import com.hazelcast.internal.services.MembershipAwareService;
@@ -84,6 +85,7 @@ public class SeaTunnelServer
     private CoordinatorService coordinatorService;
     @Getter private CheckpointService checkpointService;
     private ScheduledExecutorService monitorService;
+    private TaskLogManagerService taskLogManagerService;
 
     @Getter private SeaTunnelHealthMonitor seaTunnelHealthMonitor;
 
@@ -152,6 +154,16 @@ public class SeaTunnelServer
                 0,
                 seaTunnelConfig.getEngineConfig().getPrintExecutionInfoInterval(),
                 TimeUnit.SECONDS);
+
+        // task log manager service
+        if (seaTunnelConfig.getEngineConfig().getTelemetryConfig() != null
+                && seaTunnelConfig.getEngineConfig().getTelemetryConfig().getLogs() != null
+                && seaTunnelConfig.getEngineConfig().getTelemetryConfig().getLogs().isEnabled()) {
+            taskLogManagerService =
+                    new TaskLogManagerService(
+                            seaTunnelConfig.getEngineConfig().getTelemetryConfig().getLogs());
+            taskLogManagerService.initClean();
+        }
 
         seaTunnelHealthMonitor = new SeaTunnelHealthMonitor(((NodeEngineImpl) engine).getNode());
         Thread.currentThread().setContextClassLoader(appClassLoader);
@@ -298,5 +310,9 @@ public class SeaTunnelServer
 
     public ConnectorPackageService getConnectorPackageService() {
         return getCoordinatorService().getConnectorPackageService();
+    }
+
+    public TaskLogManagerService getTaskLogManagerService() {
+        return taskLogManagerService;
     }
 }

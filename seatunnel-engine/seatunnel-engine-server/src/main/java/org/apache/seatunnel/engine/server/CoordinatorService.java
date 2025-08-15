@@ -407,6 +407,7 @@ public class CoordinatorService {
         metricsImap = nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_RUNNING_JOB_METRICS);
         jobHistoryService =
                 new JobHistoryService(
+                        nodeEngine,
                         runningJobStateIMap,
                         logger,
                         pendingJobMasterMap,
@@ -846,6 +847,9 @@ public class CoordinatorService {
         JobDAGInfo jobInfo = jobHistoryService.getJobDAGInfo(jobId);
         if (jobInfo != null) {
             return jobInfo;
+        }
+        if (pendingJobMasterMap.containsKey(jobId)) {
+            return pendingJobMasterMap.get(jobId)._2().getJobDAGInfo();
         }
         return runningJobMasterMap.get(jobId).getJobDAGInfo();
     }

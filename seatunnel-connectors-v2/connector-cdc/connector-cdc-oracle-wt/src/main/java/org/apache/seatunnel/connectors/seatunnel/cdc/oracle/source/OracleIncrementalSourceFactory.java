@@ -40,8 +40,12 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.JdbcCatalogOptions
 import com.google.auto.service.AutoService;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+
+import static org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceTableConfig.toReadColumnsMap;
 
 @AutoService(Factory.class)
 public class OracleIncrementalSourceFactory extends BaseChangeStreamTableSourceFactory {
@@ -111,16 +115,19 @@ public class OracleIncrementalSourceFactory extends BaseChangeStreamTableSourceF
             } catch (ClassNotFoundException e) {
                 throw new RuntimeException("Oracle driver not found", e);
             }
+            Optional<List<JdbcSourceTableConfig>> tableConfigs =
+                    context.getOptions().getOptional(JdbcSourceOptions.TABLE_NAMES_CONFIG);
+            Map<String, List<String>> readColumnsMap =
+                    toReadColumnsMap(tableConfigs.orElseGet(ArrayList::new));
             List<CatalogTable> catalogTables =
                     CatalogTableUtil.getCatalogTables(
-                            context.getOptions(), context.getClassLoader());
+                            context.getOptions(), context.getClassLoader(), readColumnsMap);
+
             boolean enableSchemaChange =
                     context.getOptions().get(SourceOptions.SCHEMA_CHANGES_ENABLED);
             if (!restoreTables.isEmpty() && enableSchemaChange) {
                 catalogTables = mergeTableStruct(catalogTables, restoreTables);
             }
-            Optional<List<JdbcSourceTableConfig>> tableConfigs =
-                    context.getOptions().getOptional(JdbcSourceOptions.TABLE_NAMES_CONFIG);
             if (tableConfigs.isPresent()) {
                 catalogTables =
                         CatalogTableUtils.mergeCatalogTableConfig(

@@ -67,27 +67,42 @@ public class CatalogTableUtils {
 
     public static CatalogTable mergeCatalogTableConfig(
             final CatalogTable table, JdbcSourceTableConfig config) {
-        List<String> columnNames =
-                table.getTableSchema().getColumns().stream()
-                        .map(c -> c.getName())
-                        .collect(Collectors.toList());
-        for (String pk : config.getPrimaryKeys()) {
-            if (!columnNames.contains(pk)) {
-                throw new IllegalArgumentException(
-                        String.format(
-                                "Primary key(%s) is not in table(%s) columns(%s)",
-                                pk, table.getTablePath(), columnNames));
+        PrimaryKey primaryKeys;
+        if (config.getPrimaryKeys() != null && !config.getPrimaryKeys().isEmpty()) {
+            List<String> columnNames =
+                    table.getTableSchema().getColumns().stream()
+                            .map(c -> c.getName())
+                            .collect(Collectors.toList());
+            for (String pk : config.getPrimaryKeys()) {
+                if (!columnNames.contains(pk)) {
+                    throw new IllegalArgumentException(
+                            String.format(
+                                    "Primary key(%s) is not in table(%s) columns(%s)",
+                                    pk, table.getTablePath(), columnNames));
+                }
             }
+            primaryKeys =
+                    PrimaryKey.of(
+                            "pk" + (config.getPrimaryKeys().hashCode() & Integer.MAX_VALUE),
+                            config.getPrimaryKeys());
+        } else {
+            primaryKeys = table.getTableSchema().getPrimaryKey();
         }
-        PrimaryKey primaryKeys =
-                PrimaryKey.of(
-                        "pk" + (config.getPrimaryKeys().hashCode() & Integer.MAX_VALUE),
-                        config.getPrimaryKeys());
+        // double check
         List<Column> columns =
-                table.getTableSchema().getColumns().stream()
+                (config.getReadColumns() != null && !config.getReadColumns().isEmpty()
+                                ? table.getTableSchema().getColumns().stream()
+                                        .filter(
+                                                column ->
+                                                        config.getReadColumns()
+                                                                .contains(column.getName()))
+                                : table.getTableSchema().getColumns().stream())
                         .map(
                                 column -> {
-                                    if (config.getPrimaryKeys().contains(column.getName())
+                                    if (primaryKeys != null
+                                            && primaryKeys
+                                                    .getColumnNames()
+                                                    .contains(column.getName())
                                             && column.isNullable()) {
                                         log.warn(
                                                 "Primary key({}) is nullable for catalog table {}",
@@ -104,7 +119,6 @@ public class CatalogTableUtils {
                                     return column;
                                 })
                         .collect(Collectors.toList());
-
         return CatalogTable.of(
                 table.getTableId(),
                 TableSchema.builder()

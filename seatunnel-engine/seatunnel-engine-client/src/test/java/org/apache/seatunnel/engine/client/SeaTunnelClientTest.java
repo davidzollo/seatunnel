@@ -48,6 +48,7 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.instance.impl.HazelcastInstanceFactory;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Date;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -172,6 +173,26 @@ public class SeaTunnelClientTest {
                                                     && jobClient
                                                             .listJobStatus(true)
                                                             .contains("FINISHED")));
+
+            await().atMost(30000, TimeUnit.MILLISECONDS)
+                    .untilAsserted(
+                            () ->
+                                    Assertions.assertTrue(
+                                            jobClient
+                                                    .listJobsByStatus(JobStatus.FINISHED)
+                                                    .contains(jobId)));
+
+            Date today = new Date();
+            String todayStr = new java.text.SimpleDateFormat("yyyy-MM-dd").format(today);
+
+            await().atMost(30000, TimeUnit.MILLISECONDS)
+                    .untilAsserted(
+                            () ->
+                                    Assertions.assertTrue(
+                                            jobClient.packageJobLogs(jobId).length > 0
+                                                    && jobClient.packageZetaLogs(todayStr, null)
+                                                                    .length
+                                                            > 0));
 
         } catch (ExecutionException | InterruptedException e) {
             throw new RuntimeException(e);

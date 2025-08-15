@@ -49,8 +49,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -229,10 +231,13 @@ public class Gbase8sCatalog extends AbstractJdbcCatalog {
                         throw e;
                     }
                 }
+                Set<String> columnNames = new HashSet<>(builder.build().getColumnNames());
                 // add primary key
-                primaryKey.ifPresent(builder::primaryKey);
+                if (primaryKey.isPresent()
+                        && columnNames.containsAll(primaryKey.get().getColumnNames())) {
+                    builder.primaryKey(primaryKey.get());
+                }
                 // filter constraint key
-                List<String> columnNames = builder.build().getColumnNames();
                 constraintKeys =
                         constraintKeys.stream()
                                 .filter(

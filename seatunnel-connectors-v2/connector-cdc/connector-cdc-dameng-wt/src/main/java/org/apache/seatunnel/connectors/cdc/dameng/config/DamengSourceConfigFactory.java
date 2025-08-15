@@ -20,6 +20,8 @@ package org.apache.seatunnel.connectors.cdc.dameng.config;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfigFactory;
 import org.apache.seatunnel.connectors.cdc.debezium.EmbeddedDatabaseHistory;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.util.Properties;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -70,6 +72,13 @@ public class DamengSourceConfigFactory extends JdbcSourceConfigFactory {
                                     })
                             .collect(Collectors.joining(",")));
         }
+
+        String colIncludeRegex =
+                buildColumnIncludeList(readColumnsMap, databaseList, tableList, true);
+        if (StringUtils.isNotBlank(colIncludeRegex)) {
+            props.setProperty("column.include.list", colIncludeRegex);
+        }
+
         if (dbzProperties != null) {
             props.putAll(dbzProperties);
         }
@@ -98,6 +107,7 @@ public class DamengSourceConfigFactory extends JdbcSourceConfigFactory {
                 connectMaxRetries,
                 connectionPoolSize,
                 exactlyOnce,
-                whereCondition);
+                whereCondition,
+                readColumnsMap);
     }
 }

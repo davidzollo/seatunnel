@@ -20,8 +20,11 @@ package org.apache.seatunnel.connectors.cdc.base.config;
 import org.apache.seatunnel.connectors.cdc.base.source.IncrementalSource;
 
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
+import io.debezium.relational.TableId;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -43,6 +46,7 @@ public abstract class JdbcSourceConfig extends BaseSourceConfig {
     protected final int connectMaxRetries;
     protected final int connectionPoolSize;
     private final String whereConditionClause;
+    private final Map<String, List<String>> readColumnsMap;
 
     public JdbcSourceConfig(
             StartupConfig startupConfig,
@@ -68,7 +72,8 @@ public abstract class JdbcSourceConfig extends BaseSourceConfig {
             int connectMaxRetries,
             int connectionPoolSize,
             boolean exactlyOnce,
-            String whereConditionClause) {
+            String whereConditionClause,
+            Map<String, List<String>> readColumnsMap) {
         super(
                 startupConfig,
                 stopConfig,
@@ -94,6 +99,7 @@ public abstract class JdbcSourceConfig extends BaseSourceConfig {
         this.connectMaxRetries = connectMaxRetries;
         this.connectionPoolSize = connectionPoolSize;
         this.whereConditionClause = whereConditionClause;
+        this.readColumnsMap = readColumnsMap;
     }
 
     public abstract RelationalDatabaseConnectorConfig getDbzConnectorConfig();
@@ -152,5 +158,19 @@ public abstract class JdbcSourceConfig extends BaseSourceConfig {
 
     public String getWhereConditionClause() {
         return whereConditionClause;
+    }
+
+    public Map<String, List<String>> getReadColumnsMap() {
+        return readColumnsMap;
+    }
+
+    public Map<TableId, List<String>> getReadColumnsMapByTable() {
+        if (readColumnsMap == null || readColumnsMap.isEmpty()) {
+            return new HashMap<>();
+        }
+        return readColumnsMap.entrySet().stream()
+                .collect(
+                        java.util.stream.Collectors.toMap(
+                                e -> TableId.parse(e.getKey()), Map.Entry::getValue));
     }
 }

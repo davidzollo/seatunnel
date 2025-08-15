@@ -21,7 +21,6 @@ import org.apache.seatunnel.api.table.catalog.ConstraintKey;
 import org.apache.seatunnel.api.table.catalog.PrimaryKey;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
-import org.apache.seatunnel.api.table.type.SqlType;
 import org.apache.seatunnel.common.exception.CommonError;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfig;
 import org.apache.seatunnel.connectors.cdc.base.dialect.JdbcDataSourceDialect;
@@ -44,11 +43,21 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import static java.math.BigDecimal.ROUND_CEILING;
-import static org.apache.seatunnel.connectors.cdc.base.utils.ObjectUtils.doubleCompare;
+import static java.math.RoundingMode.CEILING;
+import static org.apache.seatunnel.api.table.type.SqlType.BIGINT;
+import static org.apache.seatunnel.api.table.type.SqlType.DATE;
+import static org.apache.seatunnel.api.table.type.SqlType.DECIMAL;
+import static org.apache.seatunnel.api.table.type.SqlType.DOUBLE;
+import static org.apache.seatunnel.api.table.type.SqlType.FLOAT;
+import static org.apache.seatunnel.api.table.type.SqlType.INT;
+import static org.apache.seatunnel.api.table.type.SqlType.SMALLINT;
+import static org.apache.seatunnel.api.table.type.SqlType.STRING;
+import static org.apache.seatunnel.api.table.type.SqlType.TIMESTAMP;
+import static org.apache.seatunnel.api.table.type.SqlType.TINYINT;
 
 @Slf4j
 public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunkSplitter {
@@ -86,7 +95,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                                 null,
                                 null,
                                 false,
-                                sourceConfig.getWhereConditionClause());
+                                sourceConfig.getWhereConditionClause(),
+                                sourceConfig.getReadColumnsMapByTable());
                 splits.add(singleSplit);
                 log.warn(
                         "No evenly split column found for table {}, use single split {}",
@@ -94,7 +104,7 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                         singleSplit);
             } else {
                 SeaTunnelDataType splitKeyType = fromDbzColumn(splitColumn);
-                if (SqlType.STRING.equals(splitKeyType.getSqlType())) {
+                if (STRING.equals(splitKeyType.getSqlType())) {
                     if (sourceConfig.isEnableHashSplitterForStringColumn()) {
                         return createStringColumnSplits(
                                 jdbc,
@@ -111,7 +121,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                                         null,
                                         null,
                                         false,
-                                        sourceConfig.getWhereConditionClause()));
+                                        sourceConfig.getWhereConditionClause(),
+                                        sourceConfig.getReadColumnsMapByTable()));
                         return splits;
                     }
                 }
@@ -137,7 +148,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                                     chunk.getChunkStart(),
                                     chunk.getChunkEnd(),
                                     false,
-                                    sourceConfig.getWhereConditionClause());
+                                    sourceConfig.getWhereConditionClause(),
+                                    sourceConfig.getReadColumnsMapByTable());
                     if (split.getSplitStart() == null && split.getSplitEnd() == null) {
                         includeKeyNullValue = true;
                     }
@@ -153,7 +165,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                                     null,
                                     null,
                                     true,
-                                    sourceConfig.getWhereConditionClause()));
+                                    sourceConfig.getWhereConditionClause(),
+                                    sourceConfig.getReadColumnsMapByTable()));
                 }
             }
 
@@ -203,7 +216,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                             new Object[] {i},
                             new Object[] {shardCount},
                             false,
-                            sourceConfig.getWhereConditionClause());
+                            sourceConfig.getWhereConditionClause(),
+                            sourceConfig.getReadColumnsMapByTable());
             splits.add(split);
         }
         // add null split
@@ -215,7 +229,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                         null,
                         null,
                         true,
-                        sourceConfig.getWhereConditionClause()));
+                        sourceConfig.getWhereConditionClause(),
+                        sourceConfig.getReadColumnsMapByTable()));
         return splits;
     }
 
@@ -355,8 +370,9 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                 calculateDistributionFactor(tableId, min, max, approximateRowCnt);
 
         boolean dataIsEvenlyDistributed =
-                doubleCompare(distributionFactor, distributionFactorLower) >= 0
-                        && doubleCompare(distributionFactor, distributionFactorUpper) <= 0;
+                ObjectUtils.doubleCompare(distributionFactor, distributionFactorLower) >= 0
+                        && ObjectUtils.doubleCompare(distributionFactor, distributionFactorUpper)
+                                <= 0;
 
         if (dataIsEvenlyDistributed) {
             // the minimum dynamic chunk size is at least 1
@@ -556,7 +572,7 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
         // factor = (max - min + 1) / rowCount
         final BigDecimal subRowCnt = difference.add(BigDecimal.valueOf(1));
         double distributionFactor =
-                subRowCnt.divide(new BigDecimal(approximateRowCnt), 4, ROUND_CEILING).doubleValue();
+                subRowCnt.divide(new BigDecimal(approximateRowCnt), 4, CEILING).doubleValue();
         log.info(
                 "The distribution factor of table {} is {} according to the min split key {}, max split key {} and approximate row count {}",
                 tableId,
@@ -575,7 +591,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
             Object chunkStart,
             Object chunkEnd,
             boolean isNull,
-            String whereConditionClause) {
+            String whereConditionClause,
+            Map<TableId, List<String>> readColumnsMap) {
         // currently, we only support single split column
         Object[] splitStart = chunkStart == null ? null : new Object[] {chunkStart};
         Object[] splitEnd = chunkEnd == null ? null : new Object[] {chunkEnd};
@@ -586,7 +603,8 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                 splitStart,
                 splitEnd,
                 isNull,
-                whereConditionClause);
+                whereConditionClause,
+                readColumnsMap);
     }
 
     protected Column getSplitColumn(

@@ -81,6 +81,12 @@ public class CatalogTableUtil implements Serializable {
                 "It is converted from RowType and only has column information.");
     }
 
+    @Deprecated
+    public static List<CatalogTable> getCatalogTables(
+            ReadonlyConfig readonlyConfig, ClassLoader classLoader) {
+        return getCatalogTables(readonlyConfig, classLoader, null);
+    }
+
     /**
      * Get catalog table from config, if schema is specified, return a catalog table with specified
      * schema, otherwise, return a catalog table with schema from catalog.
@@ -93,16 +99,21 @@ public class CatalogTableUtil implements Serializable {
      */
     @Deprecated
     public static List<CatalogTable> getCatalogTables(
-            ReadonlyConfig readonlyConfig, ClassLoader classLoader) {
+            ReadonlyConfig readonlyConfig,
+            ClassLoader classLoader,
+            Map<String, List<String>> readColumnsMap) {
 
         // We use plugin_name as factoryId, so MySQL-CDC should be MySQL
         String factoryId = readonlyConfig.get(CommonOptions.PLUGIN_NAME).replace("-CDC", "");
-        return getCatalogTables(factoryId, readonlyConfig, classLoader);
+        return getCatalogTables(factoryId, readonlyConfig, classLoader, readColumnsMap);
     }
 
     @Deprecated
     public static List<CatalogTable> getCatalogTables(
-            String factoryId, ReadonlyConfig readonlyConfig, ClassLoader classLoader) {
+            String factoryId,
+            ReadonlyConfig readonlyConfig,
+            ClassLoader classLoader,
+            Map<String, List<String>> readColumnsMap) {
         // Highest priority: specified schema
         Map<String, Object> schemaMap = readonlyConfig.get(TableSchemaOptions.SCHEMA);
         if (schemaMap != null) {
@@ -123,7 +134,13 @@ public class CatalogTableUtil implements Serializable {
                                 long startTime = System.currentTimeMillis();
                                 catalog.open();
                                 List<CatalogTable> catalogTables =
-                                        catalog.getTables(readonlyConfig);
+                                        catalog.getTables(
+                                                readonlyConfig,
+                                                (tablePath) ->
+                                                        catalog.getTable(
+                                                                tablePath,
+                                                                readColumnsMap.get(
+                                                                        tablePath.getFullName())));
                                 log.info(
                                         String.format(
                                                 "Get catalog tables, cost time: %d/ms",

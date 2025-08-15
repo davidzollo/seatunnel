@@ -20,10 +20,12 @@ package org.apache.seatunnel.connectors.cdc.dameng.source;
 import org.apache.seatunnel.api.configuration.Option;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.source.SeaTunnelSource;
+import org.apache.seatunnel.api.source.SupportColumnProjection;
 import org.apache.seatunnel.api.source.SupportParallelism;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.common.utils.SeaTunnelException;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfig;
+import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceTableConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.SourceConfig;
 import org.apache.seatunnel.connectors.cdc.base.option.JdbcSourceOptions;
 import org.apache.seatunnel.connectors.cdc.base.option.StartupMode;
@@ -58,7 +60,7 @@ import java.util.stream.Collectors;
 @NoArgsConstructor
 @AutoService(SeaTunnelSource.class)
 public class DamengIncrementalSource<T> extends IncrementalSource<T, JdbcSourceConfig>
-        implements SupportParallelism {
+        implements SupportParallelism, SupportColumnProjection {
     static final String IDENTIFIER = "Dameng-CDC";
 
     public DamengIncrementalSource(ReadonlyConfig options, List<CatalogTable> catalogTables) {
@@ -101,12 +103,17 @@ public class DamengIncrementalSource<T> extends IncrementalSource<T, JdbcSourceC
                             config.get(JdbcSourceOptions.DEBEZIUM_PROPERTIES), tableIdStructMap);
         }
 
+        Map<String, List<String>> readColumnsMap =
+                JdbcSourceTableConfig.toReadColumnsMap(
+                        config.get(JdbcSourceOptions.TABLE_NAMES_CONFIG));
+
         String zoneId = config.get(JdbcSourceOptions.SERVER_TIME_ZONE);
         return (DebeziumDeserializationSchema<T>)
                 SeaTunnelRowDebeziumDeserializeSchema.builder()
                         .setTables(catalogTables)
                         .setTableIdTableChangeMap(tableIdStructMap)
                         .setServerTimeZone(ZoneId.of(zoneId))
+                        .setReadColumnsMap(readColumnsMap)
                         .build();
     }
 
