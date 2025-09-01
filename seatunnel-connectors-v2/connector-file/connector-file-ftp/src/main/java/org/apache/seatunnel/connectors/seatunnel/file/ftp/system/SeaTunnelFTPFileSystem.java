@@ -67,6 +67,7 @@ public class SeaTunnelFTPFileSystem extends FileSystem {
     public static final String FS_FTP_CONNECTION_MODE = "fs.ftp.connection.mode";
     public static final String FS_FTP_REMOTE_VERIFICATION_ENABLED =
             "fs.ftp.remote.verification.enabled";
+    public static final String FS_FTP_CONTROL_ENCODING = "fs.ftp.control.encoding";
 
     public static final String E_SAME_DIRECTORY_ONLY = "only same directory renames are supported";
 
@@ -135,6 +136,10 @@ public class SeaTunnelFTPFileSystem extends FileSystem {
                 conf.get(
                         FS_FTP_CONNECTION_MODE,
                         FtpConnectionMode.ACTIVE_LOCAL_DATA_CONNECTION_MODE.getMode());
+
+        // Set control encoding BEFORE connecting - this is critical for special characters
+        String controlEncoding = conf.get(FS_FTP_CONTROL_ENCODING, "UTF-8");
+        client.setControlEncoding(controlEncoding);
 
         // Check if remote verification is enabled
         boolean remoteVerificationEnabled =
