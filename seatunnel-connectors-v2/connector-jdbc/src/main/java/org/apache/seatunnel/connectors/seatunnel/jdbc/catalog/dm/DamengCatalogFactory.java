@@ -31,9 +31,74 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseI
 import org.apache.commons.lang3.StringUtils;
 
 import com.google.auto.service.AutoService;
+import com.google.common.annotations.VisibleForTesting;
+
+import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @AutoService(Factory.class)
 public class DamengCatalogFactory implements CatalogFactory {
+
+    private static final Pattern DM_URL_PATTERN =
+            Pattern.compile(
+                    "^(?<url>jdbc:(?<protocol>\\w+)://(?<hostpart>[^/]+?))(/(?<database>.*?))*(?<suffix>\\?.*)*$");
+
+    private static final Pattern CLUSTER_PATTERN = Pattern.compile("[?&]([A-Z]+)=\\(([^)]+)\\)");
+
+    @VisibleForTesting
+    public static final Function<String, JdbcUrlUtil.UrlInfo> DM_URL_PARSER =
+            url -> {
+                try {
+                    return JdbcUrlUtil.getUrlInfo(url);
+                } catch (IllegalArgumentException illegalArgumentException) {
+                    Matcher matcher = DM_URL_PATTERN.matcher(url);
+                    if (matcher.find()) {
+                        String urlWithoutDatabase = matcher.group("url");
+                        String database = matcher.group("database");
+                        String hostpart = matcher.group("hostpart");
+                        String protocol = matcher.group("protocol");
+                        String suffix = matcher.group("suffix");
+
+                        String host = hostpart;
+                        Integer port = 0;
+
+                        if ("dm".equalsIgnoreCase(protocol) && suffix != null) {
+                            Matcher clusterMatcher = CLUSTER_PATTERN.matcher(suffix);
+
+                            if (clusterMatcher.find()) {
+                                String paramName = clusterMatcher.group(1);
+                                String hostList = clusterMatcher.group(2);
+                                String clusterParam = paramName + "=(" + hostList + ")";
+
+                                String[] hosts = hostList.split(",");
+                                if (hosts.length > 0) {
+                                    String firstHost = hosts[0].trim();
+                                    String[] hostPortPair = firstHost.split(":");
+                                    if (hostPortPair.length == 2) {
+                                        host = hostPortPair[0];
+                                        try {
+                                            port = Integer.valueOf(hostPortPair[1]);
+                                            urlWithoutDatabase =
+                                                    "jdbc:"
+                                                            + protocol
+                                                            + "://"
+                                                            + hostpart
+                                                            + "?"
+                                                            + clusterParam;
+                                        } catch (NumberFormatException e) {
+                                            port = 0;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return new JdbcUrlUtil.UrlInfo(
+                                url, urlWithoutDatabase, host, port, database, suffix);
+                    }
+                }
+                throw new IllegalArgumentException("The DM jdbc url format is incorrect: " + url);
+            };
 
     @Override
     public String factoryIdentifier() {
@@ -46,7 +111,7 @@ public class DamengCatalogFactory implements CatalogFactory {
         Preconditions.checkArgument(
                 StringUtils.isNotBlank(urlWithDatabase),
                 "Miss config <base-url>! Please check your config.");
-        JdbcUrlUtil.UrlInfo urlInfo = JdbcUrlUtil.getUrlInfo(urlWithDatabase);
+        JdbcUrlUtil.UrlInfo urlInfo = JdbcUrlUtil.getUrlInfo(urlWithDatabase, DM_URL_PARSER);
         return new DamengCatalog(
                 catalogName,
                 options.get(JdbcCatalogOptions.USERNAME),

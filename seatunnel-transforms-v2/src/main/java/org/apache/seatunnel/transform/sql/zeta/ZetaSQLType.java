@@ -17,16 +17,18 @@
 
 package org.apache.seatunnel.transform.sql.zeta;
 
+import org.apache.seatunnel.api.table.type.ArrayType;
 import org.apache.seatunnel.api.table.type.BasicType;
 import org.apache.seatunnel.api.table.type.DecimalType;
 import org.apache.seatunnel.api.table.type.LocalTimeType;
 import org.apache.seatunnel.api.table.type.MapType;
-import org.apache.seatunnel.api.table.type.PrimitiveByteArrayType;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.api.table.type.SqlType;
 import org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated;
 import org.apache.seatunnel.transform.exception.TransformException;
+import org.apache.seatunnel.transform.sql.zeta.functions.ArrayFunction;
+import org.apache.seatunnel.transform.sql.zeta.functions.CastFunction;
 
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -40,8 +42,10 @@ import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.NullValue;
 import net.sf.jsqlparser.expression.Parenthesis;
+import net.sf.jsqlparser.expression.SignedExpression;
 import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.TimeKeyExpression;
+import net.sf.jsqlparser.expression.TrimFunction;
 import net.sf.jsqlparser.expression.WhenClause;
 import net.sf.jsqlparser.expression.operators.arithmetic.Concat;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
@@ -61,24 +65,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class ZetaSQLType {
-    public static final String DECIMAL = "DECIMAL";
-    public static final String VARCHAR = "VARCHAR";
-    public static final String STRING = "STRING";
-    public static final String TINYINT = "TINYINT";
-    public static final String SMALLINT = "SMALLINT";
-    public static final String INT = "INT";
-    public static final String INTEGER = "INTEGER";
-    public static final String BIGINT = "BIGINT";
-    public static final String LONG = "LONG";
-    public static final String BYTE = "BYTE";
-    public static final String BYTES = "BYTES";
-    public static final String DOUBLE = "DOUBLE";
-    public static final String FLOAT = "FLOAT";
-    public static final String TIMESTAMP = "TIMESTAMP";
-    public static final String DATETIME = "DATETIME";
-    public static final String DATE = "DATE";
-    public static final String TIME = "TIME";
-    public static final String BOOLEAN = "BOOLEAN";
 
     private final SeaTunnelRowType inputRowType;
 
@@ -92,6 +78,9 @@ public class ZetaSQLType {
     public SeaTunnelDataType<?> getExpressionType(Expression expression) {
         if (expression instanceof NullValue) {
             return BasicType.VOID_TYPE;
+        }
+        if (expression instanceof SignedExpression) {
+            return getExpressionType(((SignedExpression) expression).getExpression());
         }
         if (expression instanceof DoubleValue) {
             return BasicType.DOUBLE_TYPE;
@@ -147,12 +136,15 @@ public class ZetaSQLType {
                     if (filedTypeRes instanceof SeaTunnelRowType) {
                         parRowType = (SeaTunnelRowType) filedTypeRes;
                     } else if (filedTypeRes instanceof MapType) {
-                        //  for map type. only support it's the latest struct.
-                        if (i != deep - 2) {
+                        if (i < deep - 2) {
                             throw new IllegalArgumentException(
-                                    "For now, we only support map struct is the latest struct in inner query function! Please modify your query!");
+                                    "For now, when you query map field with inner query, it must be latest field or latest struct field! Please modify your query!");
                         }
-                        return ((MapType<?, ?>) filedTypeRes).getValueType();
+                        if (i == deep - 1) {
+                            return filedTypeRes;
+                        } else {
+                            return ((MapType<?, ?>) filedTypeRes).getValueType();
+                        }
                     }
                 }
                 return filedTypeRes;
@@ -160,6 +152,9 @@ public class ZetaSQLType {
         }
         if (expression instanceof Function) {
             return getFunctionType((Function) expression);
+        }
+        if (expression instanceof TrimFunction) {
+            return BasicType.STRING_TYPE;
         }
         if (expression instanceof TimeKeyExpression) {
             return getTimeKeyExprType((TimeKeyExpression) expression);
@@ -189,19 +184,36 @@ public class ZetaSQLType {
         }
 
         if (expression instanceof CastExpression) {
-            return getCastType((CastExpression) expression);
+            CastExpression castExpression = (CastExpression) expression;
+            Expression leftExpression = castExpression.getLeftExpression();
+            SqlType originType = getExpressionType(leftExpression).getSqlType();
+            return CastFunction.getCastType(originType, castExpression.getColDataType());
         }
         if (expression instanceof BinaryExpression) {
             BinaryExpression binaryExpression = (BinaryExpression) expression;
             SeaTunnelDataType<?> leftType = getExpressionType(binaryExpression.getLeftExpression());
             SeaTunnelDataType<?> rightType =
                     getExpressionType(binaryExpression.getRightExpression());
-            if (leftType.getSqlType() == SqlType.INT && rightType.getSqlType() == SqlType.INT) {
+            if ((leftType.getSqlType() == SqlType.TINYINT
+                            || leftType.getSqlType() == SqlType.SMALLINT
+                            || leftType.getSqlType() == SqlType.INT)
+                    && (rightType.getSqlType() == SqlType.TINYINT
+                            || rightType.getSqlType() == SqlType.SMALLINT
+                            || rightType.getSqlType() == SqlType.INT)) {
                 return BasicType.INT_TYPE;
             }
-            if ((leftType.getSqlType() == SqlType.INT || leftType.getSqlType() == SqlType.BIGINT)
-                    && (rightType.getSqlType() == SqlType.INT
-                            || rightType.getSqlType() == SqlType.BIGINT)) {
+            if ((leftType.getSqlType() == SqlType.TINYINT
+                            || leftType.getSqlType() == SqlType.SMALLINT
+                            || leftType.getSqlType() == SqlType.INT
+                            || leftType.getSqlType() == SqlType.BIGINT)
+                    && rightType.getSqlType() == SqlType.BIGINT) {
+                return BasicType.LONG_TYPE;
+            }
+            if ((rightType.getSqlType() == SqlType.TINYINT
+                            || rightType.getSqlType() == SqlType.SMALLINT
+                            || rightType.getSqlType() == SqlType.INT
+                            || rightType.getSqlType() == SqlType.BIGINT)
+                    && leftType.getSqlType() == SqlType.BIGINT) {
                 return BasicType.LONG_TYPE;
             }
             if (leftType.getSqlType() == SqlType.DECIMAL
@@ -299,49 +311,6 @@ public class ZetaSQLType {
         return getMaxType(types);
     }
 
-    private SeaTunnelDataType<?> getCastType(CastExpression castExpression) {
-        String dataType = castExpression.getType().getDataType();
-        switch (dataType.toUpperCase()) {
-            case DECIMAL:
-                List<String> ps = castExpression.getType().getArgumentsStringList();
-                return new DecimalType(Integer.parseInt(ps.get(0)), Integer.parseInt(ps.get(1)));
-            case VARCHAR:
-            case STRING:
-                return BasicType.STRING_TYPE;
-            case TINYINT:
-                return BasicType.BYTE_TYPE;
-            case SMALLINT:
-                return BasicType.SHORT_TYPE;
-            case INT:
-            case INTEGER:
-                return BasicType.INT_TYPE;
-            case BIGINT:
-            case LONG:
-                return BasicType.LONG_TYPE;
-            case BYTE:
-                return BasicType.BYTE_TYPE;
-            case BYTES:
-                return PrimitiveByteArrayType.INSTANCE;
-            case DOUBLE:
-                return BasicType.DOUBLE_TYPE;
-            case FLOAT:
-                return BasicType.FLOAT_TYPE;
-            case TIMESTAMP:
-            case DATETIME:
-                return LocalTimeType.LOCAL_DATE_TIME_TYPE;
-            case DATE:
-                return LocalTimeType.LOCAL_DATE_TYPE;
-            case TIME:
-                return LocalTimeType.LOCAL_TIME_TYPE;
-            case BOOLEAN:
-                return BasicType.BOOLEAN_TYPE;
-            default:
-                throw new TransformException(
-                        CommonErrorCodeDeprecated.UNSUPPORTED_OPERATION,
-                        String.format("Unsupported CAST AS type: %s", dataType));
-        }
-    }
-
     private SeaTunnelDataType<?> getFunctionType(Function function) {
         switch (function.getName().toUpperCase()) {
             case ZetaSQLFunction.CHAR:
@@ -378,6 +347,8 @@ public class ZetaSQLType {
             case ZetaSQLFunction.MONTHNAME:
             case ZetaSQLFunction.FORMATDATETIME:
             case ZetaSQLFunction.FROM_UNIXTIME:
+            case ZetaSQLFunction.UUID:
+            case ZetaSQLFunction.TRIM_SCALE:
                 return BasicType.STRING_TYPE;
             case ZetaSQLFunction.ASCII:
             case ZetaSQLFunction.LOCATE:
@@ -404,6 +375,7 @@ public class ZetaSQLType {
             case ZetaSQLFunction.LENGTH:
             case ZetaSQLFunction.OCTET_LENGTH:
             case ZetaSQLFunction.DATEDIFF:
+            case ZetaSQLFunction.MURMUR64:
                 return BasicType.LONG_TYPE;
             case ZetaSQLFunction.REGEXP_LIKE:
             case ZetaSQLFunction.IS_DATE:
@@ -432,6 +404,13 @@ public class ZetaSQLType {
             case ZetaSQLFunction.TRUNC:
             case ZetaSQLFunction.TRUNCATE:
                 return BasicType.DOUBLE_TYPE;
+            case ZetaSQLFunction.ARRAY:
+                return ArrayFunction.castArrayTypeMapping(function, inputRowType);
+            case ZetaSQLFunction.ARRAY_MAX:
+            case ZetaSQLFunction.ARRAY_MIN:
+                return ArrayFunction.getElementType(function, inputRowType);
+            case ZetaSQLFunction.SPLIT:
+                return ArrayType.STRING_ARRAY_TYPE;
             case ZetaSQLFunction.NOW:
             case ZetaSQLFunction.DATE_TRUNC:
                 return LocalTimeType.LOCAL_DATE_TIME_TYPE;
@@ -463,6 +442,35 @@ public class ZetaSQLType {
             case ZetaSQLFunction.IFNULL:
                 // Result has the same type as first argument
                 return getExpressionType(function.getParameters().getExpressions().get(0));
+            case ZetaSQLFunction.MULTI_IF:
+                ExpressionList multiIfExpressionList = function.getParameters();
+                if (multiIfExpressionList == null) {
+                    throw new TransformException(
+                            CommonErrorCodeDeprecated.UNSUPPORTED_OPERATION,
+                            "MULTI_IF function requires parameters");
+                }
+
+                List<Expression> multiIfExpressions = multiIfExpressionList.getExpressions();
+                if (multiIfExpressions == null || multiIfExpressions.isEmpty()) {
+                    throw new TransformException(
+                            CommonErrorCodeDeprecated.UNSUPPORTED_OPERATION,
+                            "MULTI_IF function requires parameters");
+                }
+
+                if (multiIfExpressions.size() < 3 || multiIfExpressions.size() % 2 == 0) {
+                    throw new TransformException(
+                            CommonErrorCodeDeprecated.UNSUPPORTED_OPERATION,
+                            String.format(
+                                    "MULTI_IF function requires at least 3 arguments and an odd number of arguments"));
+                }
+
+                List<SeaTunnelDataType<?>> resultTypes = new ArrayList<>();
+                for (int i = 1; i < multiIfExpressions.size() - 1; i += 2) {
+                    resultTypes.add(getExpressionType(multiIfExpressions.get(i)));
+                }
+                resultTypes.add(
+                        getExpressionType(multiIfExpressions.get(multiIfExpressions.size() - 1)));
+                return getMaxType(resultTypes);
             case ZetaSQLFunction.MOD:
                 // Result has the same type as second argument
                 return getExpressionType(function.getParameters().getExpressions().get(1));

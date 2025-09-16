@@ -377,6 +377,12 @@ public class SeaTunnelClientTest {
                                         "======================list job status:"
                                                 + jobClient.listJobStatus(true));
                                 Assertions.assertTrue(
+                                        jobClient.getJobLogContent(jobId) != null
+                                                && !jobClient
+                                                        .getJobLogContent(jobId)
+                                                        .getNodeLogs()
+                                                        .isEmpty());
+                                Assertions.assertTrue(
                                         jobClient.getJobDetailStatus(jobId).contains("FINISHED")
                                                 && jobClient
                                                         .listJobStatus(true)

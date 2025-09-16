@@ -84,7 +84,7 @@ public class CatalogTableUtil implements Serializable {
     @Deprecated
     public static List<CatalogTable> getCatalogTables(
             ReadonlyConfig readonlyConfig, ClassLoader classLoader) {
-        return getCatalogTables(readonlyConfig, classLoader, null);
+        return getCatalogTables(readonlyConfig, classLoader, Collections.EMPTY_MAP);
     }
 
     /**
@@ -137,10 +137,14 @@ public class CatalogTableUtil implements Serializable {
                                         catalog.getTables(
                                                 readonlyConfig,
                                                 (tablePath) ->
-                                                        catalog.getTable(
-                                                                tablePath,
-                                                                readColumnsMap.get(
-                                                                        tablePath.getFullName())));
+                                                        readColumnsMap.containsKey(
+                                                                        tablePath.getFullName())
+                                                                ? catalog.getTable(
+                                                                        tablePath,
+                                                                        readColumnsMap.get(
+                                                                                tablePath
+                                                                                        .getFullName()))
+                                                                : catalog.getTable(tablePath));
                                 log.info(
                                         String.format(
                                                 "Get catalog tables, cost time: %d/ms",

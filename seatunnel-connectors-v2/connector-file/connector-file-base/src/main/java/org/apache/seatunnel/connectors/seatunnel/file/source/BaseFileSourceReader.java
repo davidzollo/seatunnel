@@ -21,6 +21,7 @@ import org.apache.seatunnel.api.source.Collector;
 import org.apache.seatunnel.api.source.SourceReader;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.common.exception.CommonError;
+import org.apache.seatunnel.common.utils.LoggingUtils;
 import org.apache.seatunnel.connectors.seatunnel.file.source.reader.ReadStrategy;
 import org.apache.seatunnel.connectors.seatunnel.file.source.split.FileSourceSplit;
 
@@ -55,6 +56,10 @@ public class BaseFileSourceReader implements SourceReader<SeaTunnelRow, FileSour
         synchronized (output.getCheckpointLock()) {
             FileSourceSplit split = sourceSplits.poll();
             if (null != split) {
+
+                LoggingUtils.logStart(log, "File Reading");
+                log.info("Starting to read file split: {}", split.splitId());
+
                 try {
                     // todo: If there is only one table , the tableId is not needed, but it's better
                     // to set this
@@ -64,6 +69,7 @@ public class BaseFileSourceReader implements SourceReader<SeaTunnelRow, FileSour
                 }
             } else if (noMoreSplit && sourceSplits.isEmpty()) {
                 // signal to the source that we have reached the end of the data.
+                LoggingUtils.logEnd(log, "All file reading");
                 log.info("Closed the bounded File source");
                 context.signalNoMoreElement();
             } else {

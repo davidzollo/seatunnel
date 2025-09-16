@@ -173,7 +173,8 @@ public class ExpressionUtils {
         if (condition instanceof InExpression) {
             InExpression inExpression = (InExpression) condition;
             Column column = (Column) inExpression.getLeftExpression();
-            ExpressionList itemsList = (ExpressionList) inExpression.getRightItemsList();
+            ExpressionList<net.sf.jsqlparser.expression.Expression> itemsList =
+                    (ExpressionList) inExpression.getRightExpression();
             List<Object> values =
                     itemsList.getExpressions().stream()
                             .map(

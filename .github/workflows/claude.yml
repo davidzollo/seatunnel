@@ -1,0 +1,72 @@
+name: Claude Assistant
+
+# 触发条件：当用户在评论或 issue 中 @claude 时运行
+on:
+  issue_comment:
+    types: [created]  # Issue 或 PR 中的新评论
+  pull_request_review_comment:
+    types: [created]  # PR 代码行级别的评论
+  issues:
+    types: [opened]   # 新创建的 issue
+
+jobs:
+  claude:
+    # 只有当评论或 issue 内容包含 @claude 时才运行
+    if: contains(github.event.comment.body, '@claude') || contains(github.event.issue.body, '@claude')
+    runs-on: ubuntu-latest
+    
+    # Claude 需要的权限
+    permissions:
+      contents: read      # 读取仓库内容
+      pull-requests: read # 读取 PR 信息
+      issues: read        # 读取 issue 信息
+      id-token: write     # OAuth 认证
+    
+    steps:
+      # 检出代码仓库
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      # 运行 Claude Code 助手
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          # 需要在仓库 Settings > Secrets 中配置此 token
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}name: Claude Assistant
+
+# 触发条件：当用户在评论或 issue 中 @claude 时运行
+on:
+  issue_comment:
+    types: [created]  # Issue 或 PR 中的新评论
+  pull_request_review_comment:
+    types: [created]  # PR 代码行级别的评论
+  issues:
+    types: [opened]   # 新创建的 issue
+
+jobs:
+  claude:
+    # 只有当评论或 issue 内容包含 @claude 时才运行
+    if: contains(github.event.comment.body, '@claude') || contains(github.event.issue.body, '@claude')
+    runs-on: ubuntu-latest
+    
+    # Claude 需要的权限
+    permissions:
+      contents: read      # 读取仓库内容
+      pull-requests: read # 读取 PR 信息
+      issues: read        # 读取 issue 信息
+      id-token: write     # OAuth 认证
+    
+    steps:
+      # 检出代码仓库
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      # 运行 Claude Code 助手
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          # 需要在仓库 Settings > Secrets 中配置此 token
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          
+          # 可选：自定义 Claude 的参数
+          # claude_args: '--model claude-sonnet-4-20250514'

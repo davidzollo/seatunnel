@@ -75,25 +75,36 @@ public class DorisSourceSplitEnumerator
     }
 
     @Override
-    public void open() {}
+    public void open() {
+        log.info("Opening Doris source split enumerator");
+    }
 
     @Override
-    public void close() throws IOException {}
+    public void close() throws IOException {
+        log.info("Closing Doris source split enumerator");
+    }
 
     @Override
     public void run() {
         Set<Integer> readers = context.registeredReaders();
+        log.info("Starting Doris split enumeration with {} registered readers", readers.size());
+
         if (shouldEnumerate) {
+            log.info("Starting Doris split generation");
             List<DorisSourceSplit> dorisSourceSplits = getDorisSourceSplit();
+            log.info("Generated {} Doris source splits", dorisSourceSplits.size());
+
             synchronized (stateLock) {
                 addPendingSplit(dorisSourceSplits);
                 shouldEnumerate = false;
                 assignSplit(readers);
             }
+            log.info("Doris split generation completed");
         }
 
-        log.debug(
-                "No more splits to assign." + " Sending NoMoreSplitsEvent to reader {}.", readers);
+        log.info(
+                "No more splits to assign. Sending NoMoreSplitsEvent to {} readers",
+                readers.size());
         readers.forEach(context::signalNoMoreSplits);
     }
 

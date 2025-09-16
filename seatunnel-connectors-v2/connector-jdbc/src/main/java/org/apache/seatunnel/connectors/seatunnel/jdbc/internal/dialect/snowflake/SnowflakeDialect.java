@@ -47,6 +47,66 @@ public class SnowflakeDialect implements JdbcDialect {
             String[] fieldNames,
             String[] uniqueKeyFields,
             boolean isPrimaryKeyUpdated) {
-        return Optional.empty();
+        if (uniqueKeyFields == null || uniqueKeyFields.length == 0) {
+            return Optional.empty();
+        }
+
+        String fullTableName = database != null ? database + "." + tableName : tableName;
+
+        // Build the MERGE statement for Snowflake
+        StringBuilder merge = new StringBuilder();
+        merge.append("MERGE INTO ").append(fullTableName).append(" AS target ");
+        merge.append("USING (SELECT ");
+
+        // Add parameter placeholders for all fields
+        for (int i = 0; i < fieldNames.length; i++) {
+            if (i > 0) merge.append(", ");
+            merge.append("? AS ").append(fieldNames[i]);
+        }
+        merge.append(") AS source ");
+
+        // Add ON condition using unique key fields
+        merge.append("ON ");
+        for (int i = 0; i < uniqueKeyFields.length; i++) {
+            if (i > 0) merge.append(" AND ");
+            merge.append("target.")
+                    .append(uniqueKeyFields[i])
+                    .append(" = source.")
+                    .append(uniqueKeyFields[i]);
+        }
+
+        // Add WHEN MATCHED UPDATE clause
+        merge.append(" WHEN MATCHED THEN UPDATE SET ");
+        boolean first = true;
+        for (String field : fieldNames) {
+            // Skip unique key fields in UPDATE clause unless primary key updates are allowed
+            boolean isUniqueKey = false;
+            for (String uniqueKey : uniqueKeyFields) {
+                if (uniqueKey.equals(field)) {
+                    isUniqueKey = true;
+                    break;
+                }
+            }
+            if (!isUniqueKey || isPrimaryKeyUpdated) {
+                if (!first) merge.append(", ");
+                merge.append(field).append(" = source.").append(field);
+                first = false;
+            }
+        }
+
+        // Add WHEN NOT MATCHED INSERT clause
+        merge.append(" WHEN NOT MATCHED THEN INSERT (");
+        for (int i = 0; i < fieldNames.length; i++) {
+            if (i > 0) merge.append(", ");
+            merge.append(fieldNames[i]);
+        }
+        merge.append(") VALUES (");
+        for (int i = 0; i < fieldNames.length; i++) {
+            if (i > 0) merge.append(", ");
+            merge.append("source.").append(fieldNames[i]);
+        }
+        merge.append(")");
+
+        return Optional.of(merge.toString());
     }
 }

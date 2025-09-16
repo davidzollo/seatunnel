@@ -34,7 +34,6 @@ import net.sf.jsqlparser.statement.select.AllColumns;
 import net.sf.jsqlparser.statement.select.FromItem;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
-import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItem;
 
 import javax.annotation.Nullable;
@@ -157,7 +156,7 @@ public class ZetaSQLEngine implements SQLEngine {
 
     @Override
     public SeaTunnelRowType typeMapping(List<String> inputColumnsMapping) {
-        List<SelectItem> selectItems = selectBody.getSelectItems();
+        List<SelectItem<?>> selectItems = selectBody.getSelectItems();
 
         // count number of all columns
         int columnsSize = countColumnsSize(selectItems);
@@ -175,31 +174,25 @@ public class ZetaSQLEngine implements SQLEngine {
 
         int idx = 0;
         for (SelectItem selectItem : selectItems) {
-            if (selectItem instanceof AllColumns) {
+            if (selectItem.getExpression() instanceof AllColumns) {
                 for (int i = 0; i < inputRowType.getFieldNames().length; i++) {
-                    fieldNames[idx] = inputRowType.getFieldName(i);
+                    fieldNames[idx] = cleanEscape(inputRowType.getFieldName(i));
                     seaTunnelDataTypes[idx] = inputRowType.getFieldType(i);
                     if (inputColumnsMapping != null) {
                         inputColumnsMapping.set(idx, inputRowType.getFieldName(i));
                     }
                     idx++;
                 }
-            } else if (selectItem instanceof SelectExpressionItem) {
-                SelectExpressionItem expressionItem = (SelectExpressionItem) selectItem;
-                Expression expression = expressionItem.getExpression();
-
-                if (expressionItem.getAlias() != null) {
-                    String aliasName = expressionItem.getAlias().getName();
-                    if (aliasName.startsWith(ESCAPE_IDENTIFIER)
-                            && aliasName.endsWith(ESCAPE_IDENTIFIER)) {
-                        aliasName = aliasName.substring(1, aliasName.length() - 1);
-                    }
-                    fieldNames[idx] = aliasName;
+            } else {
+                Expression expression = selectItem.getExpression();
+                if (selectItem.getAlias() != null) {
+                    String aliasName = selectItem.getAlias().getName();
+                    fieldNames[idx] = cleanEscape(aliasName);
                 } else {
                     if (expression instanceof Column) {
-                        fieldNames[idx] = ((Column) expression).getColumnName();
+                        fieldNames[idx] = cleanEscape(((Column) expression).getColumnName());
                     } else {
-                        fieldNames[idx] = expression.toString();
+                        fieldNames[idx] = cleanEscape(expression.toString());
                     }
                 }
 
@@ -211,11 +204,16 @@ public class ZetaSQLEngine implements SQLEngine {
 
                 seaTunnelDataTypes[idx] = zetaSQLType.getExpressionType(expression);
                 idx++;
-            } else {
-                idx++;
             }
         }
         return new SeaTunnelRowType(fieldNames, seaTunnelDataTypes);
+    }
+
+    private static String cleanEscape(String columnName) {
+        if (columnName.startsWith(ESCAPE_IDENTIFIER) && columnName.endsWith(ESCAPE_IDENTIFIER)) {
+            columnName = columnName.substring(1, columnName.length() - 1);
+        }
+        return columnName;
     }
 
     @Override
@@ -245,7 +243,7 @@ public class ZetaSQLEngine implements SQLEngine {
     }
 
     private Object[] project(Object[] inputFields) {
-        List<SelectItem> selectItems = selectBody.getSelectItems();
+        List<SelectItem<?>> selectItems = selectBody.getSelectItems();
 
         int columnsSize = countColumnsSize(selectItems);
 
@@ -253,30 +251,27 @@ public class ZetaSQLEngine implements SQLEngine {
 
         int idx = 0;
         for (SelectItem selectItem : selectItems) {
-            if (selectItem instanceof AllColumns) {
+            if (selectItem.getExpression() instanceof AllColumns) {
                 for (Object inputField : inputFields) {
                     fields[idx] = inputField;
                     idx++;
                 }
-            } else if (selectItem instanceof SelectExpressionItem) {
-                SelectExpressionItem expressionItem = (SelectExpressionItem) selectItem;
-                Expression expression = expressionItem.getExpression();
-                fields[idx] = zetaSQLFunction.computeForValue(expression, inputFields);
-                idx++;
             } else {
+                Expression expression = selectItem.getExpression();
+                fields[idx] = zetaSQLFunction.computeForValue(expression, inputFields);
                 idx++;
             }
         }
         return fields;
     }
 
-    private int countColumnsSize(List<SelectItem> selectItems) {
+    private int countColumnsSize(List<SelectItem<?>> selectItems) {
         if (allColumnsCount != null) {
             return allColumnsCount;
         }
         int allColumnsCnt = 0;
         for (SelectItem selectItem : selectItems) {
-            if (selectItem instanceof AllColumns) {
+            if (selectItem.getExpression() instanceof AllColumns) {
                 allColumnsCnt++;
             }
         }

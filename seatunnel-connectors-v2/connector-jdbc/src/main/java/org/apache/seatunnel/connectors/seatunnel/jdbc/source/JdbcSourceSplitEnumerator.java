@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.seatunnel.jdbc.source;
 import org.apache.seatunnel.api.source.SourceSplitEnumerator;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated;
+import org.apache.seatunnel.common.utils.LoggingUtils;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcSourceConfig;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.state.JdbcSourceState;
@@ -70,28 +71,32 @@ public class JdbcSourceSplitEnumerator
 
     @Override
     public void run() throws Exception {
+        LoggingUtils.logStart(LOG, "Sharding process");
+
         LOG.info("Starting split enumerator.");
 
         Set<Integer> readers = context.registeredReaders();
+        LOG.info("Registered readers: {}", readers);
+
         while (!pendingTables.isEmpty()) {
             synchronized (stateLock) {
                 TablePath tablePath = pendingTables.poll();
-                LOG.info("Splitting table {}.", tablePath);
-
+                LOG.info("Starting to split table {}.", tablePath);
                 Collection<JdbcSourceSplit> splits = splitter.generateSplits(tables.get(tablePath));
                 LOG.info("Split table {} into {} splits.", tablePath, splits.size());
-
                 addPendingSplit(splits);
             }
 
             synchronized (stateLock) {
+                LOG.info("Assigning splits to readers: {}", readers);
                 assignSplit(readers);
             }
         }
 
+        LoggingUtils.logEnd(LOG, "Sharding process");
         splitter.close();
 
-        LOG.info("No more splits to assign." + " Sending NoMoreSplitsEvent to reader {}.", readers);
+        LOG.info("No more splits to assign. Sending NoMoreSplitsEvent to reader {}.", readers);
         readers.forEach(context::signalNoMoreSplits);
     }
 
@@ -143,7 +148,8 @@ public class JdbcSourceSplitEnumerator
     @Override
     public JdbcSourceState snapshotState(long checkpointId) throws Exception {
         synchronized (stateLock) {
-            return new JdbcSourceState(new ArrayList(pendingTables), new HashMap<>(pendingSplits));
+            return new JdbcSourceState(
+                    new ArrayList<>(pendingTables), new HashMap<>(pendingSplits));
         }
     }
 

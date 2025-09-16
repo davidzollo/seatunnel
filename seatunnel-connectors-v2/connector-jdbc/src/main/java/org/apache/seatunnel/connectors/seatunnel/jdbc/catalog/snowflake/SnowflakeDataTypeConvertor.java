@@ -18,13 +18,15 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.snowflake;
 
-import org.apache.seatunnel.api.table.catalog.Column;
 import org.apache.seatunnel.api.table.catalog.DataTypeConvertor;
-import org.apache.seatunnel.api.table.catalog.PhysicalColumn;
-import org.apache.seatunnel.api.table.converter.BasicTypeDefine;
+import org.apache.seatunnel.api.table.type.BasicType;
+import org.apache.seatunnel.api.table.type.DecimalType;
+import org.apache.seatunnel.api.table.type.LocalTimeType;
+import org.apache.seatunnel.api.table.type.PrimitiveByteArrayType;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
+import org.apache.seatunnel.api.table.type.SqlType;
+import org.apache.seatunnel.common.exception.CommonError;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
-import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.snowflake.SnowflakeTypeConverter;
 
 import org.apache.commons.collections4.MapUtils;
 
@@ -33,10 +35,8 @@ import com.google.auto.service.AutoService;
 import java.util.Collections;
 import java.util.Map;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.seatunnel.shade.com.google.common.base.Preconditions.checkNotNull;
 
-/** @deprecated instead by {@link SnowflakeTypeConverter} */
-@Deprecated
 @AutoService(DataTypeConvertor.class)
 public class SnowflakeDataTypeConvertor implements DataTypeConvertor<String> {
 
@@ -45,29 +45,112 @@ public class SnowflakeDataTypeConvertor implements DataTypeConvertor<String> {
     public static final Integer DEFAULT_PRECISION = 10;
     public static final Integer DEFAULT_SCALE = 0;
 
+    /* ============================ data types ===================== */
+    private static final String SNOWFLAKE_NUMBER = "NUMBER";
+    private static final String SNOWFLAKE_DECIMAL = "DECIMAL";
+    private static final String SNOWFLAKE_NUMERIC = "NUMERIC";
+    private static final String SNOWFLAKE_INT = "INT";
+    private static final String SNOWFLAKE_INTEGER = "INTEGER";
+    private static final String SNOWFLAKE_BIGINT = "BIGINT";
+    private static final String SNOWFLAKE_SMALLINT = "SMALLINT";
+    private static final String SNOWFLAKE_TINYINT = "TINYINT";
+    private static final String SNOWFLAKE_BYTEINT = "BYTEINT";
+
+    private static final String SNOWFLAKE_FLOAT = "FLOAT";
+    private static final String SNOWFLAKE_FLOAT4 = "FLOAT4";
+    private static final String SNOWFLAKE_FLOAT8 = "FLOAT8";
+    private static final String SNOWFLAKE_DOUBLE = "DOUBLE";
+    private static final String SNOWFLAKE_DOUBLE_PRECISION = "DOUBLE PRECISION";
+    private static final String SNOWFLAKE_REAL = "REAL";
+
+    private static final String SNOWFLAKE_VARCHAR = "VARCHAR";
+    private static final String SNOWFLAKE_CHAR = "CHAR";
+    private static final String SNOWFLAKE_CHARACTER = "CHARACTER";
+    private static final String SNOWFLAKE_STRING = "STRING";
+    private static final String SNOWFLAKE_TEXT = "TEXT";
+    private static final String SNOWFLAKE_BINARY = "BINARY";
+    private static final String SNOWFLAKE_VARBINARY = "VARBINARY";
+
+    private static final String SNOWFLAKE_BOOLEAN = "BOOLEAN";
+
+    private static final String SNOWFLAKE_DATE = "DATE";
+    private static final String SNOWFLAKE_DATE_TIME = "DATE_TIME";
+    private static final String SNOWFLAKE_TIME = "TIME";
+    private static final String SNOWFLAKE_TIMESTAMP = "TIMESTAMP";
+    private static final String SNOWFLAKE_TIMESTAMP_LTZ = "TIMESTAMP_LTZ";
+    private static final String SNOWFLAKE_TIMESTAMP_NTZ = "TIMESTAMP_NTZ";
+    private static final String SNOWFLAKE_TIMESTAMP_TZ = "TIMESTAMP_TZ";
+
+    private static final String SNOWFLAKE_GEOGRAPHY = "GEOGRAPHY";
+    private static final String SNOWFLAKE_GEOMETRY = "GEOMETRY";
+
+    private static final String SNOWFLAKE_VARIANT = "VARIANT";
+    private static final String SNOWFLAKE_OBJECT = "OBJECT";
+
     @Override
-    public SeaTunnelDataType<?> toSeaTunnelType(String field, String dataType) {
-        return toSeaTunnelType(field, dataType, Collections.emptyMap());
+    public SeaTunnelDataType<?> toSeaTunnelType(String field, String connectorDataType) {
+        return toSeaTunnelType(field, connectorDataType, Collections.emptyMap());
     }
 
     @Override
     public SeaTunnelDataType<?> toSeaTunnelType(
             String field, String connectorDataType, Map<String, Object> dataTypeProperties) {
-        checkNotNull(connectorDataType, "Snowflake Type cannot be null");
-        Long precision = MapUtils.getLong(dataTypeProperties, PRECISION);
-        Integer scale = MapUtils.getInteger(dataTypeProperties, SCALE);
-        BasicTypeDefine typeDefine =
-                BasicTypeDefine.builder()
-                        .name(field)
-                        .nativeType(connectorDataType)
-                        .dataType(connectorDataType)
-                        .columnType(connectorDataType)
-                        .length(precision)
-                        .precision(precision)
-                        .scale(scale)
-                        .build();
+        checkNotNull(connectorDataType, "redshiftType cannot be null");
 
-        return SnowflakeTypeConverter.INSTANCE.convert(typeDefine).getDataType();
+        switch (connectorDataType) {
+            case SNOWFLAKE_SMALLINT:
+            case SNOWFLAKE_TINYINT:
+            case SNOWFLAKE_BYTEINT:
+                return BasicType.SHORT_TYPE;
+            case SNOWFLAKE_INTEGER:
+            case SNOWFLAKE_INT:
+                return BasicType.INT_TYPE;
+            case SNOWFLAKE_BIGINT:
+                return BasicType.LONG_TYPE;
+            case SNOWFLAKE_DECIMAL:
+            case SNOWFLAKE_NUMERIC:
+            case SNOWFLAKE_NUMBER:
+                Integer precision =
+                        MapUtils.getInteger(dataTypeProperties, PRECISION, DEFAULT_PRECISION);
+                Integer scale = MapUtils.getInteger(dataTypeProperties, SCALE, DEFAULT_SCALE);
+                return new DecimalType(precision, scale);
+            case SNOWFLAKE_REAL:
+            case SNOWFLAKE_FLOAT4:
+                return BasicType.FLOAT_TYPE;
+            case SNOWFLAKE_DOUBLE:
+            case SNOWFLAKE_DOUBLE_PRECISION:
+            case SNOWFLAKE_FLOAT8:
+            case SNOWFLAKE_FLOAT:
+                return BasicType.DOUBLE_TYPE;
+            case SNOWFLAKE_BOOLEAN:
+                return BasicType.BOOLEAN_TYPE;
+            case SNOWFLAKE_CHAR:
+            case SNOWFLAKE_CHARACTER:
+            case SNOWFLAKE_VARCHAR:
+            case SNOWFLAKE_STRING:
+            case SNOWFLAKE_TEXT:
+            case SNOWFLAKE_VARIANT:
+            case SNOWFLAKE_OBJECT:
+            case SNOWFLAKE_GEOMETRY:
+                return BasicType.STRING_TYPE;
+            case SNOWFLAKE_BINARY:
+            case SNOWFLAKE_VARBINARY:
+            case SNOWFLAKE_GEOGRAPHY:
+                return PrimitiveByteArrayType.INSTANCE;
+            case SNOWFLAKE_DATE:
+                return LocalTimeType.LOCAL_DATE_TYPE;
+            case SNOWFLAKE_TIME:
+                return LocalTimeType.LOCAL_TIME_TYPE;
+            case SNOWFLAKE_DATE_TIME:
+            case SNOWFLAKE_TIMESTAMP:
+            case SNOWFLAKE_TIMESTAMP_LTZ:
+            case SNOWFLAKE_TIMESTAMP_NTZ:
+            case SNOWFLAKE_TIMESTAMP_TZ:
+                return LocalTimeType.LOCAL_DATE_TIME_TYPE;
+            default:
+                throw CommonError.convertToSeaTunnelTypeError(
+                        DatabaseIdentifier.SNOWFLAKE, connectorDataType, field);
+        }
     }
 
     @Override
@@ -76,19 +159,40 @@ public class SnowflakeDataTypeConvertor implements DataTypeConvertor<String> {
             SeaTunnelDataType<?> seaTunnelDataType,
             Map<String, Object> dataTypeProperties) {
         checkNotNull(seaTunnelDataType, "seaTunnelDataType cannot be null");
-        Long precision = MapUtils.getLong(dataTypeProperties, PRECISION);
-        Integer scale = MapUtils.getInteger(dataTypeProperties, SCALE);
-        Column column =
-                PhysicalColumn.builder()
-                        .name(field)
-                        .dataType(seaTunnelDataType)
-                        .columnLength(precision)
-                        .scale(scale)
-                        .nullable(true)
-                        .build();
+        SqlType sqlType = seaTunnelDataType.getSqlType();
 
-        BasicTypeDefine typeDefine = SnowflakeTypeConverter.INSTANCE.reconvert(column);
-        return typeDefine.getColumnType();
+        switch (sqlType) {
+            case TINYINT:
+            case SMALLINT:
+                return SNOWFLAKE_SMALLINT;
+            case INT:
+                return SNOWFLAKE_INTEGER;
+            case BIGINT:
+                return SNOWFLAKE_BIGINT;
+            case DECIMAL:
+                return SNOWFLAKE_DECIMAL;
+            case FLOAT:
+                return SNOWFLAKE_FLOAT4;
+            case DOUBLE:
+                return SNOWFLAKE_DOUBLE_PRECISION;
+            case BOOLEAN:
+                return SNOWFLAKE_BOOLEAN;
+            case STRING:
+                return SNOWFLAKE_TEXT;
+            case DATE:
+                return SNOWFLAKE_DATE;
+            case BYTES:
+                return SNOWFLAKE_GEOMETRY;
+            case TIME:
+                return SNOWFLAKE_TIME;
+            case TIMESTAMP:
+                return SNOWFLAKE_TIMESTAMP;
+            default:
+                throw CommonError.convertToSeaTunnelTypeError(
+                        DatabaseIdentifier.SNOWFLAKE,
+                        seaTunnelDataType.getSqlType().toString(),
+                        field);
+        }
     }
 
     @Override

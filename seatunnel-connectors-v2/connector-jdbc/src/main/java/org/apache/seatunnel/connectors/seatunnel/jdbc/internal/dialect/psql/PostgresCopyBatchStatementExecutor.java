@@ -75,6 +75,7 @@ public class PostgresCopyBatchStatementExecutor implements CopyBatchStatementExe
                 Arrays.stream(tableSchema.getFieldNames())
                         .map(dialect::quoteIdentifier)
                         .collect(Collectors.joining(",", "(", ")"));
+
         this.copySql = String.format("COPY %s %s FROM STDIN WITH CSV", tableName, columns);
     }
 

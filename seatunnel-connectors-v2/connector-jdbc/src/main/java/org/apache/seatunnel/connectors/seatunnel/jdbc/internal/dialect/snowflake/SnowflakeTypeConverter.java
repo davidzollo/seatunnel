@@ -69,9 +69,9 @@ public class SnowflakeTypeConverter implements TypeConverter<BasicTypeDefine> {
     private static final String SNOWFLAKE_DATE_TIME = "DATE_TIME";
     private static final String SNOWFLAKE_TIME = "TIME";
     private static final String SNOWFLAKE_TIMESTAMP = "TIMESTAMP";
-    private static final String SNOWFLAKE_TIMESTAMP_LTZ = "TIMESTAMPLTZ";
-    private static final String SNOWFLAKE_TIMESTAMP_NTZ = "TIMESTAMPNTZ";
-    private static final String SNOWFLAKE_TIMESTAMP_TZ = "TIMESTAMPTZ";
+    private static final String SNOWFLAKE_TIMESTAMP_LTZ = "TIMESTAMP_LTZ";
+    private static final String SNOWFLAKE_TIMESTAMP_NTZ = "TIMESTAMP_NTZ";
+    private static final String SNOWFLAKE_TIMESTAMP_TZ = "TIMESTAMP_TZ";
 
     private static final String SNOWFLAKE_GEOGRAPHY = "GEOGRAPHY";
     private static final String SNOWFLAKE_GEOMETRY = "GEOMETRY";
@@ -280,8 +280,9 @@ public class SnowflakeTypeConverter implements TypeConverter<BasicTypeDefine> {
             case STRING:
                 if (column.getColumnLength() != null) {
                     if (column.getColumnLength() > 16777216) {
-                        builder.columnType(SNOWFLAKE_BINARY);
-                        builder.dataType(SNOWFLAKE_BINARY);
+                        // For very large strings, use TEXT type instead of BINARY
+                        builder.columnType(SNOWFLAKE_TEXT);
+                        builder.dataType(SNOWFLAKE_TEXT);
                     } else if (column.getColumnLength() > 0) {
                         builder.columnType(
                                 String.format(

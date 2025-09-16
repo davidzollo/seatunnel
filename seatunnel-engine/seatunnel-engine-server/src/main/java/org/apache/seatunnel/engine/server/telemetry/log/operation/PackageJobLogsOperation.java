@@ -106,7 +106,7 @@ public class PackageJobLogsOperation extends Operation
                     new ZipEntry(
                             "node_"
                                     + getNodeEngine().getThisAddress().getHost()
-                                    + "_"
+                                    + ":"
                                     + getNodeEngine().getThisAddress().getPort()
                                     + "/job_"
                                     + jobId

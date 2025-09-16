@@ -29,7 +29,7 @@
     <artifactId>connector-cdc-postgres</artifactId>
 
     <properties>
-        <postgresql.version>42.4.3</postgresql.version>
+        <postgresql.version>42.6.2</postgresql.version>
     </properties>
 
     <dependencyManagement>

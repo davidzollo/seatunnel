@@ -21,6 +21,7 @@ import org.apache.seatunnel.shade.com.google.common.collect.Lists;
 
 import org.apache.seatunnel.api.source.SourceSplitEnumerator;
 import org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated;
+import org.apache.seatunnel.common.utils.LoggingUtils;
 import org.apache.seatunnel.connectors.seatunnel.mongodb.exception.MongodbConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.mongodb.internal.MongodbClientProvider;
 import org.apache.seatunnel.connectors.seatunnel.mongodb.source.split.MongoSplit;
@@ -73,15 +74,22 @@ public class MongodbSplitEnumerator
 
     @Override
     public synchronized void run() {
+        LoggingUtils.logStart(log, "MongoDB Sharding process");
         log.info("Starting MongoSplitEnumerator.");
         Set<Integer> readers = context.registeredReaders();
+        log.info("Registered readers: {}", readers);
+
+        log.info("Generating splits using strategy...");
         pendingSplits.addAll(strategy.split());
         MongoNamespace namespace = clientProvider.getDefaultCollection().getNamespace();
         log.info(
                 "Added {} pending splits for namespace {}.",
                 pendingSplits.size(),
                 namespace.getFullName());
+
+        log.info("Assigning splits to readers: {}", readers);
         assignSplits(readers);
+        LoggingUtils.logEnd(log, "MongoDB Sharding");
     }
 
     @Override

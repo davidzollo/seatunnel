@@ -25,6 +25,10 @@
     <artifactId>connector-cdc-postgres-e2e</artifactId>
     <name>SeaTunnel : E2E : Connector V2 : CDC MySql</name>
 
+    <properties>
+        <postgresql.version>42.6.2</postgresql.version>
+    </properties>
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -61,10 +65,9 @@
         </dependency>
 
         <dependency>
-            <!-- fix CVE-2022-26520 https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-26520  -->
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.5.1</version>
+            <version>${postgresql.version}</version>
         </dependency>
     </dependencies>
 </project>

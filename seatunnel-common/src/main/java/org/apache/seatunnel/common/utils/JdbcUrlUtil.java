@@ -23,6 +23,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -51,6 +52,11 @@ public final class JdbcUrlUtil {
 
     public static JdbcUrlUtil.UrlInfo getUrlInfo(String url) {
         return getUrlInfo(url, URL_PATTERN);
+    }
+
+    public static JdbcUrlUtil.UrlInfo getUrlInfo(
+            String url, Function<String, UrlInfo> customParser) {
+        return customParser.apply(url);
     }
 
     @Data

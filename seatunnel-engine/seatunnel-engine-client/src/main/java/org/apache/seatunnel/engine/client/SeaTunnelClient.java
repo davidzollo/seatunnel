@@ -20,6 +20,7 @@ package org.apache.seatunnel.engine.client;
 import org.apache.seatunnel.common.utils.JsonUtils;
 import org.apache.seatunnel.engine.client.job.ClientJobExecutionEnvironment;
 import org.apache.seatunnel.engine.client.job.JobClient;
+import org.apache.seatunnel.engine.client.job.JobLogContent;
 import org.apache.seatunnel.engine.client.job.JobMetricsRunner.JobMetricsSummary;
 import org.apache.seatunnel.engine.common.config.JobConfig;
 import org.apache.seatunnel.engine.common.config.SeaTunnelConfig;
@@ -35,6 +36,7 @@ import com.hazelcast.logging.ILogger;
 import lombok.Getter;
 import lombok.NonNull;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -231,5 +233,16 @@ public class SeaTunnelClient implements SeaTunnelClientInstance, AutoCloseable {
      */
     public byte[] packageAllLogs(String dateStr, String host) {
         return jobClient.packageZetaLogs(dateStr, host);
+    }
+
+    /**
+     * Get job log content object by jobId
+     *
+     * @param jobId the job ID
+     * @return JobLogContent object containing host and log information
+     * @throws IOException if failed to read log content
+     */
+    public JobLogContent getJobLogContent(Long jobId) throws IOException {
+        return jobClient.getJobLogContent(jobId);
     }
 }

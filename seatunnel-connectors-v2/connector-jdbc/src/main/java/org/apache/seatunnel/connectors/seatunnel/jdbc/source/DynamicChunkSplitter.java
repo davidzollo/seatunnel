@@ -438,14 +438,17 @@ public class DynamicChunkSplitter extends ChunkSplitter {
         final List<ChunkRange> splits = new ArrayList<>();
 
         if (shardCount == 0) {
+            log.info("Shard count is 0, creating single split for entire table");
             splits.add(ChunkRange.of(null, null));
             return splits;
         }
 
         double approxSamplePerShard = (double) sampleData.length / shardCount;
+        log.info("Approximate samples per shard: {}", approxSamplePerShard);
 
         Object lastEnd = null;
         if (approxSamplePerShard <= 1) {
+            log.info("Using small sample per shard strategy");
             splits.add(ChunkRange.of(null, sampleData[0]));
             lastEnd = sampleData[0];
             for (int i = 1; i < sampleData.length; i++) {
@@ -459,6 +462,7 @@ public class DynamicChunkSplitter extends ChunkSplitter {
             splits.add(ChunkRange.of(lastEnd, null));
 
         } else {
+            log.info("Using large sample per shard strategy");
             for (int i = 0; i < shardCount; i++) {
                 Object chunkStart = lastEnd;
                 Object chunkEnd =

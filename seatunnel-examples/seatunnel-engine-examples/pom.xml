@@ -29,6 +29,7 @@
 
     <properties>
         <hadoop3.version>3.1.4</hadoop3.version>
+        <postgresql.version>42.6.2</postgresql.version>
     </properties>
 
     <dependencies>
@@ -118,7 +119,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.4.3</version>
+            <version>${postgresql.version}</version>
         </dependency>
 
         <dependency>

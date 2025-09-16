@@ -90,7 +90,7 @@
             </activation>
             <properties>
                 <mysql.version>8.0.27</mysql.version>
-                <postgresql.version>42.4.3</postgresql.version>
+                <postgresql.version>42.6.2</postgresql.version>
                 <postgis.jdbc.version>2.5.1</postgis.jdbc.version>
                 <dm-jdbc.version>8.1.2.141</dm-jdbc.version>
                 <sqlserver.version>9.2.1.jre8</sqlserver.version>
@@ -108,6 +108,7 @@
                 <iceberg-aws.version>1.4.2</iceberg-aws.version>
                 <software.amazon.version>2.27.12</software.amazon.version>
                 <oceanbase.version>2.4.3</oceanbase.version>
+                <snowflake.version>3.13.29</snowflake.version>
 
                 <!-- Imap storage dependency package  -->
                 <hadoop-aliyun.version>3.3.6</hadoop-aliyun.version>
@@ -442,6 +443,13 @@
 
                 <dependency>
                     <groupId>org.apache.seatunnel</groupId>
+                    <artifactId>connector-cdc-pi</artifactId>
+                    <version>${project.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+
+                <dependency>
+                    <groupId>org.apache.seatunnel</groupId>
                     <artifactId>connector-dolphindb-wt</artifactId>
                     <version>${project.version}</version>
                     <scope>provided</scope>
@@ -471,6 +479,20 @@
                 <dependency>
                     <groupId>org.apache.seatunnel</groupId>
                     <artifactId>connector-argodb</artifactId>
+                    <version>${project.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+
+                <dependency>
+                    <groupId>org.apache.seatunnel</groupId>
+                    <artifactId>connector-pi</artifactId>
+                    <version>${project.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+
+                <dependency>
+                    <groupId>org.apache.seatunnel</groupId>
+                    <artifactId>connector-pi-metadata</artifactId>
                     <version>${project.version}</version>
                     <scope>provided</scope>
                 </dependency>

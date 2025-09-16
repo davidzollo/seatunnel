@@ -58,7 +58,7 @@ jobs:
   changes:
     runs-on:
       labels: wtci_haiwai
-    timeout-minutes: 30
+    timeout-minutes: 60
     outputs:
       api: ${{ steps.filter.outputs.api }}
       engine: ${{ steps.filter.outputs.engine }}
@@ -79,6 +79,9 @@ jobs:
         run: |
           curr_time=$(date +%s%3N)
           echo "timestamp=$curr_time" >> $GITHUB_OUTPUT
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11.0'
       - name: Check for file changes by python
         id: filter
         run: |

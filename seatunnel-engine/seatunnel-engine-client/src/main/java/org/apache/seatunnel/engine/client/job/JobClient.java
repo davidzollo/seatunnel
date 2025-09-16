@@ -46,7 +46,14 @@ import org.apache.seatunnel.engine.core.protocol.codec.SeaTunnelSavePointJobCode
 
 import lombok.NonNull;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 public class JobClient {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -206,5 +213,137 @@ public class JobClient {
         return hazelcastClient.requestOnMasterAndDecodeResponse(
                 SeaTunnelPackageZetaLogsCodec.encodeRequest(dateStr, host),
                 SeaTunnelPackageZetaLogsCodec::decodeResponse);
+    }
+
+    /**
+     * Get job log content object by jobId
+     *
+     * @param jobId the job ID
+     * @return JobLogContent object containing host and log information
+     * @throws IOException if failed to read log content
+     */
+    public JobLogContent getJobLogContent(Long jobId) throws IOException {
+        byte[] logBytes = packageJobLogs(jobId);
+        return parseJobLogContent(logBytes, jobId);
+    }
+
+    /**
+     * Parse job log content from byte array
+     *
+     * @param logBytes the log bytes from packageJobLogs
+     * @param jobId the job ID
+     * @return JobLogContent object
+     * @throws IOException if failed to parse log content
+     */
+    private JobLogContent parseJobLogContent(byte[] logBytes, Long jobId) throws IOException {
+        List<JobLogContent.NodeLogEntry> nodeLogs = new ArrayList<>();
+
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(logBytes);
+                ZipInputStream zis = new ZipInputStream(bais)) {
+
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String entryName = entry.getName();
+
+                if (entryName.contains("node_") && entryName.contains("job_" + jobId)) {
+                    String host = extractHostFromEntryName(entryName);
+                    String logContent = readZipEntryContent(zis);
+                    nodeLogs.add(new JobLogContent.NodeLogEntry(host, logContent));
+                }
+
+                zis.closeEntry();
+            }
+        }
+
+        return new JobLogContent(nodeLogs);
+    }
+
+    /**
+     * Extract host information from zip entry name
+     *
+     * @param entryName the zip entry name
+     * @return host string
+     */
+    private String extractHostFromEntryName(String entryName) {
+        if (entryName.contains("node_")) {
+            String nodePart = entryName.substring(entryName.indexOf("node_") + 5);
+            int slashIndex = nodePart.indexOf("/");
+            if (slashIndex > 0) {
+                return nodePart.substring(0, slashIndex);
+            }
+            return nodePart;
+        }
+        return "unknown";
+    }
+
+    /**
+     * Read content from zip entry
+     *
+     * @param zis the zip input stream
+     * @return content as string
+     * @throws IOException if failed to read content
+     */
+    private String readZipEntryContent(ZipInputStream zis) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int length;
+        while ((length = zis.read(buffer)) > 0) {
+            baos.write(buffer, 0, length);
+        }
+
+        byte[] content = baos.toByteArray();
+
+        // Check if the content is a zip file (starts with PK magic number)
+        if (isZipFile(content)) {
+            // If it's a zip file, recursively extract the first text file
+            return extractTextFromZip(content);
+        } else {
+            // If it's not a zip file, return as string
+            return baos.toString(StandardCharsets.UTF_8.name());
+        }
+    }
+
+    /**
+     * Check if byte array represents a zip file by checking the magic number
+     *
+     * @param content the byte array to check
+     * @return true if it's a zip file, false otherwise
+     */
+    private boolean isZipFile(byte[] content) {
+        // ZIP file magic number: PK (0x50, 0x4B)
+        return content.length >= 2 && content[0] == 0x50 && content[1] == 0x4B;
+    }
+
+    /**
+     * Extract text content from a zip file
+     *
+     * @param zipContent the zip file content as byte array
+     * @return extracted text content
+     * @throws IOException if failed to extract content
+     */
+    private String extractTextFromZip(byte[] zipContent) throws IOException {
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(zipContent);
+                ZipInputStream zis = new ZipInputStream(bais)) {
+
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                // Skip directories
+                if (!entry.isDirectory()) {
+                    // Read the first file found (assuming it's a text file)
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[1024];
+                    int length;
+                    while ((length = zis.read(buffer)) > 0) {
+                        baos.write(buffer, 0, length);
+                    }
+                    zis.closeEntry();
+                    return baos.toString(StandardCharsets.UTF_8.name());
+                }
+                zis.closeEntry();
+            }
+        }
+
+        // If no text file found, return empty string
+        return "";
     }
 }
