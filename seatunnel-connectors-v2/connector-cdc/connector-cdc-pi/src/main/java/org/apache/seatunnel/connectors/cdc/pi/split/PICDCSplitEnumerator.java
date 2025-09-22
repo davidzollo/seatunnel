@@ -41,9 +41,20 @@ import java.util.Set;
  * multiple Readers for parallel processing, optimized based on PI Web API technical limitations:
  *
  * <ul>
- *   <li>Real-time mode: 50 WebIDs/split (WebSocket URL length limit 8KB)
+ *   <li>Real-time mode: 25 PI Paths/split (WebSocket URL length limit 8KB)
  *   <li>Support load balancing and checkpoint mechanism
- *   <li>Maximum support 160,000 WebIDs, 10,000 splits
+ *   <li>Maximum support 160,000 PI Paths, 10,000 splits
+ * </ul>
+ *
+ * <p>Core Design Principles:
+ *
+ * <ul>
+ *   <li>Principle 1: Keep split size - max 25 PI Paths per split
+ *   <li>Principle 2: Normal case single split, fault tolerance allows multiple splits - max 50 PI
+ *       Paths per reader
+ *   <li>Principle 3: Simplified recovery - directly use checkpoint splits without reorganization
+ *   <li>Principle 4: Dynamic allocation during fault tolerance - round-robin distribution based on
+ *       PI Path count
  * </ul>
  */
 public class PICDCSplitEnumerator
@@ -53,15 +64,15 @@ public class PICDCSplitEnumerator
 
     /**
      * Maximum number of WebIDs per split for CDC real-time mode - limited by WebSocket URL length
-     * (about 8KB)
+     * (about 8KB). This value is configurable via max_webids_per_split parameter.
      */
-    private static final int MAX_WEBIDS_PER_SPLIT = 50;
+    private final int maxWebIDsPerSplit;
 
     /** SeaTunnel split enumerator context, used for interaction with engine */
     private final SourceSplitEnumerator.Context<PICDCSplit> context;
 
-    /** List of WebIDs to be processed (use PI Path first) */
-    private final List<String> webIds;
+    /** List of PI Paths to be processed */
+    private final List<String> piPaths;
 
     /** Map of Reader ID -> list of pending splits */
     private final Map<Integer, List<PICDCSplit>> pendingSplits;
@@ -94,30 +105,31 @@ public class PICDCSplitEnumerator
                         ? checkpointState
                         : new PICDCCheckpointState(new ArrayList<>(), new ArrayList<>());
 
+        // Read max PI Paths per split from configuration (default 25 for fault tolerance)
+        this.maxWebIDsPerSplit = configHelper.getMaxWebIDsPerSplit();
+
         // Restore split state from checkpoint
         if (checkpointState != null) {
             restoreFromCheckpoint(checkpointState);
         }
 
-        // Get WebID or PI Path from configuration
+        // Get PI Paths from configuration
         if (configHelper.getPiPaths() != null) {
-            this.webIds = new ArrayList<>(configHelper.getPiPaths());
-        } else if (configHelper.getWebIds() != null) {
-            this.webIds = new ArrayList<>(configHelper.getWebIds());
+            this.piPaths = new ArrayList<>(configHelper.getPiPaths());
         } else {
-            this.webIds = new ArrayList<>();
+            this.piPaths = new ArrayList<>();
         }
     }
 
     /** Initialize enumerator and validate configuration */
     @Override
     public void open() {
-        if (webIds.isEmpty()) {
-            log.warn("WebID list is empty, cannot create split");
+        if (piPaths.isEmpty()) {
+            log.warn("PI Path list is empty, cannot create split");
             return;
         }
 
-        log.info("PI CDC split enumerator started - WebID total: {}", webIds.size());
+        log.info("PI CDC split enumerator started - PI Path total: {}", piPaths.size());
 
         // Validate split configuration
         validateSplitConfiguration();
@@ -162,11 +174,11 @@ public class PICDCSplitEnumerator
     public void run() throws Exception {
         Set<Integer> readers = context.registeredReaders();
 
-        if (shouldEnumerate && !webIds.isEmpty()) {
+        if (shouldEnumerate && !piPaths.isEmpty()) {
             log.info("Start creating CDC splits, registered Reader count: {}", readers.size());
 
             // Create splits based on read mode
-            List<PICDCSplit> splits = createSplitsByMode();
+            List<PICDCSplit> splits = validatePiPathsCountAndCreateSplits();
 
             synchronized (stateLock) {
                 if (readers.isEmpty()) {
@@ -217,30 +229,39 @@ public class PICDCSplitEnumerator
                 // Create new split with current time
                 PICDCSplit recoveredSplit =
                         new PICDCSplit(
-                                split.splitId(),
-                                split.getPiPaths(),
-                                split.getWebIds(),
-                                System.currentTimeMillis());
+                                split.splitId(), split.getPiPaths(), System.currentTimeMillis());
+
                 recoveredSplits.add(recoveredSplit);
+
                 log.debug(
                         "Reset split {} start time to current moment for CDC recovery",
                         split.splitId());
             }
 
-            pendingSplits
-                    .computeIfAbsent(subtaskId, k -> new ArrayList<>())
-                    .addAll(recoveredSplits);
+            // Redistribute recovered splits using round-robin (Principle 4)
+            Set<Integer> availableReaders = context.registeredReaders();
+            if (!availableReaders.isEmpty()) {
+                List<Integer> readerList = new ArrayList<>(availableReaders);
+                for (int i = 0; i < recoveredSplits.size(); i++) {
+                    int targetReader = readerList.get(i % readerList.size());
+                    pendingSplits
+                            .computeIfAbsent(targetReader, k -> new ArrayList<>())
+                            .add(recoveredSplits.get(i));
+                }
 
-            // Reassign if reader is available
-            if (context.registeredReaders().contains(subtaskId)) {
-                context.assignSplit(subtaskId, new ArrayList<>(recoveredSplits));
-                pendingSplits.get(subtaskId).removeAll(recoveredSplits);
-                context.signalNoMoreSplits(subtaskId);
+                // Validate that no reader exceeds WebID limit after redistribution (Principle 2)
+                validateReaderWebIDLimits();
 
                 log.info(
-                        "Immediately reassigned {} splits to recovered reader {}",
+                        "Redistributed {} recovered splits to {} available readers using round-robin",
                         recoveredSplits.size(),
-                        subtaskId);
+                        availableReaders.size());
+            } else {
+                // No readers available, keep splits pending
+                pendingSplits
+                        .computeIfAbsent(subtaskId, k -> new ArrayList<>())
+                        .addAll(recoveredSplits);
+                log.warn("No available readers, keeping {} splits pending", recoveredSplits.size());
             }
         }
     }
@@ -323,75 +344,68 @@ public class PICDCSplitEnumerator
         }
     }
 
-    /** Create splits based on read mode */
-    private List<PICDCSplit> createSplitsByMode() {
+    /** Validate PI Path count and create splits */
+    private List<PICDCSplit> validatePiPathsCountAndCreateSplits() {
         List<PICDCSplit> splits = new ArrayList<>();
-        int maxWebIDsPerSplit = MAX_WEBIDS_PER_SPLIT;
+        int maxWebIDsPerSplit = this.maxWebIDsPerSplit;
 
-        // Validate total capacity based on parallelism
+        // Calculate expected split count
+        int expectedSplitCount = (piPaths.size() + maxWebIDsPerSplit - 1) / maxWebIDsPerSplit;
         int parallelism = Math.max(1, context.currentParallelism());
-        int maxTotalWebIds = parallelism * maxWebIDsPerSplit;
 
-        if (webIds.size() > maxTotalWebIds) {
+        // Validate parallelism is sufficient to handle all splits
+        if (expectedSplitCount > parallelism) {
+            int maxAllowedPiPaths = parallelism * maxWebIDsPerSplit;
             String errorMsg =
                     String.format(
-                            "Total WebID/PI Path count (%d) exceeds system capacity (%d). "
-                                    + "Current parallelism: %d, max WebIDs per split: %d. "
-                                    + "Please reduce PI Path count to %d or increase parallelism to %d.",
-                            webIds.size(),
-                            maxTotalWebIds,
+                            "Insufficient parallelism for PICDC connector. "
+                                    + "Total PI Path count: %d, max per split: %d, expected splits: %d, current parallelism: %d. "
+                                    + "To avoid WebSocket URL length limit, each Reader can only handle one split with max %d PI Paths. "
+                                    + "Please reduce the PI Path count to %d or fewer.",
+                            piPaths.size(),
+                            maxWebIDsPerSplit,
+                            expectedSplitCount,
                             parallelism,
                             maxWebIDsPerSplit,
-                            maxTotalWebIds,
-                            (int) Math.ceil((double) webIds.size() / maxWebIDsPerSplit));
+                            maxAllowedPiPaths);
 
             log.error(errorMsg);
-            throw new IllegalArgumentException(errorMsg);
+            throw new PIConnectorException(PIErrorCode.CONFIG_VALIDATION_FAILED, errorMsg);
         }
 
         log.info(
-                "Create CDC splits - parallelism: {}, max WebIDs per split: {}, total capacity: {}, actual WebIDs: {}",
-                parallelism,
-                maxWebIDsPerSplit,
-                maxTotalWebIds,
-                webIds.size());
+                "PICDC parallelism validation passed - PI Path count: {}, expected splits: {}, parallelism: {}",
+                piPaths.size(),
+                expectedSplitCount,
+                parallelism);
 
-        // Split WebID list by split size
-        for (int i = 0; i < webIds.size(); i += maxWebIDsPerSplit) {
-            int endIndex = Math.min(i + maxWebIDsPerSplit, webIds.size());
-            List<String> splitWebIDs = webIds.subList(i, endIndex);
+        // Split PI Path list by split size
+        for (int i = 0; i < piPaths.size(); i += maxWebIDsPerSplit) {
+            int endIndex = Math.min(i + maxWebIDsPerSplit, piPaths.size());
+            List<String> splitPiPaths = piPaths.subList(i, endIndex);
 
             // Generate unique split ID
             String splitId = String.format("cdc-split-%d", i / maxWebIDsPerSplit);
 
-            // Determine whether to use PI Path or WebID
-            List<String> piPaths = new ArrayList<>();
-            List<String> webIdList = new ArrayList<>();
-
-            // Check if splitWebIDs is PI Path or WebID
-            if (isUsingPiPaths()) {
-                piPaths.addAll(splitWebIDs);
-            } else {
-                webIdList.addAll(splitWebIDs);
-            }
+            // Only use PI Paths
+            List<String> splitPiPathList = new ArrayList<>(splitPiPaths);
 
             // Create split with current timestamp
             PICDCSplit split =
                     new PICDCSplit(
                             splitId,
-                            piPaths,
-                            webIdList,
+                            splitPiPathList,
                             System.currentTimeMillis() // Start from current time
                             );
             splits.add(split);
 
-            log.debug("Create CDC split: {}, WebID count: {}", splitId, splitWebIDs.size());
+            log.debug("Create CDC split: {}, PI Path count: {}", splitId, splitPiPaths.size());
         }
 
         log.info(
-                "Split creation completed, total split count: {}, total WebID count: {}",
+                "Split creation completed, total split count: {}, total PI Path count: {}",
                 splits.size(),
-                webIds.size());
+                piPaths.size());
         return splits;
     }
 
@@ -414,13 +428,36 @@ public class PICDCSplitEnumerator
             pendingSplits.computeIfAbsent(readerId, k -> new ArrayList<>()).add(splits.get(i));
         }
 
-        // Allocate splits to each Reader
+        // Allocate splits to each Reader (one split at a time to avoid WebSocket URL length limit)
         for (Integer readerId : readers) {
             List<PICDCSplit> readerSplits = pendingSplits.get(readerId);
             if (readerSplits != null && !readerSplits.isEmpty()) {
-                log.info("Allocate {} splits to Reader-{}", readerSplits.size(), readerId);
-                context.assignSplit(readerId, new ArrayList<>(readerSplits));
-                readerSplits.clear();
+                // Debug: Log reader split allocation details
+                int totalPaths =
+                        readerSplits.stream()
+                                .mapToInt(
+                                        split ->
+                                                (split.getPiPaths() != null
+                                                        ? split.getPiPaths().size()
+                                                        : 0))
+                                .sum();
+                int originalSplitCount = readerSplits.size();
+                log.info(
+                        "Reader {} will receive {} splits with total {} paths",
+                        readerId,
+                        originalSplitCount,
+                        totalPaths);
+
+                // Assign splits one by one to avoid WebID accumulation
+                for (PICDCSplit split : new ArrayList<>(readerSplits)) {
+                    context.assignSplit(readerId, Collections.singletonList(split));
+                    readerSplits.remove(split);
+                    log.debug("Assigned split {} to Reader-{}", split.splitId(), readerId);
+                }
+                log.info(
+                        "Allocated {} splits to Reader-{} (one by one)",
+                        originalSplitCount,
+                        readerId);
             }
         }
 
@@ -429,19 +466,19 @@ public class PICDCSplitEnumerator
 
     /** Validate split configuration */
     private void validateSplitConfiguration() {
-        int totalWebIDs = webIds.size();
-        int maxWebIDsPerSplit = MAX_WEBIDS_PER_SPLIT;
-        int expectedSplits = (totalWebIDs + maxWebIDsPerSplit - 1) / maxWebIDsPerSplit;
+        int totalPiPaths = piPaths.size();
+        int maxWebIDsPerSplit = this.maxWebIDsPerSplit;
+        int expectedSplits = (totalPiPaths + maxWebIDsPerSplit - 1) / maxWebIDsPerSplit;
 
         // Validate and resolve paths
-        PIPathValidator.validatePiPaths(webIds);
+        PIPathValidator.validatePiPaths(piPaths);
 
-        // Validate WebID count limit
-        if (totalWebIDs > 160000) {
+        // Validate PI Path count limit
+        if (totalPiPaths > 160000) {
             throw new PIConnectorException(
                     PIErrorCode.CONFIG_VALIDATION_FAILED,
                     String.format(
-                            "WebID total count %d exceeds system limit 160,000", totalWebIDs));
+                            "PI Path total count %d exceeds system limit 160,000", totalPiPaths));
         }
 
         // Validate split count limit
@@ -452,10 +489,39 @@ public class PICDCSplitEnumerator
         }
 
         log.info(
-                "Split configuration validation passed - WebID count: {}, max per split: {}, expected splits: {}",
-                totalWebIDs,
+                "Split configuration validation passed - PI Path count: {}, max per split: {}, expected splits: {}",
+                totalPiPaths,
                 maxWebIDsPerSplit,
                 expectedSplits);
+    }
+
+    /** Validate that no reader exceeds WebID limit (Principle 2: max 50 WebIDs per reader) */
+    private void validateReaderWebIDLimits() {
+        for (Map.Entry<Integer, List<PICDCSplit>> entry : pendingSplits.entrySet()) {
+            int readerId = entry.getKey();
+            List<PICDCSplit> readerSplits = entry.getValue();
+
+            int totalPiPaths = 0;
+            for (PICDCSplit split : readerSplits) {
+                if (split.getPiPaths() != null) {
+                    totalPiPaths += split.getPiPaths().size();
+                }
+            }
+
+            if (totalPiPaths > 50) { // WebSocket URL limit
+                throw new IllegalStateException(
+                        String.format(
+                                "Reader %d assigned %d PI Paths (from %d splits), exceeds limit 50. "
+                                        + "Please increase parallelism or reduce PI Path count.",
+                                readerId, totalPiPaths, readerSplits.size()));
+            }
+
+            log.info(
+                    "Reader {} assigned {} splits with total {} PI Paths",
+                    readerId,
+                    readerSplits.size(),
+                    totalPiPaths);
+        }
     }
 
     /** Restore split state from checkpoint */
@@ -465,13 +531,27 @@ public class PICDCSplitEnumerator
             if (!remainingSplits.isEmpty()) {
                 log.info("Restore {} splits from checkpoint", remainingSplits.size());
 
-                // Re-allocate recovered splits to pending list
+                // Debug: Log checkpoint split details
                 for (int i = 0; i < remainingSplits.size(); i++) {
-                    int readerId = i % Math.max(1, context.currentParallelism());
+                    PICDCSplit split = remainingSplits.get(i);
+                    int piPathCount = (split.getPiPaths() != null ? split.getPiPaths().size() : 0);
+                    log.info("Checkpoint Split {}: {} PI paths", i, piPathCount);
+                }
+
+                int currentParallelism = Math.max(1, context.currentParallelism());
+
+                // Directly use checkpoint splits without reorganization (Principle 3)
+                // Allow multiple splits per reader in case of parallelism mismatch (Principle 2)
+                for (int i = 0; i < remainingSplits.size(); i++) {
+                    int readerId = i % currentParallelism;
                     pendingSplits
                             .computeIfAbsent(readerId, k -> new ArrayList<>())
                             .add(remainingSplits.get(i));
                 }
+
+                // Validate that no reader exceeds WebID limit (Principle 2: max 50 WebIDs per
+                // reader)
+                validateReaderWebIDLimits();
 
                 // No need to re-enumerate if splits exist
                 this.shouldEnumerate = false;
@@ -485,40 +565,5 @@ public class PICDCSplitEnumerator
             pendingSplits.clear();
             this.shouldEnumerate = true;
         }
-    }
-
-    /** Check if using PI Path format or WebID format */
-    private boolean isUsingPiPaths() {
-        // Check format of webIds
-        if (webIds.isEmpty()) {
-            return false;
-        }
-
-        // Check first ID format
-        String firstId = webIds.get(0);
-
-        // PI Path contains path separator or dot
-        boolean hasPiPathCharacters =
-                firstId.contains("\\") || firstId.contains("/") || firstId.contains(".");
-
-        // WebID is long string without path separators
-        boolean looksLikeWebId =
-                firstId.length() > 40
-                        && !firstId.contains("\\")
-                        && !firstId.contains("/")
-                        && !firstId.contains(".");
-
-        // Check PI Path first
-        if (hasPiPathCharacters) {
-            return true;
-        }
-
-        // Return false for WebID format
-        if (looksLikeWebId) {
-            return false;
-        }
-
-        // Default to PI Path
-        return true;
     }
 }

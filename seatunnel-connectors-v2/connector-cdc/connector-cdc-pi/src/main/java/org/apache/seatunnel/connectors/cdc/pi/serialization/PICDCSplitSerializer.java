@@ -55,12 +55,7 @@ public class PICDCSplitSerializer implements Serializer<PICDCSplit> {
                 oos.writeUTF(piPath);
             }
 
-            // Write WebID list
-            List<String> webIds = split.getWebIds();
-            oos.writeInt(webIds.size());
-            for (String webId : webIds) {
-                oos.writeUTF(webId);
-            }
+            // Skip WebID list - only use PI Paths
 
             // Write checkpoint time
             oos.writeLong(split.getLastCheckpointTime());
@@ -91,17 +86,13 @@ public class PICDCSplitSerializer implements Serializer<PICDCSplit> {
                 piPaths.add(ois.readUTF());
             }
 
-            // Read WebID list
-            int webIdCount = ois.readInt();
-            List<String> webIds = new ArrayList<>(webIdCount);
-            for (int i = 0; i < webIdCount; i++) {
-                webIds.add(ois.readUTF());
-            }
+            // Skip WebID list - only use PI Paths
+            List<String> webIds = null;
 
             // Read checkpoint time
             long lastCheckpointTime = ois.readLong();
 
-            return new PICDCSplit(splitId, piPaths, webIds, lastCheckpointTime);
+            return new PICDCSplit(splitId, piPaths, lastCheckpointTime);
         }
     }
 }

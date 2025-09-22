@@ -33,9 +33,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /** PI CDC source reader - based on WebSocket real-time push mode */
 @Slf4j
@@ -54,9 +55,9 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
     private PIRealtimeReader realtimeReader;
 
     // Split and WebID management
-    private final List<PICDCSplit> pendingSplits = new ArrayList<>();
-    private final Map<String, String> piTagToWebIdMap = new HashMap<>();
-    private List<String> resolvedWebIds = new ArrayList<>();
+    private final List<PICDCSplit> pendingSplits = new CopyOnWriteArrayList<>();
+    private final Map<String, String> piTagToWebIdMap = new ConcurrentHashMap<>();
+    private List<String> resolvedWebIds = new CopyOnWriteArrayList<>();
 
     // State management
     private volatile boolean initialized = false;
@@ -154,8 +155,65 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
     @Override
     public void addSplits(List<PICDCSplit> splits) {
         synchronized (pendingSplits) {
-            pendingSplits.addAll(splits);
+            // Check if adding these splits would exceed WebID limit
+            int totalWebIds = calculateTotalWebIds(pendingSplits) + calculateTotalWebIds(splits);
+
+            if (totalWebIds > 50) {
+                log.warn(
+                        "Reader {} would exceed WebID limit ({} > 50), rejecting additional splits",
+                        readerContext.getIndexOfSubtask(),
+                        totalWebIds);
+
+                // Only accept splits that don't exceed the limit
+                List<PICDCSplit> acceptableSplits = new ArrayList<>();
+                int currentWebIds = calculateTotalWebIds(pendingSplits);
+
+                for (PICDCSplit split : splits) {
+                    int splitWebIds = calculateSplitWebIds(split);
+                    if (currentWebIds + splitWebIds <= 50) {
+                        acceptableSplits.add(split);
+                        currentWebIds += splitWebIds;
+                    } else {
+                        log.warn(
+                                "Rejecting split {} to avoid WebID limit exceeded",
+                                split.splitId());
+                    }
+                }
+
+                if (!acceptableSplits.isEmpty()) {
+                    pendingSplits.addAll(acceptableSplits);
+                    log.info(
+                            "Reader {} accepted {} splits, total WebIDs: {}",
+                            readerContext.getIndexOfSubtask(),
+                            acceptableSplits.size(),
+                            currentWebIds);
+                }
+            } else {
+                pendingSplits.addAll(splits);
+                log.info(
+                        "Reader {} accepted {} splits, total WebIDs: {}",
+                        readerContext.getIndexOfSubtask(),
+                        splits.size(),
+                        totalWebIds);
+            }
         }
+    }
+
+    /** Calculate total WebIDs count from splits */
+    private int calculateTotalWebIds(List<PICDCSplit> splits) {
+        return splits.stream().mapToInt(this::calculateSplitWebIds).sum();
+    }
+
+    /** Calculate WebIDs count for a single split */
+    private int calculateSplitWebIds(PICDCSplit split) {
+        int webIdCount = 0;
+        if (split.getWebIds() != null) {
+            webIdCount += split.getWebIds().size();
+        }
+        if (split.getPiPaths() != null) {
+            webIdCount += split.getPiPaths().size();
+        }
+        return webIdCount;
     }
 
     @Override
@@ -251,7 +309,7 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
                                 "Failed to resolve PI Path: {}, error: {}", piPath, e.getMessage());
                     }
                 }
-                log.info(
+                log.debug(
                         "Resolve WebID from PI Path completed, successful: {}/{}",
                         successfulResolutions,
                         totalPiPaths);
@@ -281,11 +339,47 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
         }
 
         log.info("WebID resolved successfully, total count: {}", resolvedWebIds.size());
+
+        // Validate WebID count to prevent WebSocket URL length issues
+        validateWebIdCount();
+    }
+
+    /**
+     * Validate WebID count to prevent WebSocket URL length issues during checkpoint recovery.
+     * Provides clear guidance for resolving the issue without data loss.
+     */
+    private void validateWebIdCount() {
+        final int MAX_SAFE_WEBIDS = 50; // Maximum WebIDs per reader to prevent URL length issues
+
+        if (resolvedWebIds.size() > MAX_SAFE_WEBIDS) {
+            String errorMsg =
+                    String.format(
+                            "Reader received %d WebIDs, which exceeds the safe limit of %d for WebSocket connections. "
+                                    + "This typically occurs when recovering from an old checkpoint created with insufficient parallelism. "
+                                    + "\n\nTo resolve this issue:\n"
+                                    + "1. Increase job parallelism to at least %d (recommended: %d)\n"
+                                    + "2. Or reduce the number of PI Paths to %d or fewer\n\n"
+                                    + "Current configuration: %d WebIDs with parallelism that allows only %d WebIDs per reader.",
+                            resolvedWebIds.size(),
+                            MAX_SAFE_WEBIDS,
+                            (resolvedWebIds.size() + MAX_SAFE_WEBIDS - 1)
+                                    / MAX_SAFE_WEBIDS, // Ceiling division
+                            Math.max(
+                                    6,
+                                    (resolvedWebIds.size() + MAX_SAFE_WEBIDS - 1)
+                                            / MAX_SAFE_WEBIDS),
+                            MAX_SAFE_WEBIDS,
+                            resolvedWebIds.size(),
+                            MAX_SAFE_WEBIDS);
+
+            log.error(errorMsg);
+            throw new PIConnectorException(PIErrorCode.CONFIG_INVALID, errorMsg);
+        }
     }
 
     /** Initialize WebSocket connection from PISourceReader.initializeWebSocketConnection() */
     private void initializeWebSocketConnection() throws Exception {
-        log.info("Start initializing WebSocket connection");
+        log.debug("Start initializing WebSocket connection");
 
         try {
             // Create WebSocket client
@@ -309,7 +403,7 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
     private void setupWebSocketCallbacks() {
         piWebSocketClient.setOnOpen(
                 () -> {
-                    log.info("WebSocket connection established - {}", configHelper.getServerUrl());
+                    log.debug("WebSocket connection established - {}", configHelper.getServerUrl());
                 });
 
         piWebSocketClient.setOnMessage(

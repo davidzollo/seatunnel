@@ -85,7 +85,9 @@ public class PIRealtimeReader implements AutoCloseable {
     public void handleData(Collector<SeaTunnelRow> output) throws Exception {
         // Check if WebSocket client is set
         if (piWebSocketClient == null) {
-            log.warn("WebSocket client not set, waiting for completion...");
+            if (log.isDebugEnabled()) {
+                log.debug("WebSocket client not set, waiting for completion...");
+            }
             Thread.sleep(100);
             return;
         }
@@ -98,7 +100,11 @@ public class PIRealtimeReader implements AutoCloseable {
             // Distinguish between connected and connection failed states
             if (isConnecting) {
                 // Connected, silent wait
-                log.debug("WebSocket is connecting, waiting for completion...");
+                if (log.isDebugEnabled()) {
+                    log.debug(
+                            "WebSocket {} is connecting, waiting for completion...",
+                            config.getServerUrl());
+                }
                 Thread.sleep(200);
                 return;
             }
@@ -120,7 +126,7 @@ public class PIRealtimeReader implements AutoCloseable {
                             connected = true;
                             lastMessageTime = currentTime;
                         } catch (Exception e) {
-                            log.error("WebSocket reconnect failed", e);
+                            log.error("WebSocket {} reconnect failed", config.getServerUrl(), e);
                             Thread.sleep(5000); // Increase wait time to avoid frequent retries
                         }
                     }
@@ -179,13 +185,14 @@ public class PIRealtimeReader implements AutoCloseable {
 
             // Netty client reconnects by stop and start
             try {
-                log.info("Starting to reconnect WebSocket client...");
+                log.info("Starting to reconnect WebSocket client to {}", config.getServerUrl());
                 piWebSocketClient.stop();
                 Thread.sleep(2000); // Increase wait time to ensure connection is fully closed
                 piWebSocketClient.start();
 
             } catch (Exception e) {
-                log.error("Netty WebSocket client reconnect failed", e);
+                log.error(
+                        "Netty WebSocket client reconnect to {} failed", config.getServerUrl(), e);
                 throw e;
             }
         } else {
@@ -198,12 +205,14 @@ public class PIRealtimeReader implements AutoCloseable {
     private void checkHeartbeat() throws Exception {
         long now = System.currentTimeMillis();
         if (now - lastMessageTime > heartbeatTimeoutMs) {
-            log.warn("Heartbeat timeout, attempting to reconnect WebSocket");
+            log.warn(
+                    "Heartbeat timeout for WebSocket {}, attempting to reconnect",
+                    config.getServerUrl());
             try {
                 reconnectWebSocket();
                 lastMessageTime = now;
             } catch (Exception e) {
-                log.error("Reconnect WebSocket failed", e);
+                log.error("Reconnect WebSocket {} failed", config.getServerUrl(), e);
                 throw new PIConnectorException(
                         PIErrorCode.WEBSOCKET_RECONNECT_FAILED,
                         "WebSocket reconnect failed: " + e.getMessage(),
@@ -232,8 +241,11 @@ public class PIRealtimeReader implements AutoCloseable {
 
                 // Check if it is a PI server heartbeat message (empty Items array)
                 if (items.size() == 0) {
-                    log.warn(
-                            "Received PI server heartbeat message, Items is empty, ignoring processing");
+                    if (log.isDebugEnabled()) {
+                        log.debug(
+                                "Received PI server heartbeat message from WebSocket {}, Items is empty, ignoring processing",
+                                config.getServerUrl());
+                    }
                     return;
                 }
 

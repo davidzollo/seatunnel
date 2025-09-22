@@ -67,8 +67,7 @@ public class PISourceReader implements SourceReader<SeaTunnelRow, PISplit> {
 
     // ==================== Split and Data Management ====================
     private final List<PISplit> assignedSplits = new CopyOnWriteArrayList<>();
-    private final BlockingQueue<SeaTunnelRow> dataBufferBlockQueue =
-            new LinkedBlockingQueue<>(300000);
+    private final BlockingQueue<SeaTunnelRow> dataBufferBlockQueue;
 
     // ==================== Batch Processing State ====================
     private volatile LocalDateTime batchStartTime;
@@ -97,6 +96,8 @@ public class PISourceReader implements SourceReader<SeaTunnelRow, PISplit> {
         this.readerContext = readerContext;
         this.configHelper = configHelper;
         this.rowType = rowType;
+        this.dataBufferBlockQueue =
+                new LinkedBlockingQueue<>(configHelper.getDataBufferQueueSize());
     }
 
     @Override
@@ -318,24 +319,18 @@ public class PISourceReader implements SourceReader<SeaTunnelRow, PISplit> {
             return;
         }
 
-        // Strategy 2: fallback to traditional resolution method, prioritize PI Paths
+        // Strategy 2: fallback to traditional resolution method, only use PI Paths
         List<String> configPaths = configHelper.getPiPaths();
-        List<String> configWebIds = configHelper.getWebIds();
 
-        // Primary: Process PI Paths (most common user scenario)
+        // Process PI Paths (only supported method)
         if (configPaths != null && !configPaths.isEmpty()) {
             resolvePiPathsOptimized(configPaths);
-        }
-
-        // Fallback: Process directly configured WebIDs (rare scenario)
-        if (configWebIds != null && !configWebIds.isEmpty()) {
-            addDirectWebIds(configWebIds);
         }
 
         if (resolvedWebIds.isEmpty()) {
             throw new PIConnectorException(
                     PIErrorCode.CONFIG_MISSING_TAG_PATHS,
-                    "No valid PI Paths or WebIDs configured. Please configure pi_paths for normal usage.");
+                    "No valid PI Paths configured. Please configure pi_paths.");
         }
 
         log.info("WebID resolution completed - Total: {} WebIDs", resolvedWebIds.size());
@@ -433,57 +428,23 @@ public class PISourceReader implements SourceReader<SeaTunnelRow, PISplit> {
         }
     }
 
-    /**
-     * Add directly configured WebIDs
-     *
-     * <p>Note: Most users should use pi_paths instead of direct WebIDs. This method is provided for
-     * advanced users who already know the WebIDs.
-     */
-    private void addDirectWebIds(List<String> configWebIds) {
-
-        int addedCount = 0;
-        for (String webId : configWebIds) {
-            if (webId != null && !webId.trim().isEmpty() && !resolvedWebIds.contains(webId)) {
-                resolvedWebIds.add(webId);
-                piPathToWebIdMap.put(webId, webId);
-
-                // Try to resolve metadata for direct WebID
-                try {
-                    PIWebIdBatchResolver batchResolver =
-                            new PIWebIdBatchResolver(httpClient, configHelper);
-                    // Resolve WebID metadata with intelligent type detection
-                    PIWebIdMetadata metadata = batchResolver.resolveWebIdMetadata(webId);
-                    if (metadata != null) {
-                        webIdMetadataMap.put(webId, metadata);
-                    }
-                } catch (Exception e) {
-                    log.warn("Failed to resolve metadata for WebID {}: {}", webId, e.getMessage());
-                }
-                addedCount++;
-            }
-        }
-
-        if (addedCount > 0) {
-            log.info("Successfully added {} direct WebIDs", addedCount);
-        }
-    }
-
     // ==================== Batch Data Reading Methods ====================
 
     /** Poll batch data */
     private void pollNextBatchData(Collector<SeaTunnelRow> output) throws Exception {
         // First, consume existing data from buffer
-        // Increase batch size for better throughput while maintaining manageable memory usage
+        // Use configurable batch size for better throughput while maintaining manageable memory
+        // usage
         List<SeaTunnelRow> rows = new ArrayList<>();
-        int drainedCount = dataBufferBlockQueue.drainTo(rows, 2000);
+        int drainedCount = dataBufferBlockQueue.drainTo(rows, configHelper.getBatchDrainSize());
 
         for (SeaTunnelRow row : rows) {
             output.collect(row);
         }
 
         // Then check if need to query next batch of data: buffer is low & query not completed
-        // Use higher threshold to prefetch more aggressively for better throughput
-        if (dataBufferBlockQueue.size() < 5000 && !queryCompleted) {
+        // Use configurable threshold to prefetch more aggressively for better throughput
+        if (dataBufferBlockQueue.size() < configHelper.getBufferLowThreshold() && !queryCompleted) {
             fetchNextBatch();
         }
 

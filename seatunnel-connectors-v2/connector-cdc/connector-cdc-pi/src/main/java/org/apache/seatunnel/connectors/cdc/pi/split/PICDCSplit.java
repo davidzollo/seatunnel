@@ -19,14 +19,14 @@ package org.apache.seatunnel.connectors.cdc.pi.split;
 
 import org.apache.seatunnel.api.source.SourceSplit;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * PI CDC split
+ * PI CDC split - only supports PI Paths
  *
- * <p>Simplified from PISplit, specifically for PI CDC real-time data split
+ * <p>Simplified from PISplit, specifically for PI CDC real-time data split. Only uses PI Paths for
+ * processing, WebIDs are not supported.
  */
 public class PICDCSplit implements SourceSplit {
 
@@ -34,30 +34,16 @@ public class PICDCSplit implements SourceSplit {
 
     private final String splitId;
     private final List<String> piPaths;
-    private final List<String> webIds;
-
     private final long lastCheckpointTime;
 
-    public PICDCSplit(String splitId, List<String> piPaths, List<String> webIds) {
-        this(splitId, piPaths, webIds, 0L);
+    public PICDCSplit(String splitId, List<String> piPaths) {
+        this(splitId, piPaths, 0L);
     }
 
-    public PICDCSplit(
-            String splitId, List<String> piPaths, List<String> webIds, long lastCheckpointTime) {
+    public PICDCSplit(String splitId, List<String> piPaths, long lastCheckpointTime) {
         this.splitId = splitId;
         this.piPaths = piPaths;
-        this.webIds = webIds;
         this.lastCheckpointTime = lastCheckpointTime;
-    }
-
-    /**
-     * Simplified constructor - consistent with PISplit
-     *
-     * @param splitId split ID
-     * @param webIds WebID list (can be PI Path or WebID)
-     */
-    public PICDCSplit(String splitId, List<String> webIds) {
-        this(splitId, new ArrayList<>(), webIds, 0L);
     }
 
     @Override
@@ -70,35 +56,31 @@ public class PICDCSplit implements SourceSplit {
     }
 
     public List<String> getWebIds() {
-        return webIds;
+        return null; // Only for backward compatibility, always return null
     }
 
     public long getLastCheckpointTime() {
         return lastCheckpointTime;
     }
 
-    /** Get split size (number of WebIDs contained) - consistent with PISplit */
+    /** Get split size (number of PI Paths contained) */
     public int getSize() {
-        int piPathCount = piPaths != null ? piPaths.size() : 0;
-        int webIdCount = webIds != null ? webIds.size() : 0;
-        return piPathCount + webIdCount;
+        return piPaths != null ? piPaths.size() : 0;
     }
 
-    /** Check if split is empty - consistent with PISplit */
+    /** Check if split is empty */
     public boolean isEmpty() {
-        boolean piPathsEmpty = piPaths == null || piPaths.isEmpty();
-        boolean webIdsEmpty = webIds == null || webIds.isEmpty();
-        return piPathsEmpty && webIdsEmpty;
+        return piPaths == null || piPaths.isEmpty();
     }
 
     /** Create a split copy with new checkpoint time */
     public PICDCSplit withCheckpointTime(long checkpointTime) {
-        return new PICDCSplit(splitId, piPaths, webIds, checkpointTime);
+        return new PICDCSplit(splitId, piPaths, checkpointTime);
     }
 
     /** CDC split recovery - create new split with updated start time */
     public PICDCSplit withStartTime(long startTime) {
-        return new PICDCSplit(splitId, piPaths, webIds, startTime);
+        return new PICDCSplit(splitId, piPaths, startTime);
     }
 
     /** Get start time for CDC processing */
@@ -114,8 +96,6 @@ public class PICDCSplit implements SourceSplit {
                 + '\''
                 + ", piPathCount="
                 + (piPaths != null ? piPaths.size() : 0)
-                + ", webIdCount="
-                + (webIds != null ? webIds.size() : 0)
                 + ", lastCheckpointTime="
                 + lastCheckpointTime
                 + '}';
@@ -128,12 +108,11 @@ public class PICDCSplit implements SourceSplit {
         PICDCSplit that = (PICDCSplit) o;
         return lastCheckpointTime == that.lastCheckpointTime
                 && Objects.equals(splitId, that.splitId)
-                && Objects.equals(piPaths, that.piPaths)
-                && Objects.equals(webIds, that.webIds);
+                && Objects.equals(piPaths, that.piPaths);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(splitId, piPaths, webIds, lastCheckpointTime);
+        return Objects.hash(splitId, piPaths, lastCheckpointTime);
     }
 }

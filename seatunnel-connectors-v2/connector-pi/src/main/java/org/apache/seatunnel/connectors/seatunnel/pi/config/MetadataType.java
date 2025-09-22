@@ -17,37 +17,33 @@
 
 package org.apache.seatunnel.connectors.seatunnel.pi.config;
 
-import org.apache.seatunnel.api.configuration.util.OptionMark;
+/** Metadata type enumeration for PI Web API connector */
+public enum MetadataType {
+    POINTS("points"),
+    ATTRIBUTES("attributes");
 
-import lombok.Builder;
-import lombok.Data;
+    private final String value;
 
-import java.io.Serializable;
-import java.util.Map;
+    MetadataType(String value) {
+        this.value = value;
+    }
 
-/**
- * PI connection JSON Field Mapping configuration
- *
- * <p>Class for HTTP connection JsonField, configure PI Web API response field JSONPath mapping
- *
- * <p>Support complex PI Web API response fields:
- *
- * <pre>
- * json_field = {
- *   webId = "$.WebId"
- *   name = "$.Name"
- *   path = "$.Path"
- *   pointType = "$.PointType"
- *   engineeringUnits = "$.EngineeringUnits"
- *   descriptor = "$.Descriptor"
- * }
- * </pre>
- */
-@Data
-@Builder
-public class PIJsonField implements Serializable {
-    private static final long serialVersionUID = 1L;
+    public String getValue() {
+        return value;
+    }
 
-    @OptionMark(description = "PI Web API response field JSONPath mapping")
-    private Map<String, String> fields;
+    public static MetadataType fromValue(String value) {
+        for (MetadataType type : MetadataType.values()) {
+            if (type.value.equalsIgnoreCase(value)) {
+                return type;
+            }
+        }
+        throw new IllegalArgumentException(
+                "Unknown metadata type: " + value + ". Supported types: points, attributes");
+    }
+
+    @Override
+    public String toString() {
+        return value;
+    }
 }

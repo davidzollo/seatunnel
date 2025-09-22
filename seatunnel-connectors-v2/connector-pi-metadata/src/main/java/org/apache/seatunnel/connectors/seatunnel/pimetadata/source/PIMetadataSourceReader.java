@@ -152,28 +152,23 @@ public class PIMetadataSourceReader implements SourceReader<SeaTunnelRow, PIMeta
     }
 
     /**
-     * PI path format judgment to get points/attributes data PI Points path contains ":" (e.g.,
-     * \\pims.huafeng.com\HF.AA.NAB:LIA-26101.PV) AF Attributes path contains "|" (e.g.,
-     * \\PI-AFServer01&02\WebAPI\Test|Attribute1)
+     * Get metadata based on configured metadata type Uses the metadata_type configuration parameter
+     * to determine whether to fetch PI Points or AF Attributes
      */
     private JsonNode getMetadataForPaths(List<String> piPaths) throws Exception {
         if (piPaths.isEmpty()) {
             throw new IllegalArgumentException("PI paths cannot be empty");
         }
 
-        String firstPath = piPaths.get(0);
-        if (firstPath.contains(":") && !firstPath.contains("|")) {
-            // PI Points path
-            return getPointsMetadata(piPaths);
-        } else if (firstPath.contains("|")) {
-            // AF Attributes path
-            return getAttributesMetadata(piPaths);
-        } else {
-            throw new IllegalArgumentException(
-                    "Cannot determine metadata type from PI path format. "
-                            + "PI Points should contain ':' and AF Attributes should contain '|'. "
-                            + "First path: "
-                            + firstPath);
+        // Use configured metadata type (required configuration)
+        switch (configHelper.getMetadataType()) {
+            case POINTS:
+                return getPointsMetadata(piPaths);
+            case ATTRIBUTES:
+                return getAttributesMetadata(piPaths);
+            default:
+                throw new IllegalArgumentException(
+                        "Unsupported metadata type: " + configHelper.getMetadataType());
         }
     }
 

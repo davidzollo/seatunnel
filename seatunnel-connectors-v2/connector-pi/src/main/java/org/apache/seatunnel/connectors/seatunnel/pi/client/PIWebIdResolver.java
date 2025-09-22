@@ -18,6 +18,7 @@
 package org.apache.seatunnel.connectors.seatunnel.pi.client;
 
 import org.apache.seatunnel.connectors.seatunnel.pi.config.AuthType;
+import org.apache.seatunnel.connectors.seatunnel.pi.config.MetadataType;
 import org.apache.seatunnel.connectors.seatunnel.pi.config.PIConfigHelper;
 import org.apache.seatunnel.connectors.seatunnel.pi.exception.PIConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.pi.exception.PIErrorCode;
@@ -76,15 +77,17 @@ public class PIWebIdResolver {
     }
 
     /**
-     * Check if the PI Path is an AF Attribute path
+     * Check if the PI Path is an AF Attribute path based on configured metadata type
      *
      * @param piPath PI Path to check
      * @return true if it's an AF Attribute path, false if it's a PI Point path
      */
     private boolean isAttributePath(String piPath) {
-        // AF Attribute format: \\\\server\\database\\element|attribute
-        // PI Point format: \\\\server\\tag
-        return piPath != null && piPath.contains("|");
+        MetadataType metadataType = config.getMetadataType();
+        if (metadataType == null) {
+            throw new IllegalStateException("metadata_type must be configured");
+        }
+        return metadataType == MetadataType.ATTRIBUTES;
     }
 
     /**
@@ -178,7 +181,7 @@ public class PIWebIdResolver {
 
             // Right url:
             // https://10.89.63.4:8443/piwebapi/points?path=%5C%5Cpims.huafeng.com%5CHF.AA.NAB%3ALIA-26101.PV
-            log.info("Preparing to resolve PI Path: {} -> URL: {}", piPath, requestUrl);
+            log.debug("Preparing to resolve PI Path: {} -> URL: {}", piPath, requestUrl);
 
             // Send HTTP request
             HttpsURLConnection connection = createConnection(requestUrl);

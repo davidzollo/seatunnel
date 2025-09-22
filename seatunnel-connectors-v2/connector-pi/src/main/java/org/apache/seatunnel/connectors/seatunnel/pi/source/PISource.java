@@ -205,9 +205,9 @@ public class PISource
         }
 
         // Validate data source configuration
-        if (config.getPiPaths() == null && config.getWebIds() == null) {
+        if (config.getPiPaths() == null) {
             throw new PIConnectorException(
-                    PIErrorCode.CONFIG_MISSING_TAG_PATHS, "Must configure pi_paths or web_ids");
+                    PIErrorCode.CONFIG_MISSING_TAG_PATHS, "Must configure pi_paths");
         }
 
         // Validate data source quantity limit (Note: this is the number of configuration items,
@@ -233,8 +233,6 @@ public class PISource
     private int getConfiguredItemCount() {
         if (configHelper.getPiPaths() != null) {
             return configHelper.getPiPaths().size();
-        } else if (configHelper.getWebIds() != null) {
-            return configHelper.getWebIds().size();
         }
         return 0;
     }

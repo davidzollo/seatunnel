@@ -214,7 +214,7 @@ public class PIWebSocketClient implements AutoCloseable {
         this.handshakeTimeoutMillis = Math.max(connectTimeoutMillis * 2, 30000);
 
         if (trustAll) {
-            log.info("Trust all SSL certificates mode enabled!");
+            log.debug("Trust all SSL certificates mode enabled!");
         }
 
         log.info(
@@ -596,7 +596,7 @@ public class PIWebSocketClient implements AutoCloseable {
                         .getWebSocketConnectionWaitTimeoutMs(); // Use WebSocket connection wait
         // timeout configuration
 
-        log.info(
+        log.debug(
                 "Create PI WebSocket client (Netty) - URL: {}, trust all certificates: {}, WebSocket connection timeout: {}ms",
                 webSocketUrl,
                 trustAllCerts,
@@ -819,7 +819,7 @@ public class PIWebSocketClient implements AutoCloseable {
         final String path = uri.getPath() + (uri.getQuery() != null ? "?" + uri.getQuery() : "");
         final boolean ssl = "wss".equalsIgnoreCase(scheme);
 
-        log.info(
+        log.debug(
                 "Prepare to connect WebSocket server - Host: {}, Port: {}, Path: {}, SSL: {}",
                 host,
                 port,
@@ -829,7 +829,7 @@ public class PIWebSocketClient implements AutoCloseable {
         // Network connectivity pre-detection
         try {
             performNetworkTest(host, port);
-            log.info("Network connectivity detection passed");
+            log.debug("Network connectivity detection passed");
         } catch (Exception e) {
             log.error(
                     "Network connectivity detection failed: {}, current thread interrupt status: {}",
@@ -850,17 +850,17 @@ public class PIWebSocketClient implements AutoCloseable {
                                 //                                .protocols("TLSv1.2", "TLSv1.3")
                                 // // Explicitly specify supported TLS versions
                                 .build();
-                log.info(
+                log.debug(
                         "Trust all certificates configured, host name verification disabled, supports TLS 1.2/1.3");
             } else {
                 sslCtx = SslContextBuilder.forClient().build();
-                log.info("Use standard SSL certificate verification, supports TLS 1.2/1.3");
+                log.debug("Use standard SSL certificate verification, supports TLS 1.2/1.3");
             }
         } else {
             sslCtx = null;
         }
 
-        log.info(
+        log.debug(
                 "WebSocket connection configuration - protocol: {}, host: {}, port: {}, path: {}, SSL: {}",
                 scheme,
                 host,
@@ -885,21 +885,21 @@ public class PIWebSocketClient implements AutoCloseable {
                 String encodedAuth =
                         java.util.Base64.getEncoder().encodeToString(authValue.getBytes());
                 headers.add(HttpHeaderNames.AUTHORIZATION, "Basic " + encodedAuth);
-                log.info("Basic authentication header added to WebSocket handshake");
+                log.debug("Basic authentication header added to WebSocket handshake");
             } else if (AuthType.BEARER.equals(authType)
                     && authenticationConfig.getBearerToken() != null) {
                 headers.add(
                         HttpHeaderNames.AUTHORIZATION,
                         "Bearer " + authenticationConfig.getBearerToken());
-                log.info("Bearer authentication header added to WebSocket handshake");
+                log.debug("Bearer authentication header added to WebSocket handshake");
             }
         }
 
-        log.info("Start to create WebSocketClientHandshaker");
+        log.debug("Start to create WebSocketClientHandshaker");
         final WebSocketClientHandshaker handshaker =
                 WebSocketClientHandshakerFactory.newHandshaker(
                         uri, WebSocketVersion.V13, null, true, headers);
-        log.info("WebSocketClientHandshaker created successfully");
+        log.debug("WebSocketClientHandshaker created successfully");
 
         // Create WebSocket handler
         final WebSocketClientHandler handler = new WebSocketClientHandler(handshaker);
@@ -916,7 +916,7 @@ public class PIWebSocketClient implements AutoCloseable {
                         new ChannelInitializer<SocketChannel>() {
                             @Override
                             protected void initChannel(SocketChannel ch) {
-                                log.info("Initialize Channel Pipeline");
+                                log.debug("Initialize Channel Pipeline");
                                 // Configure Socket options to optimize connection
                                 ch.config().setTcpNoDelay(true);
                                 ch.config().setKeepAlive(true);
@@ -924,7 +924,7 @@ public class PIWebSocketClient implements AutoCloseable {
 
                                 ChannelPipeline p = ch.pipeline();
                                 if (sslCtx != null) {
-                                    log.info("Start to configure SSL processor");
+                                    log.debug("Start to configure SSL processor");
                                     SSLEngine sslEngine = sslCtx.newEngine(ch.alloc(), host, port);
                                     sslEngine.setUseClientMode(true);
 
@@ -933,14 +933,14 @@ public class PIWebSocketClient implements AutoCloseable {
                                     sslParams.setEndpointIdentificationAlgorithm(
                                             null); // Close host name verification
                                     sslEngine.setSSLParameters(sslParams);
-                                    log.info("Force close SSL host name verification");
+                                    log.debug("Force close SSL host name verification");
 
                                     SslHandler sslHandler = new SslHandler(sslEngine);
                                     // Set shorter handshake timeout to avoid long blocking
                                     sslHandler.setHandshakeTimeoutMillis(15000); // 15 seconds
                                     p.addLast(sslHandler);
 
-                                    log.info(
+                                    log.debug(
                                             "SSL processor configuration completed, handshake timeout: 15 seconds");
                                 }
                                 p.addLast(
@@ -951,16 +951,16 @@ public class PIWebSocketClient implements AutoCloseable {
                                                 heartbeatIntervalSeconds,
                                                 0),
                                         handler);
-                                log.info("Channel Pipeline initialized successfully");
+                                log.debug("Channel Pipeline initialized successfully");
                             }
                         });
 
         // Connect to server
-        log.info("Connecting to WebSocket server: {}://{}:{}{}", scheme, host, port, path);
+        log.debug("Connecting to WebSocket server: {}://{}:{}{}", scheme, host, port, path);
         ChannelFuture connectFuture = b.connect(host, port);
 
         // Wait for connection establishment, using configured timeout
-        log.info("Waiting for TCP connection establishment, timeout: {}ms", connectTimeoutMillis);
+        log.debug("Waiting for TCP connection establishment, timeout: {}ms", connectTimeoutMillis);
         if (!connectFuture.await(connectTimeoutMillis, TimeUnit.MILLISECONDS)) {
             connectFuture.cancel(true);
             throw new RuntimeException("Connection timeout: " + connectTimeoutMillis + "ms");
@@ -972,10 +972,10 @@ public class PIWebSocketClient implements AutoCloseable {
         }
 
         this.channel = connectFuture.channel();
-        log.info("TCP connection established, start WebSocket handshake");
+        log.debug("TCP connection established, start WebSocket handshake");
 
         // Wait for handshake completion, using independent handshake timeout
-        log.info(
+        log.debug(
                 "Waiting for WebSocket handshake completion, timeout: {}ms",
                 handshakeTimeoutMillis);
         ChannelFuture handshakeFuture = handler.handshakeFuture();
@@ -1043,16 +1043,16 @@ public class PIWebSocketClient implements AutoCloseable {
 
         @Override
         public void handlerAdded(ChannelHandlerContext ctx) {
-            log.info("WebSocket handler added to Pipeline");
+            log.debug("WebSocket handler added to Pipeline");
             handshakeFuture = ctx.newPromise();
         }
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
-            log.info("Channel activated, start WebSocket handshake");
+            log.debug("Channel activated, start WebSocket handshake");
             try {
                 handshaker.handshake(ctx.channel());
-                log.info("WebSocket handshake request sent");
+                log.debug("WebSocket handshake request sent");
             } catch (Exception e) {
                 log.error("WebSocket handshake request sending failed", e);
                 throw e;
@@ -1111,13 +1111,13 @@ public class PIWebSocketClient implements AutoCloseable {
 
             // Handle handshake completion
             if (!handshaker.isHandshakeComplete()) {
-                log.info("Handle WebSocket handshake response");
+                log.debug("Handle WebSocket handshake response");
                 try {
                     FullHttpResponse response = (FullHttpResponse) msg;
-                    log.info("Received handshake response, status code: {}", response.status());
+                    log.debug("Received handshake response, status code: {}", response.status());
                     handshaker.finishHandshake(ch, response);
                     handshakeFuture.setSuccess();
-                    log.info("WebSocket handshake completed successfully");
+                    log.debug("WebSocket handshake completed successfully");
                 } catch (Exception e) {
                     log.error("WebSocket handshake failed", e);
                     handshakeFuture.setFailure(e);

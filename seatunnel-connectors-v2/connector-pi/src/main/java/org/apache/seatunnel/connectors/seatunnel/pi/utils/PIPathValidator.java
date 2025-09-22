@@ -17,6 +17,8 @@
 
 package org.apache.seatunnel.connectors.seatunnel.pi.utils;
 
+import org.apache.seatunnel.api.configuration.ReadonlyConfig;
+import org.apache.seatunnel.connectors.seatunnel.pi.config.PIConfig;
 import org.apache.seatunnel.connectors.seatunnel.pi.exception.PIConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.pi.exception.PIErrorCode;
 
@@ -34,18 +36,57 @@ public class PIPathValidator {
     private static final Logger log = LoggerFactory.getLogger(PIPathValidator.class);
 
     /**
-     * Validate PI path list
+     * Validate PI path list with default configuration
      *
      * @param piPaths PI path list
      * @throws PIConnectorException throws exception when validation fails
      */
     public static void validatePiPaths(List<String> piPaths) {
+        // Use default recommended limit from PIConfig
+        int recommendedMaxPiPaths = PIConfig.RECOMMENDED_MAX_PI_PATHS.defaultValue();
+        validatePiPathsInternal(piPaths, recommendedMaxPiPaths);
+    }
+
+    /**
+     * Validate PI path list with configuration
+     *
+     * @param piPaths PI path list
+     * @param config Configuration for getting recommended limit
+     * @throws PIConnectorException throws exception when validation fails
+     */
+    public static void validatePiPaths(List<String> piPaths, ReadonlyConfig config) {
+        // Get recommended limit from config or use PIConfig default
+        int recommendedMaxPiPaths = PIConfig.RECOMMENDED_MAX_PI_PATHS.defaultValue();
+        if (config != null) {
+            recommendedMaxPiPaths = config.get(PIConfig.RECOMMENDED_MAX_PI_PATHS);
+        }
+        validatePiPathsInternal(piPaths, recommendedMaxPiPaths);
+    }
+
+    /**
+     * Internal method to validate PI path list with specified limit
+     *
+     * @param piPaths PI path list
+     * @param recommendedMaxPiPaths Recommended maximum PI path count
+     * @throws PIConnectorException throws exception when validation fails
+     */
+    private static void validatePiPathsInternal(List<String> piPaths, int recommendedMaxPiPaths) {
         if (piPaths == null || piPaths.isEmpty()) {
             throw new PIConnectorException(
                     PIErrorCode.CONFIG_VALIDATION_FAILED, "pi_paths configuration cannot be empty");
         }
 
         log.info("Starting PI path configuration validation, total count: {}", piPaths.size());
+
+        // Check PI Path count and provide performance warning if needed
+        if (piPaths.size() > recommendedMaxPiPaths) {
+            log.warn(
+                    "PI Path count ({}) exceeds recommended limit ({}). "
+                            + "Large numbers of PI Paths may impact performance and increase memory usage. "
+                            + "Consider: Reducing the number of PI Paths",
+                    piPaths.size(),
+                    recommendedMaxPiPaths);
+        }
 
         // 1. Check for duplicate paths
         Set<String> uniquePaths = new HashSet<>();
@@ -69,8 +110,6 @@ public class PIPathValidator {
 
         // 2. Check path format
         List<String> invalidPaths = new ArrayList<>();
-        int pointCount = 0;
-        int attributeCount = 0;
 
         for (String path : piPaths) {
             if (path == null || path.trim().isEmpty()) {
@@ -84,13 +123,6 @@ public class PIPathValidator {
             if (!isValidPiPath(trimmedPath)) {
                 invalidPaths.add(trimmedPath);
                 continue;
-            }
-
-            // Count path types
-            if (trimmedPath.contains("|")) {
-                attributeCount++;
-            } else {
-                pointCount++;
             }
         }
 
@@ -109,18 +141,22 @@ public class PIPathValidator {
         validationResult.append("PI path validation passed:\n");
         validationResult.append("  - Total path count: ").append(piPaths.size()).append("\n");
         validationResult.append("  - Unique path count: ").append(uniquePaths.size()).append("\n");
-        validationResult.append("  - PI Point paths: ").append(pointCount).append("\n");
-        validationResult.append("  - AF Attribute paths: ").append(attributeCount).append("\n");
 
         // Check for duplicate paths
         boolean hasDuplicates = piPaths.size() != uniquePaths.size();
         validationResult
                 .append("  - No duplicate paths: ")
-                .append(hasDuplicates ? "FAILED" : "PASSED")
-                .append("\n");
+                .append(hasDuplicates ? "FAILED" : "PASSED");
 
-        // Format validation already passed (if we reach here, no invalid paths found)
-        validationResult.append("  - Format validation passed: PASSED");
+        // Add performance recommendation check only if exceeds limit
+        if (piPaths.size() > recommendedMaxPiPaths) {
+            validationResult
+                    .append("\n")
+                    .append("  - Quantity check: WARNING (recommended max: ")
+                    .append(recommendedMaxPiPaths)
+                    .append(")");
+        }
+
         log.info(validationResult.toString());
     }
 

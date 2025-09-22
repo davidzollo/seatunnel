@@ -45,15 +45,15 @@ public class PIConfig {
                     .listType()
                     .noDefaultValue()
                     .withDescription(
-                            "List of PI Paths to read, supports AF Attribute and PI Point paths, automatically resolved to WebID");
+                            "List of PI Paths to read, supports AF Attribute and PI Point paths");
 
-    // Backward compatibility: still supports direct WebID configuration (optional)
-    public static final Option<List<String>> WEB_IDS =
-            Options.key("web_ids")
-                    .listType()
+    // Metadata type configuration for PI Metadata connector
+    public static final Option<MetadataType> METADATA_TYPE =
+            Options.key("metadata_type")
+                    .enumType(MetadataType.class)
                     .noDefaultValue()
                     .withDescription(
-                            "List of PI WebIDs to read (optional, pi_paths takes priority)");
+                            "Metadata type for PI Metadata connector: points (PI Points) or attributes (AF Attributes)");
 
     // ================= Authentication Configuration =================
 
@@ -200,7 +200,7 @@ public class PIConfig {
                     .noDefaultValue()
                     .withDescription("Historical data end time (ISO 8601 format)");
 
-    // ================= WebSocket Enhanced Configuration（retry） =================
+    // ================= WebSocket Enhanced Configuration (retry) =================
 
     public static final Option<String> RETRIEVAL_MODE =
             Options.key("retrieval_mode")
@@ -243,7 +243,7 @@ public class PIConfig {
                     .withDescription(
                             "Whether to allow WebSocket to continue connecting in background, default false. If false, exception will be thrown on connection failure");
 
-    // ================= JSON Field Mapping Configuration（ HTTP connector design） =================
+    // ================= JSON Field Mapping Configuration (HTTP connector design) =================
 
     @SuppressWarnings("unchecked")
     public static final Option<Map<String, String>> JSON_FIELD =
@@ -263,7 +263,7 @@ public class PIConfig {
     //                            "Content field extraction configuration, use JSONPath expressions
     // to extract arrays or objects from PI responses");
 
-    // ================= Schema Configuration（userdatastructure） =================
+    // ================= Schema Configuration (user data structure) =================
 
     @SuppressWarnings("unchecked")
     public static final Option<Map<String, Object>> SCHEMA =
@@ -275,16 +275,16 @@ public class PIConfig {
                                     .withDescription(
                                             "User-defined data structure definition, supports all SeaTunnel data types");
 
-    // ================= Batch Mode Configuration（connector-pispecific） =================
-    // ：START_TIMEEND_TIMEHistorical Mode Configuration，
+    // ================= Batch Mode Configuration (connector-pi specific) =================
+    // START_TIME and END_TIME for Historical Mode Configuration
 
-    // ================= Split Configuration（batchmode） =================
+    // ================= Split Configuration (batch mode) =================
 
     public static final Option<Integer> WEBIDS_PER_SPLIT =
             Options.key("webids_per_split")
                     .intType()
                     .defaultValue(20)
-                    .withDescription("Number of WebIDs contained in each split");
+                    .withDescription("Number of PI Paths contained in each split");
 
     public static final Option<Integer> MAX_SPLITS =
             Options.key("max_splits")
@@ -304,38 +304,54 @@ public class PIConfig {
             Options.key("webid_resolve_batch_size")
                     .intType()
                     .defaultValue(50)
-                    .withDescription("WebID resolution batch size");
+                    .withDescription("PI Path to WebID resolution batch size");
 
     public static final Option<Long> WEBID_RESOLVE_DELAY_MS =
             Options.key("webid_resolve_delay_ms")
                     .longType()
                     .defaultValue(10L)
-                    .withDescription("WebID resolution interval (milliseconds)");
+                    .withDescription("PI Path to WebID resolution interval (milliseconds)");
 
-    /** supportmaximum WebID quantity */
+    /** Maximum supported PI Path quantity */
     public static final int MAX_SUPPORTED_WEBIDS = 100000;
 
-    public enum PIMetadataType {
-        POINTS("points"),
-        ATTRIBUTES("attributes");
+    /** Maximum PI Paths per split for CDC mode to avoid WebSocket URL length limit */
+    public static final Option<Integer> MAX_WEBIDS_PER_SPLIT =
+            Options.key("max_webids_per_split")
+                    .intType()
+                    .defaultValue(25)
+                    .withDescription(
+                            "Maximum number of PI Paths per split for CDC mode (limited by WebSocket URL length)");
 
-        private final String value;
+    /** Recommended maximum PI Path count for optimal performance */
+    public static final Option<Integer> RECOMMENDED_MAX_PI_PATHS =
+            Options.key("recommended_max_pi_paths")
+                    .intType()
+                    .defaultValue(300)
+                    .withDescription(
+                            "Recommended maximum number of PI Paths for optimal performance. Exceeding this limit may impact performance and increase memory usage.");
 
-        PIMetadataType(String value) {
-            this.value = value;
-        }
+    /** Data buffer queue size for PI Source Reader */
+    public static final Option<Integer> DATA_BUFFER_QUEUE_SIZE =
+            Options.key("data_buffer_queue_size")
+                    .intType()
+                    .defaultValue(300000)
+                    .withDescription(
+                            "Size of the internal data buffer queue for PI Source Reader. Larger values provide better throughput but consume more memory.");
 
-        public String getValue() {
-            return value;
-        }
+    /** Batch size for draining data from buffer queue */
+    public static final Option<Integer> BATCH_DRAIN_SIZE =
+            Options.key("batch_drain_size")
+                    .intType()
+                    .defaultValue(2000)
+                    .withDescription(
+                            "Number of records to drain from buffer queue in each batch. Higher values improve throughput but may increase memory usage.");
 
-        public static PIMetadataType fromValue(String value) {
-            for (PIMetadataType type : PIMetadataType.values()) {
-                if (type.value.equals(value)) {
-                    return type;
-                }
-            }
-            throw new IllegalArgumentException("Unknown PI metadata type: " + value);
-        }
-    }
+    /** Buffer low threshold for triggering next batch fetch */
+    public static final Option<Integer> BUFFER_LOW_THRESHOLD =
+            Options.key("buffer_low_threshold")
+                    .intType()
+                    .defaultValue(5000)
+                    .withDescription(
+                            "When buffer size falls below this threshold, trigger fetching next batch of data. Higher values provide better prefetching but consume more memory.");
 }

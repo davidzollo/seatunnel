@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.connectors.seatunnel.pi.client;
 
+import org.apache.seatunnel.connectors.seatunnel.pi.config.MetadataType;
 import org.apache.seatunnel.connectors.seatunnel.pi.config.PIConfigHelper;
 
 import org.slf4j.Logger;
@@ -48,16 +49,16 @@ public class PIWebIdBatchResolver {
     private static final int DEFAULT_WEBID_CACHE_SIZE = 10000;
 
     private final PIHttpClient httpClient;
-    private final PIConfigHelper config;
+    private final PIConfigHelper configHelper;
     private final int batchSize;
 
     /** WebID type cache manager for optimized API calls */
     private final WebIdTypeCache webIdTypeCache;
 
-    public PIWebIdBatchResolver(PIHttpClient httpClient, PIConfigHelper config) {
+    public PIWebIdBatchResolver(PIHttpClient httpClient, PIConfigHelper configHelper) {
         this.httpClient = httpClient;
-        this.config = config;
-        this.batchSize = config.getWebIdResolveBatchSize();
+        this.configHelper = configHelper;
+        this.batchSize = configHelper.getWebIdResolveBatchSize();
         this.webIdTypeCache = new WebIdTypeCache(DEFAULT_WEBID_CACHE_SIZE);
     }
 
@@ -82,7 +83,7 @@ public class PIWebIdBatchResolver {
                         piPaths.size());
 
                 // Avoid too frequent requests
-                Thread.sleep(config.getWebIdResolveDelayMs());
+                Thread.sleep(configHelper.getWebIdResolveDelayMs());
 
             } catch (Exception e) {
                 log.error(
@@ -122,7 +123,7 @@ public class PIWebIdBatchResolver {
                 webIdMetadataMap.putAll(batchMetadata);
 
                 // Avoid too frequent requests
-                Thread.sleep(config.getWebIdResolveDelayMs());
+                Thread.sleep(configHelper.getWebIdResolveDelayMs());
 
             } catch (Exception e) {
                 log.error(
@@ -148,8 +149,8 @@ public class PIWebIdBatchResolver {
     private List<String> resolveBatch(List<String> piPaths) throws Exception {
         StringBuilder endpointBuilder = new StringBuilder();
 
-        // Select API based on path type
-        if (isAttributePath(piPaths.get(0))) {
+        // Select API based on configured metadata type
+        if (isAttributePath()) {
             endpointBuilder.append(PIWEBAPI_ATTRIBUTES_MULTIPLE_ENDPOINT).append("?");
         } else {
             endpointBuilder.append(PIWEBAPI_POINTS_MULTIPLE_ENDPOINT).append("?");
@@ -169,8 +170,8 @@ public class PIWebIdBatchResolver {
             throws Exception {
         StringBuilder endpointBuilder = new StringBuilder();
 
-        // Select API based on path type
-        if (isAttributePath(piPaths.get(0))) {
+        // Select API based on configured metadata type
+        if (isAttributePath()) {
             endpointBuilder.append(PIWEBAPI_ATTRIBUTES_MULTIPLE_ENDPOINT).append("?");
         } else {
             endpointBuilder.append(PIWEBAPI_POINTS_MULTIPLE_ENDPOINT).append("?");
@@ -243,7 +244,7 @@ public class PIWebIdBatchResolver {
                     if (webId != null) {
                         metadataMap.put(webId, new PIWebIdMetadata(webId, name, pathVal));
                         // Cache the type information for this WebID
-                        webIdTypeCache.putType(webId, isAttributePath(originalPaths.get(i)));
+                        webIdTypeCache.putType(webId, isAttributePath());
                     }
                 } else if (item.has("Object") && item.get("Object").has("WebId")) {
                     JsonNode objectNode = item.get("Object");
@@ -259,7 +260,7 @@ public class PIWebIdBatchResolver {
                     if (webId != null) {
                         metadataMap.put(webId, new PIWebIdMetadata(webId, name, pathVal));
                         // Cache the type information for this WebID
-                        webIdTypeCache.putType(webId, isAttributePath(originalPaths.get(i)));
+                        webIdTypeCache.putType(webId, isAttributePath());
                     }
                 }
             }
@@ -273,36 +274,47 @@ public class PIWebIdBatchResolver {
         return metadataMap;
     }
 
-    /** Extract name from PI path */
+    /** Extract name from PI path based on configured metadata type */
     private String extractNameFromPath(String piPath) {
         if (piPath == null || piPath.isEmpty()) {
             log.warn("PI path is null or empty, returning Unknown");
             return "Unknown";
         }
 
-        // For AF Attribute path: \\PI-AFServer01&02\WebAPI\Test|Attribute1
-        if (piPath.contains("|")) {
-            String[] parts = piPath.split("\\|");
-            String name = parts.length > 1 ? parts[parts.length - 1] : "Unknown";
-            log.info("AF Attribute path detected, extracted name: {}", name);
-            return name;
+        MetadataType metadataType = configHelper.getMetadataType();
+        if (metadataType == null) {
+            throw new IllegalStateException("metadata_type must be configured");
         }
 
-        // For PI Point path: \\pims.huafeng.com\HF.AA.NAB:LIA-26101.PV
-        if (piPath.contains("\\")) {
-            String[] parts = piPath.split("\\\\");
-            String name = parts.length > 0 ? parts[parts.length - 1] : "Unknown";
-            log.info("PI Point path detected, extracted name: {}", name);
-            return name;
+        if (metadataType == MetadataType.ATTRIBUTES) {
+            // For AF Attribute path: \\PI-AFServer01&02\WebAPI\Test|Attribute1
+            if (piPath.contains("|")) {
+                String[] parts = piPath.split("\\|");
+                String name = parts.length > 1 ? parts[parts.length - 1] : "Unknown";
+                log.debug("AF Attribute path, extracted name: {}", name);
+                return name;
+            }
+        } else {
+            // For PI Point path: \\pims.huafeng.com\HF.AA.NAB:LIA-26101.PV
+            if (piPath.contains("\\")) {
+                String[] parts = piPath.split("\\\\");
+                String name = parts.length > 0 ? parts[parts.length - 1] : "Unknown";
+                log.debug("PI Point path, extracted name: {}", name);
+                return name;
+            }
         }
 
-        log.info("No special path pattern detected, using full path as name: {}", piPath);
+        log.debug("No special path pattern detected, using full path as name: {}", piPath);
         return piPath;
     }
 
-    /** Determine if it's an AF Attribute path */
-    private boolean isAttributePath(String path) {
-        return path.contains("|");
+    /** Determine if it's an AF Attribute based on configured metadata type */
+    private boolean isAttributePath() {
+        MetadataType metadataType = configHelper.getMetadataType();
+        if (metadataType != null) {
+            return metadataType == MetadataType.ATTRIBUTES;
+        }
+        throw new IllegalStateException("metadata_type must be configured");
     }
 
     /** Batch resolve WebID metadata by WebIDs (for splits containing WebIDs) */

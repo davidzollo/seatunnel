@@ -60,10 +60,6 @@ public class PIConfigHelper implements Serializable {
         return config.getOptional(PIConfig.PI_PATHS).orElse(null);
     }
 
-    public List<String> getWebIds() {
-        return config.getOptional(PIConfig.WEB_IDS).orElse(null);
-    }
-
     // ================= Authentication Configuration =================
 
     public AuthType getAuthType() {
@@ -217,5 +213,25 @@ public class PIConfigHelper implements Serializable {
 
     public int getChannelPollingIntervalMs() {
         return config.getOptional(PIConfig.CHANNEL_POLLING_INTERVAL_MS).orElse(3000);
+    }
+
+    public MetadataType getMetadataType() {
+        return config.getOptional(PIConfig.METADATA_TYPE).orElse(null);
+    }
+
+    public int getMaxWebIDsPerSplit() {
+        return config.get(PIConfig.MAX_WEBIDS_PER_SPLIT);
+    }
+
+    public int getDataBufferQueueSize() {
+        return config.get(PIConfig.DATA_BUFFER_QUEUE_SIZE);
+    }
+
+    public int getBatchDrainSize() {
+        return config.get(PIConfig.BATCH_DRAIN_SIZE);
+    }
+
+    public int getBufferLowThreshold() {
+        return config.get(PIConfig.BUFFER_LOW_THRESHOLD);
     }
 }

@@ -42,7 +42,8 @@ public class PIMetadataSourceFactory implements TableSourceFactory {
                 // ================= Core required configuration =================
                 .required(
                         PIConfig.PI_WEB_API_URL, // PI Web API server address
-                        PIConfig.PI_PATHS) // PI data paths for metadata extraction
+                        PIConfig.PI_PATHS, // PI data paths for metadata extraction
+                        PIConfig.METADATA_TYPE) // Metadata type: points or attributes
 
                 // ================= Optional configuration =================
                 .optional(PIConfig.AUTH_TYPE) // Authentication type, default Basic
