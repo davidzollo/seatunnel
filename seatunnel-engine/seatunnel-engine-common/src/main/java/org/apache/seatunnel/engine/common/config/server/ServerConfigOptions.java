@@ -234,7 +234,11 @@ public class ServerConfigOptions {
     public static final String EVENT_REPORT_HTTP = "event-report-http";
     public static final String EVENT_REPORT_HTTP_URL = "url";
     public static final String EVENT_REPORT_HTTP_HEADERS = "headers";
+    public static final String EVENT_REPORT_HTTP_KEYSTORE_PATH = "keystorePath";
+    public static final String EVENT_REPORT_HTTP_KEYSTORE_PASSWORD = "keystorePassword";
     public static final String LICENSE_GET_HTTP = "license-service-http";
     public static final String LICENSE_GET_HTTP_URL = "url";
     public static final String LICENSE_GET_HTTP_HEADERS = "headers";
+    public static final String LICENSE_GET_HTTP_KEYSTORE_PATH = "keystorePath";
+    public static final String LICENSE_GET_HTTP_KEYSTORE_PASSWORD = "keystorePassword";
 }

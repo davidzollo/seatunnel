@@ -167,6 +167,20 @@ public class YamlSeaTunnelDomConfigProcessor extends AbstractDomConfigProcessor 
                         }
                         engineConfig.setEventReportHttpHeaders(headers);
                     }
+                    Node keystorePathNode =
+                            attributes.getNamedItem(
+                                    ServerConfigOptions.EVENT_REPORT_HTTP_KEYSTORE_PATH);
+                    if (keystorePathNode != null) {
+                        engineConfig.setEventReportHttpKeystorePath(
+                                getTextContent(keystorePathNode));
+                    }
+                    Node keystorePasswordNode =
+                            attributes.getNamedItem(
+                                    ServerConfigOptions.EVENT_REPORT_HTTP_KEYSTORE_PASSWORD);
+                    if (keystorePasswordNode != null) {
+                        engineConfig.setEventReportHttpKeystorePassword(
+                                getTextContent(keystorePasswordNode));
+                    }
                 }
             } else if (ServerConfigOptions.TELEMETRY.key().equals(name)) {
                 engineConfig.setTelemetryConfig(parseTelemetryConfig(node));
@@ -188,6 +202,20 @@ public class YamlSeaTunnelDomConfigProcessor extends AbstractDomConfigProcessor 
                             headers.put(cleanNodeName(item), getTextContent(item));
                         }
                         engineConfig.setLicenseGetHttpHeaders(headers);
+                    }
+                    Node keystorePathNode =
+                            attributes.getNamedItem(
+                                    ServerConfigOptions.LICENSE_GET_HTTP_KEYSTORE_PATH);
+                    if (keystorePathNode != null) {
+                        engineConfig.setLicenseGetHttpKeystorePath(
+                                getTextContent(keystorePathNode));
+                    }
+                    Node keystorePasswordNode =
+                            attributes.getNamedItem(
+                                    ServerConfigOptions.LICENSE_GET_HTTP_KEYSTORE_PASSWORD);
+                    if (keystorePasswordNode != null) {
+                        engineConfig.setLicenseGetHttpKeystorePassword(
+                                getTextContent(keystorePasswordNode));
                     }
                 }
             } else {

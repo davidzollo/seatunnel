@@ -16,10 +16,16 @@
  */
 package org.apache.seatunnel.engine.server.utils;
 
+import org.apache.commons.lang3.StringUtils;
+
 import com.squareup.okhttp.OkHttpClient;
+import lombok.extern.slf4j.Slf4j;
+
+import javax.net.ssl.SSLContext;
 
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 public class HttpUtils {
 
     private static OkHttpClient httpClient;
@@ -27,15 +33,37 @@ public class HttpUtils {
     private HttpUtils() {}
 
     public static OkHttpClient getInstance() {
+        return getInstance(null, null);
+    }
+
+    public static OkHttpClient getInstance(String keystorePath, String keystorePassword) {
         if (httpClient == null) {
             synchronized (HttpUtils.class) {
                 if (httpClient == null) {
-                    httpClient = new OkHttpClient();
-                    httpClient.setConnectTimeout(30, TimeUnit.SECONDS);
-                    httpClient.setWriteTimeout(10, TimeUnit.SECONDS);
+                    httpClient = createHttpClient(keystorePath, keystorePassword);
                 }
             }
         }
         return httpClient;
+    }
+
+    public static OkHttpClient createHttpClient(String keystorePath, String keystorePassword) {
+        OkHttpClient client = new OkHttpClient();
+        client.setConnectTimeout(30, TimeUnit.SECONDS);
+        client.setWriteTimeout(10, TimeUnit.SECONDS);
+
+        if (StringUtils.isNotBlank(keystorePath) && StringUtils.isNotBlank(keystorePassword)) {
+            try {
+                SSLContext sslContext = SSLUtils.createSSLContext(keystorePath, keystorePassword);
+                client.setSslSocketFactory(sslContext.getSocketFactory());
+                log.info("HTTPS SSL context configured with keystore: {}", keystorePath);
+            } catch (Exception e) {
+                log.error(
+                        "Failed to configure SSL context for HTTPS, falling back to default HTTP client",
+                        e);
+            }
+        }
+
+        return client;
     }
 }

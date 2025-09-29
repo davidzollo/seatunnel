@@ -776,5 +776,18 @@
             <outputDirectory>/plugins/connector-argodb</outputDirectory>
             <scope>system</scope>
         </dependencySet>
+        <dependencySet>
+            <useProjectArtifact>false</useProjectArtifact>
+            <useTransitiveDependencies>true</useTransitiveDependencies>
+            <unpack>false</unpack>
+            <includes>
+                <include>org.apache.seatunnel:seatunnel-hadoop3-3.3.6-uber:jar</include>
+                <include>org.apache.hadoop:hadoop-aws:jar</include>
+                <include>com.amazonaws:aws-java-sdk-bundle:jar</include>
+            </includes>
+            <outputFileNameMapping>${artifact.file.name}</outputFileNameMapping>
+            <outputDirectory>/plugins/connector-paimon</outputDirectory>
+            <scope>provided</scope>
+        </dependencySet>
     </dependencySets>
 </assembly>

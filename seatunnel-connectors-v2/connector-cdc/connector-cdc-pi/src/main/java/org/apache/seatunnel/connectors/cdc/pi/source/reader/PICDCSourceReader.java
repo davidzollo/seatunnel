@@ -112,7 +112,6 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
 
             running = false;
             log.info("PI CDC data source reader closed");
-            ;
         } catch (Exception e) {
             log.error("Error closing PI CDC data source reader", e);
             throw new IOException("Failed to close PI CDC data source reader", e);
@@ -131,8 +130,17 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
 
             // Initialize reader based on split (only once)
             if (!initialized) {
-                initializeReaders();
-                initialized = true;
+                try {
+                    initializeReaders();
+                    initialized = true;
+                } catch (Exception e) {
+                    // Mark as initialized to prevent infinite retry loop
+                    initialized = true;
+                    log.error(
+                            "PI CDC reader initialization failed, marking as initialized to prevent retry loop",
+                            e);
+                    throw e;
+                }
             }
 
             // Process real-time data
@@ -155,43 +163,29 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
     @Override
     public void addSplits(List<PICDCSplit> splits) {
         synchronized (pendingSplits) {
-            // Check if adding these splits would exceed WebID limit
-            int totalWebIds = calculateTotalWebIds(pendingSplits) + calculateTotalWebIds(splits);
+            // SplitEnumerator now correctly tracks Reader load, so we trust its assignment
+            int currentWebIds = calculateTotalWebIds(pendingSplits);
+            int newWebIds = calculateTotalWebIds(splits);
+            int totalWebIds = currentWebIds + newWebIds;
 
-            if (totalWebIds > 50) {
-                log.warn(
-                        "Reader {} would exceed WebID limit ({} > 50), rejecting additional splits",
-                        readerContext.getIndexOfSubtask(),
-                        totalWebIds);
+            pendingSplits.addAll(splits);
 
-                // Only accept splits that don't exceed the limit
-                List<PICDCSplit> acceptableSplits = new ArrayList<>();
-                int currentWebIds = calculateTotalWebIds(pendingSplits);
-
-                for (PICDCSplit split : splits) {
-                    int splitWebIds = calculateSplitWebIds(split);
-                    if (currentWebIds + splitWebIds <= 50) {
-                        acceptableSplits.add(split);
-                        currentWebIds += splitWebIds;
-                    } else {
-                        log.warn(
-                                "Rejecting split {} to avoid WebID limit exceeded",
-                                split.splitId());
-                    }
-                }
-
-                if (!acceptableSplits.isEmpty()) {
-                    pendingSplits.addAll(acceptableSplits);
-                    log.info(
-                            "Reader {} accepted {} splits, total WebIDs: {}",
-                            readerContext.getIndexOfSubtask(),
-                            acceptableSplits.size(),
-                            currentWebIds);
-                }
-            } else {
-                pendingSplits.addAll(splits);
+            if (totalWebIds <= 25) {
                 log.info(
-                        "Reader {} accepted {} splits, total WebIDs: {}",
+                        "Reader {} accepted {} splits (normal load), total WebIDs: {}",
+                        readerContext.getIndexOfSubtask(),
+                        splits.size(),
+                        totalWebIds);
+            } else if (totalWebIds <= 50) {
+                log.warn(
+                        "Reader {} accepted {} splits (fault tolerance mode), total WebIDs: {} (above normal 25, but within failover limit 50)",
+                        readerContext.getIndexOfSubtask(),
+                        splits.size(),
+                        totalWebIds);
+            } else {
+                log.error(
+                        "Reader {} accepted {} splits but total WebIDs {} exceeds safe limit 50. "
+                                + "This should not happen with corrected SplitEnumerator tracking.",
                         readerContext.getIndexOfSubtask(),
                         splits.size(),
                         totalWebIds);

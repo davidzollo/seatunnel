@@ -165,6 +165,11 @@ public class DateUtils {
         return null;
     }
 
+    public static LocalDate parse(String date) {
+        DateTimeFormatter dateTimeFormatter = matchDateTimeFormatter(date);
+        return parse(date, dateTimeFormatter);
+    }
+
     public static LocalDate parse(String date, DateTimeFormatter dateTimeFormatter) {
         return LocalDate.parse(date, dateTimeFormatter);
     }

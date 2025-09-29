@@ -271,6 +271,11 @@ public class MultiTableSinkWriter
 
     @Override
     public Optional<MultiTableCommitInfo> prepareCommit() throws IOException {
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<MultiTableCommitInfo> prepareCommit(long checkpointId) throws IOException {
         checkQueueRemain();
         subSinkErrorCheck();
         MultiTableCommitInfo multiTableCommitInfo =
@@ -287,7 +292,10 @@ public class MultiTableSinkWriter
                                                     sinkWritersWithIndex.get(finalI).entrySet()) {
                                         Optional<?> commit;
                                         try {
-                                            commit = sinkWriterEntry.getValue().prepareCommit();
+                                            commit =
+                                                    sinkWriterEntry
+                                                            .getValue()
+                                                            .prepareCommit(checkpointId);
                                         } catch (Exception e) {
                                             String message =
                                                     String.format(

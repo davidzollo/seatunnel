@@ -23,6 +23,7 @@ import org.apache.seatunnel.shade.com.google.common.util.concurrent.ThreadFactor
 
 import org.apache.seatunnel.api.event.Event;
 import org.apache.seatunnel.api.event.EventHandler;
+import org.apache.seatunnel.engine.server.utils.HttpUtils;
 
 import com.hazelcast.ringbuffer.OverflowPolicy;
 import com.hazelcast.ringbuffer.ReadResultSet;
@@ -57,6 +58,8 @@ public class JobEventHttpReportHandler implements EventHandler {
     private final Ringbuffer ringbuffer;
     private volatile long committedEventIndex;
     private final ScheduledExecutorService scheduledExecutorService;
+    private final String keystorePath;
+    private final String keystorePassword;
 
     public JobEventHttpReportHandler(String httpEndpoint, Ringbuffer ringbuffer) {
         this(httpEndpoint, REPORT_INTERVAL, ringbuffer);
@@ -77,11 +80,23 @@ public class JobEventHttpReportHandler implements EventHandler {
             Map<String, String> httpHeaders,
             Duration reportInterval,
             Ringbuffer ringbuffer) {
+        this(httpEndpoint, httpHeaders, null, null, reportInterval, ringbuffer);
+    }
+
+    public JobEventHttpReportHandler(
+            String httpEndpoint,
+            Map<String, String> httpHeaders,
+            String keystorePath,
+            String keystorePassword,
+            Duration reportInterval,
+            Ringbuffer ringbuffer) {
         this.httpEndpoint = httpEndpoint;
         this.httpHeaders = httpHeaders;
+        this.keystorePath = keystorePath;
+        this.keystorePassword = keystorePassword;
         this.ringbuffer = ringbuffer;
         this.committedEventIndex = ringbuffer.headSequence();
-        this.httpClient = createHttpClient();
+        this.httpClient = HttpUtils.createHttpClient(this.keystorePath, this.keystorePassword);
         this.scheduledExecutorService =
                 Executors.newSingleThreadScheduledExecutor(
                         new ThreadFactoryBuilder()
@@ -131,6 +146,7 @@ public class JobEventHttpReportHandler implements EventHandler {
                         .post(RequestBody.create(httpMediaType, events));
         httpHeaders.forEach(requestBuilder::header);
         Response response = httpClient.newCall(requestBuilder.build()).execute();
+        log.info("Report event to http server: {}", response.body());
         try (ResponseBody closeable = response.body()) {
             if (response.isSuccessful()) {
                 committedEventIndex += resultSet.readCount();
@@ -144,12 +160,5 @@ public class JobEventHttpReportHandler implements EventHandler {
     public void close() {
         log.info("Close http report handler");
         scheduledExecutorService.shutdown();
-    }
-
-    private OkHttpClient createHttpClient() {
-        OkHttpClient client = new OkHttpClient();
-        client.setConnectTimeout(30, TimeUnit.SECONDS);
-        client.setWriteTimeout(10, TimeUnit.SECONDS);
-        return client;
     }
 }

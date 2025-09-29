@@ -94,7 +94,7 @@ public class DDLTest {
                         null);
         alterTableColumnEvents.add(e1);
 
-        AlterTableAddColumnEvent e2 =
+        AlterTableChangeColumnEvent e2 =
                 new AlterTableChangeColumnEvent(
                         TableIdentifier.of(null, TablePath.of("t.t")),
                         "f2",

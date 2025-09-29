@@ -135,7 +135,11 @@ public class LicenseDelegator {
         if (StringUtils.isBlank(licenseGetHttpApi) || MapUtils.isEmpty(licenseGetHttpHeaders)) {
             return Optional.empty();
         }
-        OkHttpClient httpClient = HttpUtils.getInstance();
+
+        final String keystorePath = engineConfig.getLicenseGetHttpKeystorePath();
+        final String keystorePassword = engineConfig.getLicenseGetHttpKeystorePassword();
+        OkHttpClient httpClient = HttpUtils.createHttpClient(keystorePath, keystorePassword);
+
         try {
             Request.Builder requestBuilder = new Request.Builder().url(licenseGetHttpApi).get();
             licenseGetHttpHeaders.forEach(requestBuilder::header);
@@ -145,6 +149,7 @@ public class LicenseDelegator {
                 return Optional.empty();
             }
             final String body = response.body().string();
+            log.info("get license success:{}", body);
             final ObjectNode jsonNodes = JsonUtils.parseObject(body);
             final JsonNode data = jsonNodes.get("data");
             final JsonNode systemLicense = data.get("systemLicense");

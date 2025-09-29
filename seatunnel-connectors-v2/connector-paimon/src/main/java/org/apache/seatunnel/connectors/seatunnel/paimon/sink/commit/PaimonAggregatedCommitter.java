@@ -18,68 +18,123 @@
 package org.apache.seatunnel.connectors.seatunnel.paimon.sink.commit;
 
 import org.apache.seatunnel.api.sink.SinkAggregatedCommitter;
+import org.apache.seatunnel.api.sink.SupportMultiTableSinkAggregatedCommitter;
+import org.apache.seatunnel.connectors.seatunnel.paimon.config.PaimonHadoopConfiguration;
 import org.apache.seatunnel.connectors.seatunnel.paimon.exception.PaimonConnectorErrorCode;
 import org.apache.seatunnel.connectors.seatunnel.paimon.exception.PaimonConnectorException;
+import org.apache.seatunnel.connectors.seatunnel.paimon.security.PaimonSecurityContext;
 
-import org.apache.paimon.operation.Lock;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.Table;
-import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.sink.CommitMessage;
+import org.apache.paimon.table.sink.TableCommitImpl;
 
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /** Paimon connector aggregated committer class */
 @Slf4j
 public class PaimonAggregatedCommitter
-        implements SinkAggregatedCommitter<PaimonCommitInfo, PaimonAggregatedCommitInfo> {
+        implements SinkAggregatedCommitter<PaimonCommitInfo, PaimonAggregatedCommitInfo>,
+                SupportMultiTableSinkAggregatedCommitter {
 
     private static final long serialVersionUID = 1L;
 
-    private final Lock.Factory localFactory = Lock.emptyFactory();
+    private final FileStoreTable table;
 
-    private final Table table;
-
-    public PaimonAggregatedCommitter(Table table) {
-        this.table = table;
+    public PaimonAggregatedCommitter(
+            Table table, PaimonHadoopConfiguration paimonHadoopConfiguration) {
+        this.table = (FileStoreTable) table;
+        PaimonSecurityContext.shouldEnableKerberos(paimonHadoopConfiguration);
     }
 
     @Override
     public List<PaimonAggregatedCommitInfo> commit(
             List<PaimonAggregatedCommitInfo> aggregatedCommitInfo) throws IOException {
-        try (BatchTableCommit tableCommit =
-                table.newBatchWriteBuilder().withOverwrite().newCommit()) {
-            List<CommitMessage> fileCommittables =
-                    aggregatedCommitInfo.stream()
-                            .map(PaimonAggregatedCommitInfo::getCommittables)
-                            .flatMap(List::stream)
-                            .flatMap(List::stream)
-                            .collect(Collectors.toList());
-            tableCommit.commit(fileCommittables);
+        aggregatedCommitInfo.stream()
+                .collect(Collectors.groupingBy(PaimonAggregatedCommitInfo::getCommitUser))
+                .forEach(this::commit);
+        return Collections.emptyList();
+    }
+
+    private void commit(String commitUser, List<PaimonAggregatedCommitInfo> aggregatedCommitInfo) {
+        try (TableCommitImpl tableCommit = table.newCommit(commitUser)) {
+            PaimonSecurityContext.runSecured(
+                    () -> {
+                        log.debug("Trying to commit states streaming mode");
+                        Map<Long, List<CommitMessage>> committablesMap =
+                                aggregatedCommitInfo.stream()
+                                        .flatMap(
+                                                paimonAggregatedCommitInfo ->
+                                                        paimonAggregatedCommitInfo
+                                                                .getCommittablesMap().entrySet()
+                                                                .stream())
+                                        .collect(
+                                                Collectors.toMap(
+                                                        Map.Entry::getKey, Map.Entry::getValue));
+                        if (!committablesMap.isEmpty()) {
+                            tableCommit.filterAndCommit(committablesMap);
+                        }
+                        return null;
+                    });
         } catch (Exception e) {
             throw new PaimonConnectorException(
-                    PaimonConnectorErrorCode.TABLE_WRITE_COMMIT_FAILED,
-                    "Flink table store commit operation failed",
-                    e);
+                    PaimonConnectorErrorCode.TABLE_WRITE_COMMIT_FAILED, e);
         }
-        return Collections.emptyList();
     }
 
     @Override
     public PaimonAggregatedCommitInfo combine(List<PaimonCommitInfo> commitInfos) {
-        List<List<CommitMessage>> committables = new ArrayList<>();
-        commitInfos.forEach(commitInfo -> committables.add(commitInfo.getCommittables()));
-        return new PaimonAggregatedCommitInfo(committables);
+        String commitUser = commitInfos.get(0).getCommitUser();
+        Map<Long, List<CommitMessage>> commitTables = new HashMap<>();
+        commitInfos.forEach(
+                commitInfo ->
+                        commitTables
+                                .computeIfAbsent(
+                                        commitInfo.getCheckpointId(),
+                                        id -> new CopyOnWriteArrayList<>())
+                                .addAll(commitInfo.getCommittables()));
+        return new PaimonAggregatedCommitInfo(commitTables, commitUser);
     }
 
     @Override
     public void abort(List<PaimonAggregatedCommitInfo> aggregatedCommitInfo) throws Exception {
-        // TODO find the right way to abort
+        aggregatedCommitInfo.stream()
+                .collect(Collectors.groupingBy(PaimonAggregatedCommitInfo::getCommitUser))
+                .forEach(this::abort);
+    }
+
+    private void abort(String commitUser, List<PaimonAggregatedCommitInfo> aggregatedCommitInfo) {
+        try (TableCommitImpl tableCommit = table.newCommit(commitUser)) {
+            PaimonSecurityContext.runSecured(
+                    () -> {
+                        log.debug("Trying to commit states streaming mode");
+                        Map<Long, List<CommitMessage>> committablesMap =
+                                aggregatedCommitInfo.stream()
+                                        .flatMap(
+                                                paimonAggregatedCommitInfo ->
+                                                        paimonAggregatedCommitInfo
+                                                                .getCommittablesMap().entrySet()
+                                                                .stream())
+                                        .collect(
+                                                Collectors.toMap(
+                                                        Map.Entry::getKey, Map.Entry::getValue));
+                        if (!committablesMap.isEmpty()) {
+                            committablesMap.values().forEach(tableCommit::abort);
+                        }
+                        return null;
+                    });
+        } catch (Exception e) {
+            throw new PaimonConnectorException(
+                    PaimonConnectorErrorCode.TABLE_WRITE_COMMIT_FAILED, e);
+        }
     }
 
     @Override

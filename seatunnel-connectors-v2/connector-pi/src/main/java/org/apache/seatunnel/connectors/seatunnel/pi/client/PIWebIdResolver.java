@@ -200,7 +200,7 @@ public class PIWebIdResolver {
                 if (webId != null && !webId.trim().isEmpty()) {
                     // Cache result
                     webIdCache.put(piPath, webId);
-                    log.info("Successfully resolved PI Path: {} -> WebID: {}", piPath, webId);
+                    log.debug("Successfully resolved PI Path: {} -> WebID: {}", piPath, webId);
                     return webId;
                 } else {
                     throw new PIConnectorException(

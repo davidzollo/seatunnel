@@ -24,7 +24,15 @@ public enum PaimonConnectorErrorCode implements SeaTunnelErrorCode {
     TABLE_WRITE_COMMIT_FAILED("PAIMON-01", "Paimon write commit failed"),
     TABLE_WRITE_RECORD_FAILED("PAIMON-02", "Write record to paimon failed"),
     TABLE_PRE_COMMIT_FAILED("PAIMON-03", "Paimon pre commit failed"),
-    GET_TABLE_FAILED("PAIMON-04", "Get table from database failed");
+    GET_TABLE_FAILED("PAIMON-04", "Get table from database failed"),
+    AUTHENTICATE_KERBEROS_FAILED("PAIMON-05", "Authenticate kerberos failed"),
+    LOAD_CATALOG("PAIMON-06", "Load catalog failed"),
+    GET_FILED_FAILED("PAIMON-07", "Get field failed"),
+    UNSUPPORTED_PRIMARY_DATATYPE("PAIMON-08", "Paimon primary key datatype is unsupported"),
+    WRITE_PROPS_BUCKET_KEY_ERROR("PAIMON-09", "Cannot define 'bucket-key' in dynamic bucket mode"),
+    NON_PRIMARY_KEY_CHECK_ERROR(
+            "PAIMON-10", "Primary keys should be empty when nonPrimaryKey is true"),
+    DECIMAL_PRECISION_INCOMPATIBLE("PAIMON-11", "decimal type precision is incompatible. ");
 
     private final String code;
     private final String description;

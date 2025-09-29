@@ -17,10 +17,20 @@
 
 package org.apache.seatunnel.connectors.seatunnel.paimon.sink;
 
+import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.configuration.util.OptionRule;
+import org.apache.seatunnel.api.sink.SinkCommonOptions;
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
+import org.apache.seatunnel.api.table.catalog.TableIdentifier;
+import org.apache.seatunnel.api.table.connector.TableSink;
 import org.apache.seatunnel.api.table.factory.Factory;
 import org.apache.seatunnel.api.table.factory.TableSinkFactory;
-import org.apache.seatunnel.connectors.seatunnel.paimon.config.PaimonConfig;
+import org.apache.seatunnel.api.table.factory.TableSinkFactoryContext;
+import org.apache.seatunnel.connectors.seatunnel.paimon.catalog.PaimonCatalogEnum;
+import org.apache.seatunnel.connectors.seatunnel.paimon.config.PaimonSinkConfig;
+import org.apache.seatunnel.connectors.seatunnel.paimon.config.PaimonSinkOptions;
+
+import org.apache.commons.lang3.StringUtils;
 
 import com.google.auto.service.AutoService;
 
@@ -29,16 +39,63 @@ public class PaimonSinkFactory implements TableSinkFactory {
 
     @Override
     public String factoryIdentifier() {
-        return "Paimon";
+        return PaimonSinkOptions.CONNECTOR_IDENTITY;
     }
 
     @Override
     public OptionRule optionRule() {
         return OptionRule.builder()
-                .required(PaimonConfig.WAREHOUSE)
-                .required(PaimonConfig.DATABASE)
-                .required(PaimonConfig.TABLE)
-                .optional(PaimonConfig.HDFS_SITE_PATH)
+                .required(
+                        PaimonSinkOptions.WAREHOUSE,
+                        PaimonSinkOptions.DATABASE,
+                        PaimonSinkOptions.TABLE)
+                .optional(
+                        PaimonSinkOptions.HDFS_SITE_PATH,
+                        PaimonSinkOptions.HADOOP_CONF,
+                        PaimonSinkOptions.HADOOP_CONF_PATH,
+                        PaimonSinkOptions.CATALOG_TYPE,
+                        PaimonSinkOptions.SCHEMA_SAVE_MODE,
+                        PaimonSinkOptions.DATA_SAVE_MODE,
+                        PaimonSinkOptions.PRIMARY_KEYS,
+                        PaimonSinkOptions.PARTITION_KEYS,
+                        PaimonSinkOptions.WRITE_PROPS,
+                        SinkCommonOptions.MULTI_TABLE_SINK_REPLICA)
+                .conditional(
+                        PaimonSinkOptions.CATALOG_TYPE,
+                        PaimonCatalogEnum.HIVE,
+                        PaimonSinkOptions.CATALOG_URI)
                 .build();
+    }
+
+    @Override
+    public TableSink createSink(TableSinkFactoryContext context) {
+        ReadonlyConfig readonlyConfig = context.getOptions();
+        CatalogTable catalogTable =
+                renameCatalogTable(new PaimonSinkConfig(readonlyConfig), context.getCatalogTable());
+        return () -> new PaimonSink(context.getOptions(), catalogTable);
+    }
+
+    private CatalogTable renameCatalogTable(
+            PaimonSinkConfig paimonSinkConfig, CatalogTable catalogTable) {
+        TableIdentifier tableId = catalogTable.getTableId();
+        String tableName;
+        String namespace;
+        if (StringUtils.isNotEmpty(paimonSinkConfig.getTable())) {
+            tableName = paimonSinkConfig.getTable();
+        } else {
+            tableName = tableId.getTableName();
+        }
+
+        if (StringUtils.isNotEmpty(paimonSinkConfig.getNamespace())) {
+            namespace = paimonSinkConfig.getNamespace();
+        } else {
+            namespace = tableId.getSchemaName();
+        }
+
+        TableIdentifier newTableId =
+                TableIdentifier.of(
+                        tableId.getCatalogName(), namespace, tableId.getSchemaName(), tableName);
+
+        return CatalogTable.of(newTableId, catalogTable);
     }
 }

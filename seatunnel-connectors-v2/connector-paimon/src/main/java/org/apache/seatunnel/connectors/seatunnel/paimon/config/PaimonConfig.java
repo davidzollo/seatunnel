@@ -17,46 +17,82 @@
 
 package org.apache.seatunnel.connectors.seatunnel.paimon.config;
 
-import org.apache.seatunnel.api.configuration.Option;
-import org.apache.seatunnel.api.configuration.Options;
+import org.apache.seatunnel.shade.com.google.common.collect.ImmutableList;
+
+import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.sink.SeaTunnelSink;
 import org.apache.seatunnel.api.source.SeaTunnelSource;
+import org.apache.seatunnel.common.exception.CommonError;
+import org.apache.seatunnel.common.utils.SeaTunnelException;
+import org.apache.seatunnel.connectors.seatunnel.paimon.catalog.PaimonCatalogEnum;
 
+import org.apache.commons.lang3.StringUtils;
+
+import lombok.Getter;
+
+import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+
+import static java.util.stream.Collectors.toList;
 
 /**
  * Utility class to store configuration options, used by {@link SeaTunnelSource} and {@link
  * SeaTunnelSink}.
  */
-public class PaimonConfig {
+@Getter
+public class PaimonConfig implements Serializable {
 
-    public static final Option<String> WAREHOUSE =
-            Options.key("warehouse")
-                    .stringType()
-                    .noDefaultValue()
-                    .withDescription("The warehouse path of paimon");
+    protected String catalogName;
+    protected PaimonCatalogEnum catalogType;
+    protected String catalogUri;
+    protected String warehouse;
+    protected String namespace;
+    protected String table;
+    protected String hdfsSitePath;
+    protected Map<String, String> hadoopConfProps;
+    protected String hadoopConfPath;
+    protected String user;
+    protected String password;
 
-    public static final Option<String> DATABASE =
-            Options.key("database")
-                    .stringType()
-                    .noDefaultValue()
-                    .withDescription("The database you intend to access");
+    public PaimonConfig(ReadonlyConfig readonlyConfig) {
+        this.catalogName =
+                checkArgumentNotBlank(
+                        readonlyConfig.get(PaimonBaseOptions.CATALOG_NAME),
+                        PaimonBaseOptions.CATALOG_NAME.key());
+        this.warehouse =
+                checkArgumentNotBlank(
+                        readonlyConfig.get(PaimonBaseOptions.WAREHOUSE),
+                        PaimonBaseOptions.WAREHOUSE.key());
+        this.namespace = readonlyConfig.get(PaimonBaseOptions.DATABASE);
+        this.table = readonlyConfig.get(PaimonBaseOptions.TABLE);
+        this.hdfsSitePath = readonlyConfig.get(PaimonBaseOptions.HDFS_SITE_PATH);
+        this.hadoopConfProps = readonlyConfig.get(PaimonBaseOptions.HADOOP_CONF);
+        this.hadoopConfPath = readonlyConfig.get(PaimonBaseOptions.HADOOP_CONF_PATH);
+        this.catalogType = readonlyConfig.get(PaimonBaseOptions.CATALOG_TYPE);
+        if (PaimonCatalogEnum.HIVE.getType().equals(catalogType.getType())) {
+            this.catalogUri =
+                    checkArgumentNotBlank(
+                            readonlyConfig.get(PaimonBaseOptions.CATALOG_URI),
+                            PaimonBaseOptions.CATALOG_URI.key());
+        }
+        this.user = readonlyConfig.get(PaimonBaseOptions.USER);
+        this.password = readonlyConfig.get(PaimonBaseOptions.PASSWORD);
+    }
 
-    public static final Option<String> TABLE =
-            Options.key("table")
-                    .stringType()
-                    .noDefaultValue()
-                    .withDescription("The table you intend to access");
+    protected String checkArgumentNotBlank(String propValue, String propKey) {
+        if (StringUtils.isBlank(propValue)) {
+            throw new SeaTunnelException(
+                    CommonError.convertToConnectorPropsBlankError("Paimon", propKey));
+        }
+        return propValue;
+    }
 
-    public static final Option<List<String>> READ_COLUMNS =
-            Options.key("read_columns")
-                    .listType()
-                    .noDefaultValue()
-                    .withDescription("The read columns of the flink table store");
-
-    public static final Option<String> HDFS_SITE_PATH =
-            Options.key("hdfs_site_path")
-                    .stringType()
-                    .noDefaultValue()
-                    .withDescription("The file path of hdfs-site.xml");
+    protected static List<String> stringToList(String value, String regex) {
+        if (value == null || value.isEmpty()) {
+            return ImmutableList.of();
+        }
+        return Arrays.stream(value.split(regex)).map(String::trim).collect(toList());
+    }
 }

@@ -374,7 +374,12 @@ public class CoordinatorService {
             Ringbuffer ringbuffer = nodeEngine.getHazelcastInstance().getRingbuffer(ringBufferName);
             JobEventHttpReportHandler httpReportHandler =
                     new JobEventHttpReportHandler(
-                            reportHttpEndpoint, reportHttpHeaders, ringbuffer);
+                            reportHttpEndpoint,
+                            reportHttpHeaders,
+                            engineConfig.getEventReportHttpKeystorePath(),
+                            engineConfig.getEventReportHttpKeystorePassword(),
+                            JobEventHttpReportHandler.REPORT_INTERVAL,
+                            ringbuffer);
             handlers.add(httpReportHandler);
         }
         logger.info("Loaded event handlers: " + handlers);

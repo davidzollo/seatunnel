@@ -68,6 +68,8 @@ public class EngineConfig {
 
     private String eventReportHttpApi;
     private Map<String, String> eventReportHttpHeaders = Collections.emptyMap();
+    private String eventReportHttpKeystorePath;
+    private String eventReportHttpKeystorePassword;
 
     private ExecutionMode mode = ExecutionMode.CLUSTER;
 
@@ -78,6 +80,8 @@ public class EngineConfig {
 
     private String licenseGetHttpApi;
     private Map<String, String> licenseGetHttpHeaders = Collections.emptyMap();
+    private String licenseGetHttpKeystorePath;
+    private String licenseGetHttpKeystorePassword;
 
     public void setBackupCount(int newBackupCount) {
         checkBackupCount(newBackupCount, 0);
@@ -137,6 +141,16 @@ public class EngineConfig {
         return this;
     }
 
+    public EngineConfig setEventReportHttpKeystorePath(String eventReportHttpKeystorePath) {
+        this.eventReportHttpKeystorePath = eventReportHttpKeystorePath;
+        return this;
+    }
+
+    public EngineConfig setEventReportHttpKeystorePassword(String eventReportHttpKeystorePassword) {
+        this.eventReportHttpKeystorePassword = eventReportHttpKeystorePassword;
+        return this;
+    }
+
     public EngineConfig setLicenseGetHttpApi(String licenseGetHttpApi) {
         this.licenseGetHttpApi = licenseGetHttpApi;
         return this;
@@ -144,6 +158,16 @@ public class EngineConfig {
 
     public EngineConfig setLicenseGetHttpHeaders(Map<String, String> licenseGetHttpHeaders) {
         this.licenseGetHttpHeaders = licenseGetHttpHeaders;
+        return this;
+    }
+
+    public EngineConfig setLicenseGetHttpKeystorePath(String licenseGetHttpKeystorePath) {
+        this.licenseGetHttpKeystorePath = licenseGetHttpKeystorePath;
+        return this;
+    }
+
+    public EngineConfig setLicenseGetHttpKeystorePassword(String licenseGetHttpKeystorePassword) {
+        this.licenseGetHttpKeystorePassword = licenseGetHttpKeystorePassword;
         return this;
     }
 }

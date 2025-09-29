@@ -55,9 +55,32 @@ public enum CommonErrorCode implements SeaTunnelErrorCode {
     VERSION_NOT_SUPPORTED("COMMON-25", "<identifier> <version> is unsupported."),
 
     OPERATION_NOT_SUPPORTED("COMMON-26", "<identifier> <operation> is unsupported."),
+    CONVERT_TO_SEATUNNEL_PROPS_BLANK_ERROR(
+            "COMMON-27", "The props named '<props>' of '<connector>' is blank."),
+    UNSUPPORTED_ARRAY_GENERIC_TYPE(
+            "COMMON-28",
+            "'<identifier>' array type not support genericType '<genericType>' of '<fieldName>'"),
+    UNSUPPORTED_ROW_KIND(
+            "COMMON-29", "'<identifier>' table '<tableId>' not support rowKind  '<rowKind>'"),
 
-    UNSUPPORTED_METHOD("COMMON-34", "'<identifier>' unsupported the method '<methodName>'");
+    WRITE_SEATUNNEL_ROW_ERROR_WITH_SCHEMA_INCOMPATIBLE_SCHEMA(
+            "COMMON-30",
+            "'<connector>': The source field with schema '<sourceFieldSqlSchema>', expected field schema of sink is '<expectedFieldSqlSchema>'; whose actual schema in the sink table is '<sinkFieldSqlSchema>'. Please check schema of sink table."),
 
+    WRITE_SEATUNNEL_ROW_ERROR_WITH_FIELDS_NOT_MATCH(
+            "COMMON-31",
+            "'<connector>': The source has '<sourceFieldsNum>' fields, but the table of sink has '<sinkFieldsNum>' fields. Please check schema of sink table."),
+    FORMAT_DATE_ERROR(
+            "COMMON-32",
+            "The date format '<date>' of field '<field>' is not supported. Please check the date format."),
+    FORMAT_DATETIME_ERROR(
+            "COMMON-33",
+            "The datetime format '<datetime>' of field '<field>' is not supported. Please check the datetime format."),
+    UNSUPPORTED_METHOD("COMMON-34", "'<identifier>' unsupported the method '<methodName>'"),
+    KERBEROS_AUTHORIZED_FAILED("COMMON-35", "Kerberos authorized failed"),
+    CLOSE_FAILED("COMMON-36", "'<identifier>' close failed."),
+    SEATUNNEL_ROW_SERIALIZE_FAILED("COMMON-36", "Seatunnel row serialize failed. Row={ '<row>' }"),
+    ;
     private final String code;
     private final String description;
 
