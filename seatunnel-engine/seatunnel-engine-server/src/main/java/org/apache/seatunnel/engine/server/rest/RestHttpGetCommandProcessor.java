@@ -436,7 +436,7 @@ public class RestHttpGetCommandProcessor extends HttpCommandProcessor<HttpGetCom
                         (byte[])
                                 NodeEngineUtil.sendOperationToMasterNode(
                                                 getNode().nodeEngine,
-                                                new PackageJobLogsOperation(jobId))
+                                                new PackageJobLogsOperation(jobId, false))
                                         .join();
             } else {
                 LogoutService logOutService = new LogoutService(seaTunnelServer);

@@ -30,12 +30,14 @@ import com.hazelcast.nio.serialization.IdentifiedDataSerializable;
 import com.hazelcast.spi.impl.AllowedDuringPassiveState;
 import com.hazelcast.spi.impl.operationservice.Operation;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ExecutionException;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 public class PackageZetaLogsOperation extends Operation
@@ -45,19 +47,34 @@ public class PackageZetaLogsOperation extends Operation
     private LocalDate date;
     private String targetHost;
 
+    /**
+     * Flag to indicate if this is a sub-request to avoid recursive calls. When true, only collect
+     * logs from current node without requesting other nodes.
+     */
+    private boolean isSubRequest;
+
     public PackageZetaLogsOperation() {
         this.date = LocalDate.now();
         this.targetHost = null;
+        this.isSubRequest = false;
     }
 
     public PackageZetaLogsOperation(LocalDate date) {
         this.date = date != null ? date : LocalDate.now();
         this.targetHost = null;
+        this.isSubRequest = false;
     }
 
     public PackageZetaLogsOperation(LocalDate date, String targetHost) {
         this.date = date != null ? date : LocalDate.now();
         this.targetHost = targetHost;
+        this.isSubRequest = false;
+    }
+
+    public PackageZetaLogsOperation(LocalDate date, String targetHost, boolean isSubRequest) {
+        this.date = date != null ? date : LocalDate.now();
+        this.targetHost = targetHost;
+        this.isSubRequest = isSubRequest;
     }
 
     public PackageZetaLogsOperation(String dateStr) {
@@ -71,6 +88,7 @@ public class PackageZetaLogsOperation extends Operation
             this.date = LocalDate.now();
         }
         this.targetHost = null;
+        this.isSubRequest = false;
     }
 
     public PackageZetaLogsOperation(String dateStr, String targetHost) {
@@ -84,6 +102,7 @@ public class PackageZetaLogsOperation extends Operation
             this.date = LocalDate.now();
         }
         this.targetHost = targetHost;
+        this.isSubRequest = false;
     }
 
     @Override
@@ -101,6 +120,7 @@ public class PackageZetaLogsOperation extends Operation
         super.writeInternal(out);
         out.writeString(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
         out.writeString(targetHost);
+        out.writeBoolean(isSubRequest);
     }
 
     @Override
@@ -117,6 +137,7 @@ public class PackageZetaLogsOperation extends Operation
             this.date = LocalDate.now();
         }
         this.targetHost = in.readString();
+        this.isSubRequest = in.readBoolean();
     }
 
     @Override
@@ -163,44 +184,91 @@ public class PackageZetaLogsOperation extends Operation
                 new ZipEntry(
                         "node_"
                                 + getNodeEngine().getThisAddress().getHost()
-                                + "_"
+                                + ":"
                                 + getNodeEngine().getThisAddress().getPort()
                                 + "/logs.zip");
         zipOut.putNextEntry(currentNodeEntry);
         zipOut.write(currentNodeLogs);
         zipOut.closeEntry();
 
-        for (Member member : getNodeEngine().getClusterService().getMembers()) {
-            if (!member.getAddress().equals(getNodeEngine().getThisAddress())) {
-                try {
-                    PackageZetaLogsOperation operation = new PackageZetaLogsOperation(date, null);
-                    Data result =
-                            (Data)
-                                    getNodeEngine()
-                                            .getOperationService()
-                                            .createInvocationBuilder(
-                                                    SeaTunnelServer.SERVICE_NAME,
-                                                    operation,
-                                                    member.getAddress())
-                                            .invoke()
-                                            .get();
+        // Only collect logs from other nodes if this is not a sub-request
+        // This prevents recursive calls and potential deadlock
+        if (!isSubRequest) {
+            for (Member member : getNodeEngine().getClusterService().getMembers()) {
+                if (!member.getAddress().equals(getNodeEngine().getThisAddress())) {
+                    try {
+                        // Create a sub-request with isSubRequest=true to prevent recursion
+                        PackageZetaLogsOperation operation =
+                                new PackageZetaLogsOperation(date, null, true);
+                        Object result =
+                                getNodeEngine()
+                                        .getOperationService()
+                                        .createInvocationBuilder(
+                                                SeaTunnelServer.SERVICE_NAME,
+                                                operation,
+                                                member.getAddress())
+                                        .invoke()
+                                        .get();
 
-                    if (result != null) {
-                        byte[] memberLogs =
-                                getNodeEngine().getSerializationService().toObject(result);
-                        ZipEntry memberEntry =
-                                new ZipEntry(
-                                        "node_"
-                                                + member.getAddress().getHost()
-                                                + "_"
-                                                + member.getAddress().getPort()
-                                                + "/logs.zip");
-                        zipOut.putNextEntry(memberEntry);
-                        zipOut.write(memberLogs);
-                        zipOut.closeEntry();
+                        if (result != null) {
+                            byte[] memberLogs = null;
+                            if (result instanceof Data) {
+                                memberLogs =
+                                        getNodeEngine()
+                                                .getSerializationService()
+                                                .toObject((Data) result);
+                            } else if (result instanceof byte[]) {
+                                memberLogs = (byte[]) result;
+                            } else {
+                                getLogger()
+                                        .warning(
+                                                "Unexpected result type from node "
+                                                        + member.getAddress()
+                                                        + ": "
+                                                        + result.getClass().getName());
+                            }
+
+                            if (memberLogs != null && memberLogs.length > 0) {
+                                try (ZipInputStream remoteZipIn =
+                                        new ZipInputStream(new ByteArrayInputStream(memberLogs))) {
+                                    ZipEntry remoteEntry;
+                                    byte[] buffer = new byte[8192];
+
+                                    while ((remoteEntry = remoteZipIn.getNextEntry()) != null) {
+                                        String entryName =
+                                                "node_"
+                                                        + member.getAddress().getHost()
+                                                        + ":"
+                                                        + member.getAddress().getPort()
+                                                        + "/"
+                                                        + remoteEntry.getName();
+
+                                        ZipEntry newEntry = new ZipEntry(entryName);
+                                        zipOut.putNextEntry(newEntry);
+
+                                        int len;
+                                        while ((len = remoteZipIn.read(buffer)) > 0) {
+                                            zipOut.write(buffer, 0, len);
+                                        }
+
+                                        zipOut.closeEntry();
+                                        remoteZipIn.closeEntry();
+                                    }
+                                } catch (IOException e) {
+                                    getLogger()
+                                            .warning(
+                                                    "Failed to merge ZIP from node: "
+                                                            + member.getAddress()
+                                                            + " - "
+                                                            + e.getMessage(),
+                                                    e);
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        getLogger()
+                                .warning("Failed to get logs from node: " + member.getAddress(), e);
                     }
-                } catch (Exception e) {
-                    getLogger().warning("Failed to get logs from node: " + member.getAddress(), e);
                 }
             }
         }
@@ -220,19 +288,30 @@ public class PackageZetaLogsOperation extends Operation
                     try {
                         PackageZetaLogsOperation operation =
                                 new PackageZetaLogsOperation(date, targetHost);
-                        Data result =
-                                (Data)
-                                        getNodeEngine()
-                                                .getOperationService()
-                                                .createInvocationBuilder(
-                                                        SeaTunnelServer.SERVICE_NAME,
-                                                        operation,
-                                                        member.getAddress())
-                                                .invoke()
-                                                .get();
+                        Object result =
+                                getNodeEngine()
+                                        .getOperationService()
+                                        .createInvocationBuilder(
+                                                SeaTunnelServer.SERVICE_NAME,
+                                                operation,
+                                                member.getAddress())
+                                        .invoke()
+                                        .get();
 
                         if (result != null) {
-                            return getNodeEngine().getSerializationService().toObject(result);
+                            if (result instanceof Data) {
+                                return getNodeEngine()
+                                        .getSerializationService()
+                                        .toObject((Data) result);
+                            } else if (result instanceof byte[]) {
+                                return (byte[]) result;
+                            } else {
+                                throw new RuntimeException(
+                                        "Unexpected result type from target node "
+                                                + targetHost
+                                                + ": "
+                                                + result.getClass().getName());
+                            }
                         }
                     } catch (Exception e) {
                         throw new RuntimeException(

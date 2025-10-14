@@ -25,7 +25,9 @@ import com.hazelcast.instance.impl.Node;
 import com.hazelcast.internal.nio.Connection;
 import com.hazelcast.spi.impl.operationservice.Operation;
 
-public class PackageJobLogsTask extends AbstractSeaTunnelMessageTask<Long, byte[]> {
+public class PackageJobLogsTask
+        extends AbstractSeaTunnelMessageTask<
+                SeaTunnelPackageJobLogsCodec.RequestParameters, byte[]> {
 
     protected PackageJobLogsTask(ClientMessage clientMessage, Node node, Connection connection) {
         super(
@@ -38,7 +40,7 @@ public class PackageJobLogsTask extends AbstractSeaTunnelMessageTask<Long, byte[
 
     @Override
     protected Operation prepareOperation() {
-        return new PackageJobLogsOperation(parameters);
+        return new PackageJobLogsOperation(parameters.jobId, parameters.isSubRequest);
     }
 
     @Override

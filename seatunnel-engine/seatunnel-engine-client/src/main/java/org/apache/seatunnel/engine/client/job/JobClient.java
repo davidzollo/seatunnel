@@ -205,13 +205,13 @@ public class JobClient {
 
     public byte[] packageJobLogs(Long jobId) {
         return hazelcastClient.requestOnMasterAndDecodeResponse(
-                SeaTunnelPackageJobLogsCodec.encodeRequest(jobId),
+                SeaTunnelPackageJobLogsCodec.encodeRequest(jobId, false),
                 SeaTunnelPackageJobLogsCodec::decodeResponse);
     }
 
     public byte[] packageZetaLogs(String dateStr, String host) {
         return hazelcastClient.requestOnMasterAndDecodeResponse(
-                SeaTunnelPackageZetaLogsCodec.encodeRequest(dateStr, host),
+                SeaTunnelPackageZetaLogsCodec.encodeRequest(dateStr, host, false),
                 SeaTunnelPackageZetaLogsCodec::decodeResponse);
     }
 

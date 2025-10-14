@@ -28,8 +28,11 @@ import static com.hazelcast.client.impl.protocol.ClientMessage.PARTITION_ID_FIEL
 import static com.hazelcast.client.impl.protocol.ClientMessage.RESPONSE_BACKUP_ACKS_FIELD_OFFSET;
 import static com.hazelcast.client.impl.protocol.ClientMessage.TYPE_FIELD_OFFSET;
 import static com.hazelcast.client.impl.protocol.ClientMessage.UNFRAGMENTED_MESSAGE;
+import static com.hazelcast.client.impl.protocol.codec.builtin.FixedSizeTypesCodec.BOOLEAN_SIZE_IN_BYTES;
 import static com.hazelcast.client.impl.protocol.codec.builtin.FixedSizeTypesCodec.BYTE_SIZE_IN_BYTES;
 import static com.hazelcast.client.impl.protocol.codec.builtin.FixedSizeTypesCodec.INT_SIZE_IN_BYTES;
+import static com.hazelcast.client.impl.protocol.codec.builtin.FixedSizeTypesCodec.decodeBoolean;
+import static com.hazelcast.client.impl.protocol.codec.builtin.FixedSizeTypesCodec.encodeBoolean;
 import static com.hazelcast.client.impl.protocol.codec.builtin.FixedSizeTypesCodec.encodeInt;
 
 /*
@@ -38,15 +41,16 @@ import static com.hazelcast.client.impl.protocol.codec.builtin.FixedSizeTypesCod
  * definitions on the https://github.com/hazelcast/hazelcast-client-protocol
  * and regenerate it.
  */
-
-@Generated("8d302f5c5b6d10cc14a488c04f232072")
+@Generated("49ae4306b81da0254727b7ea541b0318")
 public final class SeaTunnelPackageZetaLogsCodec {
     // hex: 0xDE1100
     public static final int REQUEST_MESSAGE_TYPE = 14553344;
     // hex: 0xDE1101
     public static final int RESPONSE_MESSAGE_TYPE = 14553345;
-    private static final int REQUEST_INITIAL_FRAME_SIZE =
+    private static final int REQUEST_IS_SUB_REQUEST_FIELD_OFFSET =
             PARTITION_ID_FIELD_OFFSET + INT_SIZE_IN_BYTES;
+    private static final int REQUEST_INITIAL_FRAME_SIZE =
+            REQUEST_IS_SUB_REQUEST_FIELD_OFFSET + BOOLEAN_SIZE_IN_BYTES;
     private static final int RESPONSE_INITIAL_FRAME_SIZE =
             RESPONSE_BACKUP_ACKS_FIELD_OFFSET + BYTE_SIZE_IN_BYTES;
 
@@ -57,10 +61,14 @@ public final class SeaTunnelPackageZetaLogsCodec {
         public @Nullable java.lang.String date;
 
         public @Nullable java.lang.String host;
+
+        public boolean isSubRequest;
     }
 
     public static ClientMessage encodeRequest(
-            @Nullable java.lang.String date, @Nullable java.lang.String host) {
+            @Nullable java.lang.String date,
+            @Nullable java.lang.String host,
+            boolean isSubRequest) {
         ClientMessage clientMessage = ClientMessage.createForEncode();
         clientMessage.setRetryable(true);
         clientMessage.setOperationName("SeaTunnel.PackageZetaLogs");
@@ -68,6 +76,7 @@ public final class SeaTunnelPackageZetaLogsCodec {
                 new ClientMessage.Frame(new byte[REQUEST_INITIAL_FRAME_SIZE], UNFRAGMENTED_MESSAGE);
         encodeInt(initialFrame.content, TYPE_FIELD_OFFSET, REQUEST_MESSAGE_TYPE);
         encodeInt(initialFrame.content, PARTITION_ID_FIELD_OFFSET, -1);
+        encodeBoolean(initialFrame.content, REQUEST_IS_SUB_REQUEST_FIELD_OFFSET, isSubRequest);
         clientMessage.add(initialFrame);
         CodecUtil.encodeNullable(clientMessage, date, StringCodec::encode);
         CodecUtil.encodeNullable(clientMessage, host, StringCodec::encode);
@@ -78,8 +87,9 @@ public final class SeaTunnelPackageZetaLogsCodec {
             ClientMessage clientMessage) {
         ClientMessage.ForwardFrameIterator iterator = clientMessage.frameIterator();
         RequestParameters request = new RequestParameters();
-        // empty initial frame
-        iterator.next();
+        ClientMessage.Frame initialFrame = iterator.next();
+        request.isSubRequest =
+                decodeBoolean(initialFrame.content, REQUEST_IS_SUB_REQUEST_FIELD_OFFSET);
         request.date = CodecUtil.decodeNullable(iterator, StringCodec::decode);
         request.host = CodecUtil.decodeNullable(iterator, StringCodec::decode);
         return request;
