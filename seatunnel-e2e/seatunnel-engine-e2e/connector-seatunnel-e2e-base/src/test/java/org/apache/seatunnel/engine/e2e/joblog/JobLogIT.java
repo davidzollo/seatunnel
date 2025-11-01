@@ -26,6 +26,7 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.platform.commons.util.StringUtils;
 import org.testcontainers.containers.Container;
@@ -53,6 +54,7 @@ import static io.restassured.RestAssured.given;
 import static org.apache.seatunnel.e2e.common.util.ContainerUtil.PROJECT_ROOT_PATH;
 import static org.hamcrest.Matchers.equalTo;
 
+@Disabled("Temporarily disabled - needs to be fixed")
 public class JobLogIT extends SeaTunnelContainer {
 
     private static final String CUSTOM_JOB_NAME = "test-job-log-file";

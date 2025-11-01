@@ -18,66 +18,50 @@ package org.apache.seatunnel.connectors.cdc.pi.source.client;
 
 import org.apache.seatunnel.connectors.seatunnel.pi.config.AuthType;
 import org.apache.seatunnel.connectors.seatunnel.pi.config.PIConfigHelper;
+import org.apache.seatunnel.connectors.seatunnel.pi.exception.PIConnectorException;
+import org.apache.seatunnel.connectors.seatunnel.pi.exception.PIErrorCode;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
-import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpObjectAggregator;
-import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.PingWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
-import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
-import io.netty.util.CharsetUtil;
 
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -117,39 +101,22 @@ public class PIWebSocketClient implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(PIWebSocketClient.class);
 
-    /** Maximum reconnection attempts */
-    private static final int MAX_RECONNECT_ATTEMPTS = 5;
+    private static final int DEFAULT_MAX_RECONNECT_ATTEMPTS = 5;
+    private static final long DEFAULT_BACKOFF_INITIAL_MS = 1000L;
+    private static final long DEFAULT_BACKOFF_MAX_MS = 10000L;
 
-    /** Thread pool shutdown timeout (seconds) */
-    private static final int SHUTDOWN_TIMEOUT_SECONDS = 30;
-
-    // ========== Connection configuration fields ==========
-    private final URI uri;
-    private final boolean trustAll;
-    private final int reconnectIntervalSeconds;
-    private final int heartbeatIntervalSeconds;
-    private final int connectTimeoutMillis;
-    private final int handshakeTimeoutMillis;
-    private volatile PIConfigHelper authenticationConfig;
+    // ========== Core components ==========
+    private final PIWebSocketConfig config;
+    private final PIWebSocketConnectionState connectionState;
+    private final PIWebSocketReconnectStrategy reconnectStrategy;
+    private final PIWebSocketHeartbeat heartbeat;
+    private final PIConfigHelper piConfigHelper;
 
     // ========== Netty related fields ==========
     private volatile EventLoopGroup eventLoopGroup;
     private volatile Channel channel;
-    private volatile ScheduledExecutorService scheduler;
-
-    // ========== State management fields ==========
-    private final AtomicBoolean running = new AtomicBoolean(false);
-    private final AtomicBoolean connecting = new AtomicBoolean(false);
-    private final AtomicBoolean connected = new AtomicBoolean(false);
-    private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
+    private volatile ScheduledExecutorService connectionExecutor;
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-    private final AtomicReference<String> lastError = new AtomicReference<>();
-
-    // ========== Statistics and time fields ==========
-    private final AtomicLong totalMessagesReceived = new AtomicLong(0);
-    private final AtomicLong totalMessagesSent = new AtomicLong(0);
-    private volatile long lastConnectAttemptTime = 0;
-    private volatile long connectionEstablishedTime = 0;
 
     // ========== Callback function fields ==========
     private volatile Consumer<String> onMessage;
@@ -157,73 +124,63 @@ public class PIWebSocketClient implements AutoCloseable {
     private volatile Consumer<Throwable> onError;
     private volatile Consumer<CloseWebSocketFrame> onClose;
 
-    // ========================================
-    // Constructor
-    // ========================================
-
     /**
      * Construct Netty WebSocket client
      *
      * @param url WebSocket URL (supports ws:// and wss://)
      * @param trustAll Whether to trust all SSL certificates (only used for test environment)
-     * @param reconnectIntervalSeconds Reconnection interval (seconds)
      * @param heartbeatIntervalSeconds Heartbeat interval (seconds)
      * @param connectTimeoutMillis Connection timeout (milliseconds)
+     * @param maxReconnectAttempts Maximum reconnection attempts
+     * @param backoffInitialMillis Initial backoff interval in milliseconds
+     * @param backoffMaxMillis Maximum backoff interval in milliseconds
      * @throws IllegalArgumentException If URL format is invalid
      */
     public PIWebSocketClient(
             String url,
             boolean trustAll,
-            int reconnectIntervalSeconds,
             int heartbeatIntervalSeconds,
-            int connectTimeoutMillis) {
+            int connectTimeoutMillis,
+            int maxReconnectAttempts,
+            long backoffInitialMillis,
+            long backoffMaxMillis,
+            PIConfigHelper piConfigHelper) {
 
-        // Parameter validation
-        if (url == null || url.trim().isEmpty()) {
-            throw new IllegalArgumentException("WebSocket URL cannot be empty");
-        }
-        if (reconnectIntervalSeconds < 1) {
-            throw new IllegalArgumentException(
-                    "Reconnection interval must be greater than 0 seconds");
-        }
-        if (heartbeatIntervalSeconds < 0) {
-            throw new IllegalArgumentException("Heartbeat interval cannot be less than 0 seconds");
-        }
-        if (connectTimeoutMillis < 1000) {
-            throw new IllegalArgumentException(
-                    "Connection timeout must be greater than or equal to 1000 milliseconds");
-        }
+        // Build configuration
+        this.config =
+                PIWebSocketConfig.builder()
+                        .url(url)
+                        .trustAll(trustAll)
+                        .heartbeatIntervalSeconds(heartbeatIntervalSeconds)
+                        .connectTimeoutMillis(connectTimeoutMillis)
+                        .maxReconnectAttempts(maxReconnectAttempts)
+                        .backoffInitialMillis(backoffInitialMillis)
+                        .backoffMaxMillis(backoffMaxMillis)
+                        .build();
 
-        try {
-            this.uri = new URI(url);
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Invalid WebSocket URL: " + url, e);
-        }
+        // Initialize components
+        this.connectionState = new PIWebSocketConnectionState();
+        this.reconnectStrategy =
+                new PIWebSocketReconnectStrategy(
+                        config.getMaxReconnectAttempts(),
+                        config.getBackoffInitialMillis(),
+                        config.getBackoffMaxMillis());
+        this.heartbeat = new PIWebSocketHeartbeat(config.getHeartbeatIntervalSeconds());
+        this.piConfigHelper = piConfigHelper;
 
-        // Verify protocol
-        String scheme = uri.getScheme();
-        if (!"ws".equalsIgnoreCase(scheme) && !"wss".equalsIgnoreCase(scheme)) {
-            throw new IllegalArgumentException(
-                    "Unsupported protocol: " + scheme + ", only ws:// or wss:// is supported");
-        }
-
-        this.trustAll = trustAll;
-        this.reconnectIntervalSeconds = reconnectIntervalSeconds;
-        this.heartbeatIntervalSeconds = heartbeatIntervalSeconds;
-        this.connectTimeoutMillis = connectTimeoutMillis;
-        this.handshakeTimeoutMillis = Math.max(connectTimeoutMillis * 2, 30000);
-
-        if (trustAll) {
+        if (config.isTrustAll()) {
             log.debug("Trust all SSL certificates mode enabled!");
         }
 
-        log.info(
-                "Initialize PIWebSocketClient - URL: {}, connection timeout: {}ms, handshake timeout: {}ms, heartbeat interval: {}s, reconnection interval: {}s",
+        log.debug(
+                "Initialize PIWebSocketClient - URL: {}, connection timeout: {}ms, handshake timeout: {}ms, heartbeat interval: {}s, backoff initial: {}ms, backoff max: {}ms, max retries: {}",
                 url,
-                connectTimeoutMillis,
-                handshakeTimeoutMillis,
-                heartbeatIntervalSeconds,
-                reconnectIntervalSeconds);
+                config.getConnectTimeoutMillis(),
+                config.getHandshakeTimeoutMillis(),
+                config.getHeartbeatIntervalSeconds(),
+                config.getBackoffInitialMillis(),
+                config.getBackoffMaxMillis(),
+                config.getMaxReconnectAttempts());
     }
 
     // ========================================
@@ -279,15 +236,19 @@ public class PIWebSocketClient implements AutoCloseable {
      * @throws IllegalStateException If the client has already been started
      */
     public synchronized void start() {
-        if (running.compareAndSet(false, true)) {
+        if (connectionState.startRunning()) {
             log.info("Start PIWebSocketClient...");
 
-            // Create dedicated thread pool
+            // Reset reconnection attempts counter when starting
+            reconnectStrategy.reset();
+            log.debug("Reconnection attempts counter reset to 0 on client start");
+
+            // Create dedicated thread pool with single thread per WebSocket client
             this.eventLoopGroup =
-                    new NioEventLoopGroup(0, createThreadFactory("PIWebSocketClient-EventLoop"));
-            this.scheduler =
-                    Executors.newScheduledThreadPool(
-                            2, createThreadFactory("PIWebSocketClient-Scheduler"));
+                    new NioEventLoopGroup(1, createThreadFactory("PIWebSocketClient-EventLoop"));
+            this.connectionExecutor =
+                    Executors.newSingleThreadScheduledExecutor(
+                            createThreadFactory("PIWebSocketClient-Thread"));
 
             // Start connection
             scheduleConnect(0);
@@ -303,10 +264,12 @@ public class PIWebSocketClient implements AutoCloseable {
      * resources are released correctly.
      */
     public synchronized void stop() {
-        if (running.compareAndSet(true, false)) {
+        if (connectionState.stopRunning()) {
             log.info("Stop PIWebSocketClient...");
-            connected.set(false);
-            connecting.set(false);
+            connectionState.reset();
+
+            // Cancel heartbeat task on stop
+            heartbeat.stop();
 
             try {
                 // Send close frame
@@ -335,6 +298,7 @@ public class PIWebSocketClient implements AutoCloseable {
             } finally {
                 // Close thread pool
                 shutdownThreadPools();
+                shutdownConnectionExecutor();
 
                 log.info("PIWebSocketClient has been completely stopped");
             }
@@ -345,146 +309,14 @@ public class PIWebSocketClient implements AutoCloseable {
     @Override
     public void close() {
         stop();
-    }
 
-    // ========================================
-    // Message sending method
-    // ========================================
+        // Clear callback references to prevent memory leaks
+        onMessage = null;
+        onOpen = null;
+        onError = null;
+        onClose = null;
 
-    /**
-     * Send text message
-     *
-     * @param text The text content to be sent
-     * @return The CompletableFuture of the send operation
-     */
-    public CompletableFuture<Void> sendText(String text) {
-        if (text == null) {
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            future.completeExceptionally(
-                    new IllegalArgumentException("Message content cannot be null"));
-            return future;
-        }
-
-        if (!isConnected()) {
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            future.completeExceptionally(
-                    new IllegalStateException("WebSocket connection not established"));
-            return future;
-        }
-
-        CompletableFuture<Void> future = new CompletableFuture<>();
-
-        try {
-            ChannelFuture channelFuture = channel.writeAndFlush(new TextWebSocketFrame(text));
-            channelFuture.addListener(
-                    f -> {
-                        if (f.isSuccess()) {
-                            totalMessagesSent.incrementAndGet();
-                            future.complete(null);
-                            log.debug("Text message sent successfully, length: {}", text.length());
-                        } else {
-                            future.completeExceptionally(f.cause());
-                            log.warn("Text message sending failed", f.cause());
-                        }
-                    });
-        } catch (Exception e) {
-            future.completeExceptionally(e);
-            log.error("Exception occurred while sending text message", e);
-        }
-
-        return future;
-    }
-
-    /**
-     * Send binary message
-     *
-     * @param data The binary data to be sent
-     * @return The CompletableFuture of the send operation
-     */
-    public CompletableFuture<Void> sendBinary(byte[] data) {
-        if (data == null) {
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            future.completeExceptionally(new IllegalArgumentException("Data cannot be null"));
-            return future;
-        }
-
-        if (!isConnected()) {
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            future.completeExceptionally(
-                    new IllegalStateException("WebSocket connection not established"));
-            return future;
-        }
-
-        CompletableFuture<Void> future = new CompletableFuture<>();
-
-        try {
-            ByteBuf buffer = Unpooled.wrappedBuffer(data);
-            ChannelFuture channelFuture = channel.writeAndFlush(new BinaryWebSocketFrame(buffer));
-            channelFuture.addListener(
-                    f -> {
-                        if (f.isSuccess()) {
-                            totalMessagesSent.incrementAndGet();
-                            future.complete(null);
-                            log.debug(
-                                    "Binary message sent successfully, length: {} bytes",
-                                    data.length);
-                        } else {
-                            future.completeExceptionally(f.cause());
-                            log.warn("Binary message sending failed", f.cause());
-                        }
-                    });
-        } catch (Exception e) {
-            future.completeExceptionally(e);
-            log.error("Exception occurred while sending binary message", e);
-        }
-
-        return future;
-    }
-
-    /**
-     * Send Ping frame
-     *
-     * @return The CompletableFuture of the send operation
-     */
-    public CompletableFuture<Void> sendPing() {
-        return sendPing(new byte[] {1, 2, 3, 4});
-    }
-
-    /**
-     * Send Ping frame (with custom data)
-     *
-     * @param data Ping frame data
-     * @return The CompletableFuture of the send operation
-     */
-    public CompletableFuture<Void> sendPing(byte[] data) {
-        if (!isConnected()) {
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            future.completeExceptionally(
-                    new IllegalStateException("WebSocket connection not established"));
-            return future;
-        }
-
-        CompletableFuture<Void> future = new CompletableFuture<>();
-
-        try {
-            ByteBuf buffer = Unpooled.wrappedBuffer(data != null ? data : new byte[0]);
-            ChannelFuture channelFuture = channel.writeAndFlush(new PingWebSocketFrame(buffer));
-            channelFuture.addListener(
-                    f -> {
-                        if (f.isSuccess()) {
-                            future.complete(null);
-                            log.debug("Ping frame sent successfully");
-                        } else {
-                            future.completeExceptionally(f.cause());
-                            log.warn("Ping frame sending failed", f.cause());
-                        }
-                    });
-        } catch (Exception e) {
-            future.completeExceptionally(e);
-            log.error("Exception occurred while sending Ping frame", e);
-        }
-
-        return future;
+        log.debug("PIWebSocketClient closed and callbacks cleaned");
     }
 
     // ========================================
@@ -586,40 +418,66 @@ public class PIWebSocketClient implements AutoCloseable {
         }
 
         // Configuration parameters
-        boolean trustAllCerts =
-                piConfigHelper.isTrustAllCerts(); // Use trustAllCerts field in configuration
-        int reconnectIntervalSeconds = 5; // Default reconnection interval
-        int heartbeatIntervalSeconds =
-                piConfigHelper.getHeartbeatRate(); // Use heartbeat rate in configuration
-        int connectTimeoutMillis =
-                piConfigHelper
-                        .getWebSocketConnectionWaitTimeoutMs(); // Use WebSocket connection wait
-        // timeout configuration
+        boolean trustAllCerts = piConfigHelper.isTrustAllCerts();
+        int heartbeatIntervalSeconds = piConfigHelper.getHeartbeatRate();
+        int connectTimeoutMillis = piConfigHelper.getWebSocketConnectionWaitTimeoutMs();
+
+        long backoffInitialMs = piConfigHelper.getRetryBackoffMultiplierMs();
+        if (backoffInitialMs <= 0) {
+            log.warn(
+                    "Configured retry_backoff_multiplier_ms ({}) is invalid, fallback to {} ms",
+                    backoffInitialMs,
+                    DEFAULT_BACKOFF_INITIAL_MS);
+            backoffInitialMs = DEFAULT_BACKOFF_INITIAL_MS;
+        }
+
+        long backoffMaxMs = piConfigHelper.getRetryBackoffMaxMs();
+        if (backoffMaxMs <= 0) {
+            log.warn(
+                    "Configured retry_backoff_max_ms ({}) is invalid, fallback to {} ms",
+                    backoffMaxMs,
+                    DEFAULT_BACKOFF_MAX_MS);
+            backoffMaxMs = DEFAULT_BACKOFF_MAX_MS;
+        }
+        if (backoffMaxMs < backoffInitialMs) {
+            log.warn(
+                    "retry_backoff_max_ms ({}) is smaller than retry_backoff_multiplier_ms ({}), align to multiplier value",
+                    backoffMaxMs,
+                    backoffInitialMs);
+            backoffMaxMs = backoffInitialMs;
+        }
+
+        int maxReconnectAttempts = piConfigHelper.getWebSocketMaxRetries();
+        if (maxReconnectAttempts <= 0) {
+            log.warn(
+                    "Configured retry attempts is invalid, fallback to default {} attempts",
+                    DEFAULT_MAX_RECONNECT_ATTEMPTS);
+            maxReconnectAttempts = DEFAULT_MAX_RECONNECT_ATTEMPTS;
+        }
 
         log.debug(
-                "Create PI WebSocket client (Netty) - URL: {}, trust all certificates: {}, WebSocket connection timeout: {}ms",
+                "Create PI WebSocket client (Netty) - URL: {}, trust all certificates: {}, WebSocket connection timeout: {}ms, max retries: {}, backoff initial/max: {}/{} ms",
                 webSocketUrl,
                 trustAllCerts,
-                connectTimeoutMillis);
+                connectTimeoutMillis,
+                maxReconnectAttempts,
+                backoffInitialMs,
+                backoffMaxMs);
 
         // Create authenticated WebSocket client
         PIWebSocketClient client =
                 new PIWebSocketClient(
                         webSocketUrl,
                         trustAllCerts,
-                        reconnectIntervalSeconds,
                         heartbeatIntervalSeconds,
-                        connectTimeoutMillis);
-
-        // Save authentication configuration, used when connecting
-        client.authenticationConfig = piConfigHelper;
+                        connectTimeoutMillis,
+                        maxReconnectAttempts,
+                        backoffInitialMs,
+                        backoffMaxMs,
+                        piConfigHelper);
 
         return client;
     }
-
-    // ========================================
-    // Status query method
-    // ========================================
 
     /**
      * Check if the client is connected
@@ -627,87 +485,10 @@ public class PIWebSocketClient implements AutoCloseable {
      * @return Whether the client is connected
      */
     public boolean isConnected() {
-        return running.get() && connected.get() && channel != null && channel.isActive();
-    }
-
-    /**
-     * Check if the client is connecting
-     *
-     * @return Whether the client is connecting
-     */
-    public boolean isConnecting() {
-        return connecting.get();
-    }
-
-    /**
-     * Get connection status information
-     *
-     * @return Connection status description
-     */
-    public String getConnectionStatus() {
-        if (isConnected()) {
-            long uptime = System.currentTimeMillis() - connectionEstablishedTime;
-            return String.format("Connected (uptime: %dms)", uptime);
-        } else if (isConnecting()) {
-            long connectingTime = System.currentTimeMillis() - lastConnectAttemptTime;
-            return String.format("Connecting (attempted: %dms)", connectingTime);
-        } else {
-            String error = lastError.get();
-            return "Not connected" + (error != null ? " (error: " + error + ")" : "");
-        }
-    }
-
-    /**
-     * Get the last error information
-     *
-     * @return Error information
-     */
-    public String getLastError() {
-        return lastError.get();
-    }
-
-    /**
-     * Get performance summary information
-     *
-     * @return Performance summary
-     */
-    public String getPerformanceSummary() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("WebSocket performance statistics: ");
-        sb.append("Message received: ").append(totalMessagesReceived.get());
-        sb.append(", Message sent: ").append(totalMessagesSent.get());
-        sb.append(", Running status: ").append(isConnected() ? "Connected" : "Not connected");
-        if (connectionEstablishedTime > 0) {
-            long uptime = System.currentTimeMillis() - connectionEstablishedTime;
-            sb.append(", Running duration: ").append(uptime).append("ms");
-        }
-        return sb.toString();
-    }
-
-    /**
-     * Check if recovery is needed (compatibility method)
-     *
-     * @return Whether recovery is needed
-     */
-    public boolean needsRecovery() {
-        return !isConnected() && running.get();
-    }
-
-    /** Mark recovery complete (compatibility method) */
-    public void markRecoveryComplete() {
-        log.info("Recovery process marked as complete");
-    }
-
-    /**
-     * Receive updates (compatibility method)
-     *
-     * @param timeoutMs Timeout (milliseconds)
-     * @return Data update list
-     */
-    @Deprecated
-    public List<Object> receiveUpdates(int timeoutMs) {
-        log.warn("receiveUpdates method is deprecated, please use asynchronous callback mechanism");
-        return new java.util.ArrayList<>();
+        return connectionState.isRunning()
+                && connectionState.isConnected()
+                && channel != null
+                && channel.isActive();
     }
 
     // ========================================
@@ -727,82 +508,129 @@ public class PIWebSocketClient implements AutoCloseable {
         };
     }
 
+    /**
+     * Schedule connection attempt with retry logic
+     *
+     * @param attempt
+     */
     private void scheduleConnect(int attempt) {
-        if (attempt < MAX_RECONNECT_ATTEMPTS) {
-            connectWithRetry(attempt);
-        } else {
-            log.error("Maximum reconnection attempts reached, connection failed");
-            connected.set(false);
-            lastError.set("Maximum reconnection attempts reached, connection failed");
+        if (!connectionState.isRunning()) {
+            log.debug("Client is not running, skip scheduling reconnect attempt {}", attempt);
+            connectionState.clearReconnectScheduled();
+            return;
+        }
+
+        if (!connectionState.scheduleReconnect()) {
+            log.debug("Reconnect attempt {} already scheduled, skip duplicate scheduling", attempt);
+            return;
+        }
+
+        if (!reconnectStrategy.canRetry(attempt)) {
+            connectionState.clearReconnectScheduled();
+            log.error(
+                    "Maximum reconnection attempts ({}) reached, connection failed",
+                    reconnectStrategy.getMaxReconnectAttempts());
+            connectionState.setConnected(false);
+            connectionState.setLastError(
+                    "Maximum reconnection attempts reached, connection failed");
             if (onError != null) {
                 onError.accept(
-                        new RuntimeException(
-                                "Maximum reconnection attempts reached, connection failed"));
+                        new PIConnectorException(
+                                PIErrorCode.WEBSOCKET_RECONNECT_FAILED,
+                                String.format(
+                                        "Maximum reconnection attempts (%d) reached, connection failed",
+                                        reconnectStrategy.getMaxReconnectAttempts())));
             }
+            return;
         }
+
+        long delayMs = reconnectStrategy.calculateBackoffDelayMs(attempt);
+        ScheduledExecutorService executor = connectionExecutor;
+        executor.schedule(
+                () -> {
+                    connectionState.clearReconnectScheduled();
+                    try {
+                        connectWithRetry(attempt);
+                    } catch (Exception ex) {
+                        log.error("Connection attempt {} terminated unexpectedly", attempt, ex);
+                        connectionState.setConnecting(false);
+                    }
+                },
+                delayMs,
+                TimeUnit.MILLISECONDS);
     }
 
+    /**
+     * Attempt to connect with retry logic
+     *
+     * @param attempt
+     */
     private void connectWithRetry(int attempt) {
-        if (connecting.compareAndSet(false, true)) {
-            scheduler.execute(
-                    () -> {
-                        log.info(
-                                "Attempt to establish WebSocket connection, attempt number: {}",
-                                attempt + 1);
-                        while (running.get() && !Thread.currentThread().isInterrupted()) {
-                            try {
-                                lastConnectAttemptTime = System.currentTimeMillis();
-                                log.info(
-                                        "Start to establish WebSocket connection, attempt time: {}",
-                                        new java.util.Date(lastConnectAttemptTime));
+        if (!connectionState.isRunning()) {
+            return;
+        }
+        if (!connectionState.startConnecting()) {
+            log.debug(
+                    "Connection attempt {} skipped because another attempt is in progress",
+                    attempt + 1);
+            return;
+        }
 
-                                setupConnection();
+        try {
+            connectionState.updateLastConnectAttemptTime();
+            log.info("Attempt to establish WebSocket connection, attempt number: {}", attempt + 1);
 
-                                // Connection successful - note: connected status is now set in
-                                // onOpen callback
-                                connectionEstablishedTime = System.currentTimeMillis();
-                                long connectDuration =
-                                        connectionEstablishedTime - lastConnectAttemptTime;
-                                log.info(
-                                        "WebSocket connection established successfully, duration: {}ms",
-                                        connectDuration);
+            setupConnection();
+            connectionState.clearLastError();
 
-                                connecting.set(false);
-                                lastError.set(null);
-                                break;
+        } catch (Throwable e) {
+            connectionState.setConnected(false);
+            connectionState.setLastError(e.getMessage());
 
-                            } catch (Throwable e) {
-                                connected.set(false);
-                                lastError.set(e.getMessage());
+            long connectDuration =
+                    System.currentTimeMillis() - connectionState.getLastConnectAttemptTime();
+            int nextAttempt = attempt + 1;
+            boolean canRetry = reconnectStrategy.canRetry(nextAttempt);
+            long nextDelay = reconnectStrategy.calculateBackoffDelayMs(nextAttempt);
+            if (canRetry) {
+                log.warn(
+                        "WebSocket connection attempt {} failed (duration: {}ms). Next retry in {} ms: {}",
+                        attempt + 1,
+                        connectDuration,
+                        nextDelay,
+                        e.getMessage());
+            } else {
+                log.error(
+                        "WebSocket connection attempt {} failed (duration: {}ms). Maximum retries ({}) reached: {}",
+                        attempt + 1,
+                        connectDuration,
+                        reconnectStrategy.getMaxReconnectAttempts(),
+                        e.getMessage());
 
-                                long connectDuration =
-                                        System.currentTimeMillis() - lastConnectAttemptTime;
-                                log.warn(
-                                        "WebSocket connection failed, duration: {}ms, retry after {} seconds: {}",
-                                        connectDuration,
-                                        reconnectIntervalSeconds,
-                                        e.getMessage());
+                // Call onError callback only when max retries reached
+                if (onError != null) {
+                    try {
+                        onError.accept(
+                                new PIConnectorException(
+                                        PIErrorCode.WEBSOCKET_RECONNECT_FAILED,
+                                        String.format(
+                                                "WebSocket connection failed after %d attempts: %s",
+                                                reconnectStrategy.getMaxReconnectAttempts(),
+                                                e.getMessage()),
+                                        e));
+                    } catch (Exception callbackEx) {
+                        log.error(
+                                "Exception occurred while executing onError callback", callbackEx);
+                    }
+                }
+            }
 
-                                if (onError != null) {
-                                    try {
-                                        onError.accept(e);
-                                    } catch (Exception callbackEx) {
-                                        log.error(
-                                                "Exception occurred while executing onError callback",
-                                                callbackEx);
-                                    }
-                                }
-
-                                try {
-                                    TimeUnit.SECONDS.sleep(reconnectIntervalSeconds);
-                                } catch (InterruptedException ignored) {
-                                    Thread.currentThread().interrupt();
-                                    break;
-                                }
-                            }
-                        }
-                        connecting.set(false);
-                    });
+            if (connectionState.isRunning() && canRetry) {
+                reconnectStrategy.setReconnectAttempts(nextAttempt);
+                scheduleConnect(nextAttempt);
+            }
+        } finally {
+            connectionState.stopConnecting();
         }
     }
 
@@ -812,6 +640,7 @@ public class PIWebSocketClient implements AutoCloseable {
      * and production environment recommends using start()
      */
     public void setupConnection() throws Exception {
+        URI uri = config.getUri();
         String scheme = uri.getScheme() == null ? "ws" : uri.getScheme();
         final String host = uri.getHost();
         final int port =
@@ -828,7 +657,7 @@ public class PIWebSocketClient implements AutoCloseable {
 
         // Network connectivity pre-detection
         try {
-            performNetworkTest(host, port);
+            runNetworkTest(host, port);
             log.debug("Network connectivity detection passed");
         } catch (Exception e) {
             log.error(
@@ -843,12 +672,10 @@ public class PIWebSocketClient implements AutoCloseable {
         // Configure SSL context
         final SslContext sslCtx;
         if (ssl) {
-            if (trustAll) {
+            if (config.isTrustAll()) {
                 sslCtx =
                         SslContextBuilder.forClient()
                                 .trustManager(InsecureTrustManagerFactory.INSTANCE)
-                                //                                .protocols("TLSv1.2", "TLSv1.3")
-                                // // Explicitly specify supported TLS versions
                                 .build();
                 log.debug(
                         "Trust all certificates configured, host name verification disabled, supports TLS 1.2/1.3");
@@ -873,24 +700,24 @@ public class PIWebSocketClient implements AutoCloseable {
         headers.add(HttpHeaderNames.USER_AGENT, "SeaTunnel-PI-Connector");
 
         // Add authentication header
-        if (authenticationConfig != null) {
-            AuthType authType = authenticationConfig.getAuthType();
+        if (piConfigHelper != null) {
+            AuthType authType = piConfigHelper.getAuthType();
             if (AuthType.BASIC.equals(authType)
-                    && authenticationConfig.getUsername() != null
-                    && authenticationConfig.getPassword() != null) {
+                    && piConfigHelper.getUsername() != null
+                    && piConfigHelper.getPassword() != null) {
                 String authValue =
-                        authenticationConfig.getUsername()
-                                + ":"
-                                + authenticationConfig.getPassword();
+                        piConfigHelper.getUsername() + ":" + piConfigHelper.getPassword();
+                // Use UTF-8 encoding explicitly to avoid platform-dependent encoding issues
+                // This ensures non-ASCII characters in username/password are handled correctly
                 String encodedAuth =
-                        java.util.Base64.getEncoder().encodeToString(authValue.getBytes());
+                        java.util.Base64.getEncoder()
+                                .encodeToString(authValue.getBytes(StandardCharsets.UTF_8));
                 headers.add(HttpHeaderNames.AUTHORIZATION, "Basic " + encodedAuth);
                 log.debug("Basic authentication header added to WebSocket handshake");
             } else if (AuthType.BEARER.equals(authType)
-                    && authenticationConfig.getBearerToken() != null) {
+                    && piConfigHelper.getBearerToken() != null) {
                 headers.add(
-                        HttpHeaderNames.AUTHORIZATION,
-                        "Bearer " + authenticationConfig.getBearerToken());
+                        HttpHeaderNames.AUTHORIZATION, "Bearer " + piConfigHelper.getBearerToken());
                 log.debug("Bearer authentication header added to WebSocket handshake");
             }
         }
@@ -902,25 +729,35 @@ public class PIWebSocketClient implements AutoCloseable {
         log.debug("WebSocketClientHandshaker created successfully");
 
         // Create WebSocket handler
-        final WebSocketClientHandler handler = new WebSocketClientHandler(handshaker);
+        final PIWebSocketHandler handler =
+                new PIWebSocketHandler(
+                        handshaker,
+                        connectionState,
+                        reconnectStrategy,
+                        heartbeat,
+                        shutdownLatch,
+                        () -> scheduleConnect(0));
+        handler.setOnMessage(onMessage);
+        handler.setOnOpen(onOpen);
+        handler.setOnClose(onClose);
 
         // Configure Bootstrap
         Bootstrap b = new Bootstrap();
         b.group(eventLoopGroup)
                 .channel(NioSocketChannel.class)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMillis)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.getConnectTimeoutMillis())
                 .option(ChannelOption.TCP_NODELAY, true)
                 .option(ChannelOption.SO_KEEPALIVE, true)
-                .option(ChannelOption.SO_REUSEADDR, true) // Allow address reuse
+                .option(ChannelOption.SO_REUSEADDR, true)
                 .handler(
                         new ChannelInitializer<SocketChannel>() {
                             @Override
                             protected void initChannel(SocketChannel ch) {
                                 log.debug("Initialize Channel Pipeline");
-                                // Configure Socket options to optimize connection
                                 ch.config().setTcpNoDelay(true);
                                 ch.config().setKeepAlive(true);
-                                ch.config().setConnectTimeoutMillis(connectTimeoutMillis);
+                                ch.config()
+                                        .setConnectTimeoutMillis(config.getConnectTimeoutMillis());
 
                                 ChannelPipeline p = ch.pipeline();
                                 if (sslCtx != null) {
@@ -928,16 +765,13 @@ public class PIWebSocketClient implements AutoCloseable {
                                     SSLEngine sslEngine = sslCtx.newEngine(ch.alloc(), host, port);
                                     sslEngine.setUseClientMode(true);
 
-                                    // Force close host name verification
                                     SSLParameters sslParams = sslEngine.getSSLParameters();
-                                    sslParams.setEndpointIdentificationAlgorithm(
-                                            null); // Close host name verification
+                                    sslParams.setEndpointIdentificationAlgorithm(null);
                                     sslEngine.setSSLParameters(sslParams);
                                     log.debug("Force close SSL host name verification");
 
                                     SslHandler sslHandler = new SslHandler(sslEngine);
-                                    // Set shorter handshake timeout to avoid long blocking
-                                    sslHandler.setHandshakeTimeoutMillis(15000); // 15 seconds
+                                    sslHandler.setHandshakeTimeoutMillis(15000);
                                     p.addLast(sslHandler);
 
                                     log.debug(
@@ -947,8 +781,8 @@ public class PIWebSocketClient implements AutoCloseable {
                                         new HttpClientCodec(),
                                         new HttpObjectAggregator(65536),
                                         new IdleStateHandler(
-                                                heartbeatIntervalSeconds,
-                                                heartbeatIntervalSeconds,
+                                                config.getHeartbeatIntervalSeconds(),
+                                                config.getHeartbeatIntervalSeconds(),
                                                 0),
                                         handler);
                                 log.debug("Channel Pipeline initialized successfully");
@@ -960,10 +794,13 @@ public class PIWebSocketClient implements AutoCloseable {
         ChannelFuture connectFuture = b.connect(host, port);
 
         // Wait for connection establishment, using configured timeout
-        log.debug("Waiting for TCP connection establishment, timeout: {}ms", connectTimeoutMillis);
-        if (!connectFuture.await(connectTimeoutMillis, TimeUnit.MILLISECONDS)) {
+        log.debug(
+                "Waiting for TCP connection establishment, timeout: {}ms",
+                config.getConnectTimeoutMillis());
+        if (!connectFuture.await(config.getConnectTimeoutMillis(), TimeUnit.MILLISECONDS)) {
             connectFuture.cancel(true);
-            throw new RuntimeException("Connection timeout: " + connectTimeoutMillis + "ms");
+            throw new RuntimeException(
+                    "Connection timeout: " + config.getConnectTimeoutMillis() + "ms");
         }
 
         if (!connectFuture.isSuccess()) {
@@ -977,12 +814,12 @@ public class PIWebSocketClient implements AutoCloseable {
         // Wait for handshake completion, using independent handshake timeout
         log.debug(
                 "Waiting for WebSocket handshake completion, timeout: {}ms",
-                handshakeTimeoutMillis);
+                config.getHandshakeTimeoutMillis());
         ChannelFuture handshakeFuture = handler.handshakeFuture();
-        if (!handshakeFuture.await(handshakeTimeoutMillis, TimeUnit.MILLISECONDS)) {
+        if (!handshakeFuture.await(config.getHandshakeTimeoutMillis(), TimeUnit.MILLISECONDS)) {
             channel.close();
             throw new RuntimeException(
-                    "WebSocket handshake timeout: " + handshakeTimeoutMillis + "ms");
+                    "WebSocket handshake timeout: " + config.getHandshakeTimeoutMillis() + "ms");
         }
 
         if (!handshakeFuture.isSuccess()) {
@@ -992,248 +829,13 @@ public class PIWebSocketClient implements AutoCloseable {
 
         log.info("WebSocket handshake completed, connection established successfully: {}", uri);
 
-        // Set connection status
-        connected.set(true);
-
-        // Trigger connection success callback
-        if (onOpen != null) {
-            try {
-                onOpen.run();
-            } catch (Exception e) {
-                log.error("Exception occurred while executing onOpen callback", e);
-            }
-        }
-
         // Start heartbeat
-        startHeartbeat();
-    }
-
-    private void startHeartbeat() {
-        if (heartbeatIntervalSeconds > 0 && scheduler != null && !scheduler.isShutdown()) {
-            scheduler.scheduleAtFixedRate(
-                    () -> {
-                        if (channel != null && channel.isActive()) {
-                            log.debug("Send heartbeat PING");
-                            channel.writeAndFlush(
-                                    new PingWebSocketFrame(
-                                            Unpooled.wrappedBuffer(new byte[] {1, 2, 3})));
-                        }
-                    },
-                    heartbeatIntervalSeconds,
-                    heartbeatIntervalSeconds,
-                    TimeUnit.SECONDS);
-        }
+        heartbeat.start(channel);
     }
 
     // ========================================
-    // Inner classes
+    // Helper methods
     // ========================================
-
-    private class WebSocketClientHandler extends SimpleChannelInboundHandler<Object> {
-        private final WebSocketClientHandshaker handshaker;
-        private ChannelPromise handshakeFuture;
-
-        public WebSocketClientHandler(WebSocketClientHandshaker handshaker) {
-            this.handshaker = handshaker;
-        }
-
-        public ChannelFuture handshakeFuture() {
-            return handshakeFuture;
-        }
-
-        @Override
-        public void handlerAdded(ChannelHandlerContext ctx) {
-            log.debug("WebSocket handler added to Pipeline");
-            handshakeFuture = ctx.newPromise();
-        }
-
-        @Override
-        public void channelActive(ChannelHandlerContext ctx) {
-            log.debug("Channel activated, start WebSocket handshake");
-            try {
-                handshaker.handshake(ctx.channel());
-                log.debug("WebSocket handshake request sent");
-            } catch (Exception e) {
-                log.error("WebSocket handshake request sending failed", e);
-                throw e;
-            }
-        }
-
-        @Override
-        public void channelInactive(ChannelHandlerContext ctx) {
-            log.warn("WebSocket connection disconnected");
-            connected.set(false);
-
-            if (onClose != null) {
-                try {
-                    // For abnormal disconnection, use 1000 (normal close) or no status code
-                    // 1000 = normal close, 1001 = endpoint left, 1002 = protocol error
-                    CloseWebSocketFrame closeFrame =
-                            new CloseWebSocketFrame(1000, "Connection disconnected");
-                    onClose.accept(closeFrame);
-                } catch (Exception e) {
-                    log.error("Exception occurred while executing onClose callback", e);
-                    // plan B: if creating CloseWebSocketFrame fails, pass null
-                    try {
-                        onClose.accept(null);
-                    } catch (Exception ex) {
-                        log.error("Exception occurred while executing onClose callback", ex);
-                    }
-                }
-            }
-
-            // If the client is still running, try to reconnect
-            if (running.get()) {
-                connecting.set(false);
-                scheduleConnect(reconnectAttempts.incrementAndGet());
-            } else {
-                shutdownLatch.countDown();
-            }
-        }
-
-        @Override
-        public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-            if (evt instanceof IdleStateEvent) {
-                IdleStateEvent idleEvent = (IdleStateEvent) evt;
-                log.debug("Detected idle state: {}", idleEvent.state());
-                // Send heartbeat
-                if (ctx.channel().isActive()) {
-                    ctx.writeAndFlush(
-                            new PingWebSocketFrame(Unpooled.wrappedBuffer(new byte[] {1, 2, 3})));
-                }
-            }
-            super.userEventTriggered(ctx, evt);
-        }
-
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
-            Channel ch = ctx.channel();
-
-            // Handle handshake completion
-            if (!handshaker.isHandshakeComplete()) {
-                log.debug("Handle WebSocket handshake response");
-                try {
-                    FullHttpResponse response = (FullHttpResponse) msg;
-                    log.debug("Received handshake response, status code: {}", response.status());
-                    handshaker.finishHandshake(ch, response);
-                    handshakeFuture.setSuccess();
-                    log.debug("WebSocket handshake completed successfully");
-                } catch (Exception e) {
-                    log.error("WebSocket handshake failed", e);
-                    handshakeFuture.setFailure(e);
-                }
-                return;
-            }
-
-            // Handle unexpected HTTP response
-            if (msg instanceof FullHttpResponse) {
-                FullHttpResponse response = (FullHttpResponse) msg;
-                throw new IllegalStateException(
-                        "Unexpected FullHttpResponse (getStatus="
-                                + response.status()
-                                + ", content="
-                                + response.content().toString(CharsetUtil.UTF_8)
-                                + ')');
-            }
-
-            // Handle WebSocket frame
-            if (msg instanceof WebSocketFrame) {
-                WebSocketFrame frame = (WebSocketFrame) msg;
-                if (frame instanceof TextWebSocketFrame) {
-                    TextWebSocketFrame textFrame = (TextWebSocketFrame) frame;
-                    String text = textFrame.text();
-                    log.debug("Received WebSocket server message: {}", text);
-
-                    if (onMessage != null) {
-                        try {
-                            onMessage.accept(text);
-                        } catch (Exception e) {
-                            log.error("Exception occurred while executing onMessage callback", e);
-                        }
-                    }
-                } else if (frame instanceof BinaryWebSocketFrame) {
-                    BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) frame;
-                    log.debug(
-                            "Received binary message, length: {}",
-                            binaryFrame.content().readableBytes());
-                    // If binary message needs to be processed, add processing logic here
-                } else if (frame instanceof PingWebSocketFrame) {
-                    log.debug("Received PING");
-                    ctx.writeAndFlush(new PongWebSocketFrame(frame.content().retain()));
-                } else if (frame instanceof PongWebSocketFrame) {
-                    log.debug("Received PONG heartbeat response");
-                } else if (frame instanceof CloseWebSocketFrame) {
-                    log.debug("Received close frame");
-                    CloseWebSocketFrame closeFrame = (CloseWebSocketFrame) frame;
-
-                    if (onClose != null) {
-                        try {
-                            onClose.accept(closeFrame);
-                        } catch (Exception e) {
-                            log.error("Exception occurred while executing onClose callback", e);
-                        }
-                    }
-
-                    ch.close();
-                    shutdownLatch.countDown();
-                }
-            }
-        }
-
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            if (!handshakeFuture.isDone()) {
-                handshakeFuture.setFailure(cause);
-            }
-
-            log.error("WebSocket connection exception occurred: {}", cause.getMessage(), cause);
-
-            // Detailed analysis of exception types to help diagnose problems
-            if (cause instanceof javax.net.ssl.SSLHandshakeException) {
-                log.error("SSL handshake failed: {}", cause.getMessage());
-                log.error(
-                        "Possible reasons: 1) TLS version mismatch 2) Certificate problem 3) Password suite incompatibility");
-            } else if (cause instanceof javax.net.ssl.SSLException) {
-                log.error("SSL exception: {}", cause.getMessage());
-                log.error("Possible reasons: 1) SSL connection error occurred during the process");
-            } else if (cause instanceof java.net.ConnectException) {
-                log.error("Connection refused: {}", cause.getMessage());
-                log.error(
-                        "Possible reasons: 1) Server not started 2) Port occupied 3) Firewall blocked");
-            } else if (cause instanceof java.net.SocketTimeoutException) {
-                log.error("Connection timeout: {}", cause.getMessage());
-                log.error(
-                        "Possible reasons: 1) Network delay too high 2) Server response slow 3) Connection timeout set too short");
-            } else if (cause instanceof java.io.IOException) {
-                log.error("IO exception: {}", cause.getMessage());
-                log.error(
-                        "Possible reasons: 1) Network interruption 2) Connection reset 3) Data transmission error");
-            } else if (cause instanceof io.netty.handler.timeout.TimeoutException) {
-                log.error("Netty timeout exception: {}", cause.getMessage());
-                log.error(
-                        "Possible reasons: 1) Handshake timeout 2) Read/write timeout 3) Heartbeat timeout");
-            } else if (cause instanceof java.security.cert.CertificateException) {
-                log.error("Certificate exception: {}", cause.getMessage());
-                log.error(
-                        "Possible reasons: 1) Certificate invalid 2) Certificate expired 3) Certificate chain verification failed");
-            } else {
-                log.error(
-                        "Unknown exception type: {} - {}",
-                        cause.getClass().getSimpleName(),
-                        cause.getMessage());
-            }
-
-            if (onError != null) {
-                try {
-                    onError.accept(cause);
-                } catch (Exception e) {
-                    log.error("Exception occurred while executing onError callback", e);
-                }
-            }
-
-            ctx.close();
-        }
-    }
 
     /**
      * Perform network connectivity detection
@@ -1242,7 +844,7 @@ public class PIWebSocketClient implements AutoCloseable {
      * @param port target port
      * @throws Exception when connection fails
      */
-    private void performNetworkTest(String host, int port) throws Exception {
+    private void runNetworkTest(String host, int port) throws Exception {
         log.debug("Test TCP connection to {}:{}", host, port);
 
         try (java.net.Socket socket = new java.net.Socket()) {
@@ -1260,12 +862,28 @@ public class PIWebSocketClient implements AutoCloseable {
         }
     }
 
+    /** Shutdown Netty event loop thread pool */
     private void shutdownThreadPools() {
         if (eventLoopGroup != null) {
-            eventLoopGroup.shutdownGracefully(0, SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            eventLoopGroup.shutdownGracefully(
+                    0, config.getShutdownTimeoutSeconds(), TimeUnit.SECONDS);
         }
-        if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdownNow();
+    }
+
+    /** Shutdown connection executor thread pool */
+    private void shutdownConnectionExecutor() {
+        ScheduledExecutorService executor = connectionExecutor;
+        connectionExecutor = null;
+        if (executor != null) {
+            executor.shutdownNow();
+            try {
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    log.warn("Connection executor did not terminate within timeout");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Interrupted while shutting down connection executor", e);
+            }
         }
     }
 }

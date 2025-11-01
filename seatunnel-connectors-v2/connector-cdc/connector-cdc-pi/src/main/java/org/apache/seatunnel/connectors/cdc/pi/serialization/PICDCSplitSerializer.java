@@ -86,9 +86,6 @@ public class PICDCSplitSerializer implements Serializer<PICDCSplit> {
                 piPaths.add(ois.readUTF());
             }
 
-            // Skip WebID list - only use PI Paths
-            List<String> webIds = null;
-
             // Read checkpoint time
             long lastCheckpointTime = ois.readLong();
 

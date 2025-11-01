@@ -40,6 +40,13 @@ public class PICDCCheckpointStateSerializer implements Serializer<PICDCCheckpoin
     private static final int VERSION = 1;
 
     @Override
+    /**
+     * Serialize PICDCCheckpointState.
+     *
+     * @param state checkpoint state to serialize
+     * @return serialized bytes
+     * @throws IOException when serialization fails
+     */
     public byte[] serialize(PICDCCheckpointState state) throws IOException {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 ObjectOutputStream oos = new ObjectOutputStream(baos)) {
@@ -66,6 +73,13 @@ public class PICDCCheckpointStateSerializer implements Serializer<PICDCCheckpoin
         }
     }
 
+    /**
+     * Deserialize PICDCCheckpointState.
+     *
+     * @param serialized serialized bytes
+     * @return deserialized checkpoint state
+     * @throws IOException when deserialization fails
+     */
     @Override
     public PICDCCheckpointState deserialize(byte[] serialized) throws IOException {
         try (ByteArrayInputStream bais = new ByteArrayInputStream(serialized);

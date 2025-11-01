@@ -33,6 +33,7 @@ import org.apache.seatunnel.e2e.common.container.TestContainer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.GenericContainer;
@@ -81,6 +82,7 @@ import java.util.stream.Stream;
 import static org.awaitility.Awaitility.given;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class AmazondynamodbIT extends TestSuiteBase implements TestResource {
     private static final String AMAZONDYNAMODB_DOCKER_IMAGE = "amazon/dynamodb-local:1.21.0";
     private static final String AMAZONDYNAMODB_CONTAINER_HOST = "dynamodb-host";

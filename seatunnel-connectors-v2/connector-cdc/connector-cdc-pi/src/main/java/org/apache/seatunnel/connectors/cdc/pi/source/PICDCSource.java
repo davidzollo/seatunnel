@@ -36,6 +36,7 @@ import org.apache.seatunnel.connectors.cdc.pi.source.reader.PICDCSourceReader;
 import org.apache.seatunnel.connectors.cdc.pi.split.PICDCCheckpointState;
 import org.apache.seatunnel.connectors.cdc.pi.split.PICDCSplit;
 import org.apache.seatunnel.connectors.cdc.pi.split.PICDCSplitEnumerator;
+import org.apache.seatunnel.connectors.seatunnel.pi.config.AuthType;
 import org.apache.seatunnel.connectors.seatunnel.pi.config.PIConfig;
 import org.apache.seatunnel.connectors.seatunnel.pi.config.PIConfigHelper;
 import org.apache.seatunnel.connectors.seatunnel.pi.exception.PIConnectorException;
@@ -107,6 +108,9 @@ public class PICDCSource
                         "PI CDC source configuration validation failed: " + checkResult.getMsg());
             }
 
+            // Additional detailed configuration validation
+            validateConfiguration();
+
             // Reuse connector-pi's Schema builder
             if (config.getOptional(PIConfig.SCHEMA).isPresent()) {
                 // User-defined Schema - fully generic
@@ -167,7 +171,7 @@ public class PICDCSource
     @Override
     public SourceSplitEnumerator<PICDCSplit, PICDCCheckpointState> createEnumerator(
             SourceSplitEnumerator.Context<PICDCSplit> enumeratorContext) throws Exception {
-
+        log.info("Create PI CDC split enumerator");
         return new PICDCSplitEnumerator(configHelper, enumeratorContext);
     }
 
@@ -192,5 +196,49 @@ public class PICDCSource
 
     public CatalogTable getProducedCatalogTable() {
         return catalogTable;
+    }
+
+    /** Detailed configuration validation to prevent production issues */
+    private void validateConfiguration() {
+        // 1. Validate max_webids_per_split range
+        int maxWebIDsPerSplit = configHelper.getMaxWebIDsPerSplit();
+        if (maxWebIDsPerSplit < 1 || maxWebIDsPerSplit > 50) {
+            throw new PIConnectorException(
+                    PIErrorCode.CONFIG_INVALID,
+                    String.format(
+                            "max_webids_per_split (%d) must be between 1 and 50 to prevent WebSocket URL length issues",
+                            maxWebIDsPerSplit));
+        }
+
+        // 2. Validate authentication configuration consistency
+        AuthType authType = configHelper.getAuthType();
+        if (authType == AuthType.BEARER && configHelper.getBearerToken() == null) {
+            throw new PIConnectorException(
+                    PIErrorCode.CONFIG_INVALID, "bearer_token is required when auth_type=BEARER");
+        }
+
+        // 3. Validate PI Paths are not empty
+        List<String> piPaths = configHelper.getPiPaths();
+        if (piPaths == null || piPaths.isEmpty()) {
+            throw new PIConnectorException(
+                    PIErrorCode.CONFIG_MISSING_TAG_PATHS,
+                    "pi_paths cannot be empty for CDC connector");
+        }
+
+        // 4. Validate timeout values are reasonable
+        int connectionTimeout = configHelper.getConnectionTimeoutMs();
+        if (connectionTimeout < 1000 || connectionTimeout > 300000) {
+            throw new PIConnectorException(
+                    PIErrorCode.CONFIG_INVALID,
+                    String.format(
+                            "connection_timeout_ms (%d) must be between 1000 and 300000 milliseconds",
+                            connectionTimeout));
+        }
+
+        log.info(
+                "Configuration validation passed: {} PI paths, max_webids_per_split={}, auth_type={}",
+                piPaths.size(),
+                maxWebIDsPerSplit,
+                authType);
     }
 }

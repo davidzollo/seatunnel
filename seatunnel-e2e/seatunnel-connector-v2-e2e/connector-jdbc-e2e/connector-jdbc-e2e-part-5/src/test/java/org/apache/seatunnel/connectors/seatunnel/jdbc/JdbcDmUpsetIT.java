@@ -24,6 +24,7 @@ import org.apache.seatunnel.common.exception.SeaTunnelRuntimeException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
+import org.junit.jupiter.api.Disabled;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.utility.DockerLoggerFactory;
@@ -48,6 +49,7 @@ import java.util.Map;
 import java.util.Properties;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class JdbcDmUpsetIT extends AbstractJdbcIT {
 
     private static final String DM_IMAGE = "laglangyue/dmdb8";

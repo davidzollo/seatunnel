@@ -65,9 +65,9 @@ public class SnowflakeTypeMapper implements JdbcDialectTypeMapper {
     private static final String SNOWFLAKE_DATE_TIME = "DATE_TIME";
     private static final String SNOWFLAKE_TIME = "TIME";
     private static final String SNOWFLAKE_TIMESTAMP = "TIMESTAMP";
-    private static final String SNOWFLAKE_TIMESTAMP_LTZ = "TIMESTAMP_LTZ";
-    private static final String SNOWFLAKE_TIMESTAMP_NTZ = "TIMESTAMP_NTZ";
-    private static final String SNOWFLAKE_TIMESTAMP_TZ = "TIMESTAMP_TZ";
+    public static final String SNOWFLAKE_TIMESTAMP_LTZ = "TIMESTAMP_LTZ";
+    public static final String SNOWFLAKE_TIMESTAMP_NTZ = "TIMESTAMP_NTZ";
+    public static final String SNOWFLAKE_TIMESTAMP_TZ = "TIMESTAMP_TZ";
 
     private static final String SNOWFLAKE_GEOGRAPHY = "GEOGRAPHY";
     private static final String SNOWFLAKE_GEOMETRY = "GEOMETRY";

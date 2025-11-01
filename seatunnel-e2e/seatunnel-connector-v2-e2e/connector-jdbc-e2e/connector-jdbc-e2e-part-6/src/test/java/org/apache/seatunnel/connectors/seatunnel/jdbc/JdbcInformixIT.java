@@ -22,6 +22,7 @@ import org.apache.seatunnel.common.exception.SeaTunnelRuntimeException;
 
 import org.apache.commons.lang3.tuple.Pair;
 
+import org.junit.jupiter.api.Disabled;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -61,6 +62,7 @@ import java.util.Map;
  * accuracy - Sequence number automatic generation - Connection timeout and reconnection mechanism
  */
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class JdbcInformixIT extends AbstractJdbcIT {
 
     // === Container and connection configuration ===

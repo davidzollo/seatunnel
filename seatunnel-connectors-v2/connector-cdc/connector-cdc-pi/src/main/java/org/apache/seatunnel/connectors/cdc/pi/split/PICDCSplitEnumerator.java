@@ -23,10 +23,8 @@ import org.apache.seatunnel.connectors.seatunnel.pi.exception.PIConnectorExcepti
 import org.apache.seatunnel.connectors.seatunnel.pi.exception.PIErrorCode;
 import org.apache.seatunnel.connectors.seatunnel.pi.utils.PIPathValidator;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -35,83 +33,115 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * PI CDC split enumerator - Round-robin and reliable split scheduling core component
- *
- * <p>Responsible for Round-robin split scheduling of large PI data sources and assigning them to
- * multiple Readers for parallel processing, optimized based on PI Web API technical limitations:
- *
- * <ul>
- *   <li>Real-time mode: 25 PI Paths/split (WebSocket URL length limit 8KB)
- *   <li>Support round-robin load balancing and checkpoint mechanism
- *   <li>Maximum support 160,000 PI Paths, 10,000 splits
- * </ul>
- *
- * <p>Core Design Principles:
- *
- * <ul>
- *   <li>Principle 1: Keep split size - max 25 PI Paths per split (WebSocket URL limit)
- *   <li>Principle 2: Round-robin distribution ensures balanced allocation
- *   <li>Principle 3: Complete reallocation strategy - recreate all splits on failure/resume
- *   <li>Principle 4: Minimal state tracking - only track pending allocations, no Reader states
- * </ul>
+ * PI CDC split enumerator for round-robin split allocation. Each split contains a list of PI Paths
+ * to track in CDC PIRealtimeReader.
  */
+@Slf4j
 public class PICDCSplitEnumerator
         implements SourceSplitEnumerator<PICDCSplit, PICDCCheckpointState> {
 
-    private static final Logger log = LoggerFactory.getLogger(PICDCSplitEnumerator.class);
-
     /**
-     * Maximum number of WebIDs per split for CDC real-time mode - limited by WebSocket URL length
-     * (about 8KB). This value is configurable via max_webids_per_split parameter.
+     * Maximum number of WebIDs per split - limited by WebSocket URL length (about 8KB). This value
+     * is configurable via max_webids_per_split parameter.
      */
     private final int maxWebIDsPerSplit;
 
-    /** SeaTunnel split enumerator context, used for interaction with engine */
+    // SeaTunnel split enumerator context, used for interaction with engine
     private final SourceSplitEnumerator.Context<PICDCSplit> context;
 
-    /** List of PI Paths to be processed */
+    // List of PI Paths to be processed
     private final List<String> piPaths;
 
-    /** Map of Reader ID -> list of pending splits */
-    private final Map<Integer, List<PICDCSplit>> pendingSplits;
+    // Pending splits map: splitId -> split
+    private final Map<String, PICDCSplit> pendingSplitsMap = new HashMap<>();
 
-    /** Thread synchronization lock, protecting shared state */
+    // Assigned splits map: splitId -> split (CDC long-running tracking to prevent duplicate
+    // assignment)
+    private final Map<String, PICDCSplit> assignedSplitsMap = new HashMap<>();
+
+    // Optional: split ownership mapping for auditing (splitId -> readerId)
+    private final Map<String, Integer> splitOwnerMap = new HashMap<>();
+
+    // Thread synchronization lock, protecting shared state
     private final Object stateLock = new Object();
 
-    /** Whether to execute split enumeration (to prevent duplicate execution) */
-    private boolean shouldEnumerate;
+    // Whether splits should be enumerated (to prevent duplicate enumeration)
+    private volatile boolean shouldEnumerated = true;
 
-    /** Checkpoint state manager */
-    private PICDCCheckpointState checkpointState;
+    // Checkpoint state manager (only records checkpointId)
+    private final PICDCCheckpointState checkpointState;
 
-    /** Create split enumerator from PI configuration */
+    /** Create split enumerator from PI configuration. */
     public PICDCSplitEnumerator(PIConfigHelper configHelper, Context<PICDCSplit> context) {
         this(configHelper, context, null);
     }
 
-    /** Constructor from checkpoint for fault recovery */
+    /**
+     * Constructor from checkpoint for fault recovery.
+     *
+     * @param configHelper PI connector configuration helper
+     * @param context enumerator context
+     * @param checkpointState checkpoint state to restore from
+     */
     public PICDCSplitEnumerator(
             PIConfigHelper configHelper,
             Context<PICDCSplit> context,
             PICDCCheckpointState checkpointState) {
         this.context = context;
 
-        this.pendingSplits = new HashMap<>();
-        this.shouldEnumerate = true;
+        this.shouldEnumerated = true;
         this.checkpointState =
                 checkpointState != null
                         ? checkpointState
                         : new PICDCCheckpointState(new ArrayList<>(), new ArrayList<>());
 
-        // Read max PI Paths per split from configuration (default 25 for fault tolerance)
         this.maxWebIDsPerSplit = configHelper.getMaxWebIDsPerSplit();
 
-        // With complete reallocation strategy, ignore checkpoint and always recreate
+        // Restore splits from checkpoint if available
         if (checkpointState != null) {
-            log.info(
-                    "Using recovery strategy: ignore checkpoint and recreate from original PI Paths");
-            // Complete state cleanup for clean recovery
-            pendingSplits.clear();
+            int restoredPending = 0;
+            int restoredAssigned = 0;
+            // restore assigned first
+            List<PICDCSplit> assigned = checkpointState.getAssignedSplits();
+            if (assigned != null) {
+                for (PICDCSplit s : assigned) {
+                    if (s != null) {
+                        assignedSplitsMap.put(s.splitId(), s);
+                        restoredAssigned++;
+                    }
+                }
+            }
+            // then restore remaining, skip ids already in assigned
+            List<PICDCSplit> remaining = checkpointState.getRemainingSplits();
+            if (remaining != null) {
+                for (PICDCSplit s : remaining) {
+                    if (s != null && !assignedSplitsMap.containsKey(s.splitId())) {
+                        pendingSplitsMap.put(s.splitId(), s);
+                        restoredPending++;
+                    }
+                }
+            }
+            if (restoredPending > 0 || restoredAssigned > 0) {
+                shouldEnumerated = false;
+                // Requeue assigned splits after recovery to ensure they will be dispatched again
+                if (!assignedSplitsMap.isEmpty()) {
+                    int requeued = 0;
+                    for (PICDCSplit s : assignedSplitsMap.values()) {
+                        if (s != null) {
+                            pendingSplitsMap.put(s.splitId(), s);
+                            requeued++;
+                        }
+                    }
+                    assignedSplitsMap.clear();
+                    log.info("Requeued {} assigned splits after restore", requeued);
+                }
+
+                log.info(
+                        "Checkpoint recovery detected (checkpointId: {}), restored pending={}, assigned={}",
+                        checkpointState.getCheckpointId(),
+                        restoredPending,
+                        restoredAssigned);
+            }
         }
 
         // Get PI Paths from configuration
@@ -122,7 +152,7 @@ public class PICDCSplitEnumerator
         }
     }
 
-    /** Initialize enumerator and validate configuration */
+    /** Initialize enumerator and validate configuration. */
     @Override
     public void open() {
         if (piPaths.isEmpty()) {
@@ -136,208 +166,192 @@ public class PICDCSplitEnumerator
         validateSplitConfiguration();
     }
 
-    /** Register new Reader and assign pending splits */
+    /**
+     * Register new Reader and assign pending splits.
+     *
+     * @param subtaskId
+     */
     @Override
     public void registerReader(int subtaskId) {
-        log.info("Register new Reader, subtaskId: {}", subtaskId);
+        log.info("Reader-{} registered", subtaskId);
 
-        // Assign pending splits to new Reader
         synchronized (stateLock) {
-            List<PICDCSplit> readerSplits = pendingSplits.get(subtaskId);
-            if (readerSplits != null && !readerSplits.isEmpty()) {
-                log.info(
-                        "Assign {} pre-stored splits to new registered Reader-{}",
-                        readerSplits.size(),
-                        subtaskId);
-                // Assign all splits to the reader
-                for (PICDCSplit split : new ArrayList<>(readerSplits)) {
-                    context.assignSplit(subtaskId, Collections.singletonList(split));
-                }
-                // Remove assigned splits
-                pendingSplits.remove(subtaskId);
+            // Try to assign one initial split to the newly registered Reader
+            PICDCSplit split = getOneSplitFromPendingMap();
+            if (split != null) {
+                // Track assignment to avoid duplicate re-assignment
+                assignedSplitsMap.put(split.splitId(), split);
+                splitOwnerMap.put(split.splitId(), subtaskId);
+                context.assignSplit(subtaskId, Collections.singletonList(split));
 
-                // Immediately send no more splits signal, allowing Reader to start processing
-                context.signalNoMoreSplits(subtaskId);
+                // Reminder: Do NOT send signalNoMoreSplits here - let Reader request more splits as
+                // needed,this enables multi-split processing per Reader
                 log.info(
-                        "Sent no more splits signal to Reader-{}, Reader can start processing data",
-                        subtaskId);
+                        "Assigned initial split {} to Reader-{}, remaining pending: {}, assigned: {}",
+                        split.splitId(),
+                        subtaskId,
+                        pendingSplitsMap.size(),
+                        assignedSplitsMap.size());
             } else {
-                log.info("Reader-{} registered, but no splits assigned", subtaskId);
-                // Send signal to avoid Reader waiting indefinitely
-                context.signalNoMoreSplits(subtaskId);
+                log.info(
+                        "No pending splits for Reader-{}, will wait for split requests", subtaskId);
             }
         }
     }
 
-    /** Create and assign splits to registered Readers */
+    /** Initialize splits and distribute to registered Readers. */
     @Override
-    public void run() throws Exception {
-        Set<Integer> readers = context.registeredReaders();
-
-        if (shouldEnumerate && !piPaths.isEmpty()) {
-            log.info("Start creating CDC splits, registered Reader count: {}", readers.size());
-
-            // Create splits based on read mode
-            List<PICDCSplit> splits = validatePiPathsCountAndCreateSplits();
-
+    public void run() {
+        if (shouldEnumerated && !piPaths.isEmpty()) {
             synchronized (stateLock) {
-                if (readers.isEmpty()) {
-                    // Pre-allocate splits using round-robin for future Reader registration
-                    log.info(
-                            "No registered Reader, pre-allocate {} splits using round-robin",
-                            splits.size());
+                if (shouldEnumerated) {
+                    log.info("Enumerating PI CDC splits, PI paths count: {}", piPaths.size());
 
-                    int currentParallelism = Math.max(1, context.currentParallelism());
-                    for (int i = 0; i < splits.size(); i++) {
-                        int readerId = i % currentParallelism;
-                        pendingSplits
-                                .computeIfAbsent(readerId, k -> new ArrayList<>())
-                                .add(splits.get(i));
+                    // Create all splits and put into pending map (deduplicated by splitId)
+                    List<PICDCSplit> splits = generateSplitsFromPiPaths();
+                    for (PICDCSplit s : splits) {
+                        pendingSplitsMap.put(s.splitId(), s);
                     }
+                    shouldEnumerated = false;
 
-                    log.info("Splits pre-allocated successfully, waiting for Reader registration");
-                } else {
-                    // Distribute splits to registered Readers
-                    distributeSplitsToReaders(splits, readers);
+                    log.info("Enumerated {} splits into pending map", splits.size());
+
+                    // Immediately distribute pending splits to registered readers
+                    distributeSplitsToReaders();
                 }
-
-                shouldEnumerate = false;
             }
-        }
-
-        // Send no more splits signal to registered Readers
-        if (!readers.isEmpty()) {
-            readers.forEach(context::signalNoMoreSplits);
         }
     }
 
     /**
-     * Handle splits returned by Reader due to various reasons. Called by SeaTunnel framework in
-     * three scenarios: 1. Reader failure/crash - Reader returns unfinished splits 2. Job pause -
-     * Reader returns current processing splits for checkpoint 3. Job resume - Framework returns
-     * splits from previous checkpoint
+     * Handle splits returned by Reader due to failure/pause/resume. Simply add returned splits back
+     * to the global queue for reassignment.
      *
-     * <p>PI CDC uses "complete reallocation strategy": - Ignores returned splits (they become
-     * invalid after WebSocket disconnection) - Clears all allocation states and recreates splits
-     * from original PI Paths - Reassigns all splits to healthy readers starting from current time
+     * @param splits returned splits
+     * @param subtaskId the returning reader id
      */
     @Override
     public void addSplitsBack(List<PICDCSplit> splits, int subtaskId) {
-        if (splits.isEmpty()) {
+        if (splits == null || splits.isEmpty()) {
             return;
         }
-
-        log.info(
-                "Reader {} returned {} splits (failure/pause/resume), applying complete reallocation strategy",
-                subtaskId,
-                splits.size());
-
-        boolean needReallocation = false;
-
         synchronized (stateLock) {
-            // Prevent duplicate reallocation if another thread is already processing
-            // This can happen when multiple readers fail simultaneously
-            if (!shouldEnumerate) {
-                // Clear all existing allocation states to start fresh
-                pendingSplits.clear();
-                shouldEnumerate = true;
-                needReallocation = true;
-
-                log.info(
-                        "Cleared all allocation states, will recreate and redistribute all splits from original PI Paths");
-            } else {
-                log.info(
-                        "Split reallocation already in progress, ignoring duplicate request from Reader {}",
-                        subtaskId);
-            }
-        }
-
-        // Execute reallocation outside synchronized block to prevent potential deadlock
-        // The run() method will create new reader threads and assign splits, which may acquire
-        // other locks
-        if (needReallocation) {
-            try {
-                run();
-            } catch (Exception e) {
-                log.error("Failed to execute split reallocation", e);
-                // Reset state on failure to allow manual retry or next automatic trigger
-                synchronized (stateLock) {
-                    shouldEnumerate = false;
-                    pendingSplits.clear(); // Clean up inconsistent state
+            int added = 0;
+            for (PICDCSplit s : splits) {
+                if (s == null) {
+                    continue;
                 }
-                throw new RuntimeException(
-                        "Critical: Split reallocation failed, manual intervention may be required",
-                        e);
+                // remove from assigned if present
+                assignedSplitsMap.remove(s.splitId());
+                // remove owner if present and warn on mismatch
+                Integer owner = splitOwnerMap.remove(s.splitId());
+                if (owner != null && owner.intValue() != subtaskId) {
+                    log.warn(
+                            "Split {} returned by Reader-{} but owned by Reader-{}",
+                            s.splitId(),
+                            subtaskId,
+                            owner);
+                }
+                // put back to pending (dedup by map key)
+                pendingSplitsMap.put(s.splitId(), s);
+                added++;
             }
-        }
-    }
-
-    /** Get total number of unassigned splits */
-    @Override
-    public int currentUnassignedSplitSize() {
-        synchronized (stateLock) {
-            return pendingSplits.values().stream().mapToInt(List::size).sum();
+            log.info(
+                    "Reader-{} returned {} splits, added back to pending splits map. pending={}, assigned={}",
+                    subtaskId,
+                    added,
+                    pendingSplitsMap.size(),
+                    assignedSplitsMap.size());
         }
     }
 
     /**
-     * Handle Reader's request for additional splits.
+     * Get total number of unassigned splits.
      *
-     * <p>PI CDC uses push-based split allocation model (like Kafka connector): - All splits are
-     * pre-allocated during reader registration - Readers establish WebSocket connections and wait
-     * for data - No dynamic split request is needed or supported
+     * @return number of unassigned splits
+     */
+    @Override
+    public int currentUnassignedSplitSize() {
+        return pendingSplitsMap.size();
+    }
+
+    /**
+     * Handle Reader's request for additional splits. Assign available splits from global queue on
+     * demand. This enables dynamic multi-split processing per Reader.
      *
-     * <p>If this method is called, it indicates a potential issue in Reader implementation.
+     * @param subtaskId the requesting reader id
      */
     @Override
     public void handleSplitRequest(int subtaskId) {
-        // Do nothing because PI CDC source uses push-based split allocation
-        log.warn(
-                "PI CDC Reader-{} requested additional splits, but CDC mode does not support dynamic split allocation. "
-                        + "All splits should have been assigned during reader registration. This shouldn't happen.",
-                subtaskId);
+        synchronized (stateLock) {
+            // Validate subtaskId to prevent NullPointerException in context operations
+            Set<Integer> registeredReaders = context.registeredReaders();
+            if (!registeredReaders.contains(subtaskId)) {
+                log.debug(
+                        "Received split request from subtask {} before registration (readers: {}), will retry after registration",
+                        subtaskId,
+                        registeredReaders);
+                // Instead of rejecting, defer the request - the reader will retry
+                return;
+            }
+
+            PICDCSplit split = getOneSplitFromPendingMap();
+            if (split != null) {
+                assignedSplitsMap.put(split.splitId(), split);
+                splitOwnerMap.put(split.splitId(), subtaskId);
+                context.assignSplit(subtaskId, Collections.singletonList(split));
+                log.info(
+                        "Assigned requested split {} to Reader-{}, remaining pending: {}, assigned: {}",
+                        split.splitId(),
+                        subtaskId,
+                        pendingSplitsMap.size(),
+                        assignedSplitsMap.size());
+            } else {
+                // Only signal no more splits when enumeration is complete and queue is empty
+                if (!shouldEnumerated) {
+                    context.signalNoMoreSplits(subtaskId);
+                    log.info(
+                            "No more splits pending for Reader-{}, signaled completion", subtaskId);
+                } else {
+                    log.debug(
+                            "Enumeration not yet complete, Reader-{} will retry split request",
+                            subtaskId);
+                }
+            }
+        }
     }
 
     /**
-     * Create checkpoint state snapshot.
+     * Save enumerator state: pending + assigned splits for CDC recovery.
      *
-     * <p>Note: PI CDC uses "complete reallocation strategy", so saved checkpoint state will be
-     * ignored during recovery. However, we still implement this method to: 1. Comply with SeaTunnel
-     * framework requirements 2. Provide debugging information about current state 3. Support
-     * potential future optimizations
+     * @param checkpointId checkpoint identifier
+     * @return snapshot state containing pending and assigned splits
      */
     @Override
-    public PICDCCheckpointState snapshotState(long checkpointId) throws Exception {
-        log.debug("Save split enumerator state, checkpointId: {}", checkpointId);
-
+    public PICDCCheckpointState snapshotState(long checkpointId) {
         synchronized (stateLock) {
-            // Save current pending splits (will be ignored during recovery due to complete
-            // reallocation)
-            List<PICDCSplit> remainingSplits = new ArrayList<>();
-            for (List<PICDCSplit> splitList : pendingSplits.values()) {
-                remainingSplits.addAll(splitList);
-            }
-
-            // Assigned splits (keep empty list as splits are immediately assigned in CDC mode)
-            List<PICDCSplit> assignedSplits = new ArrayList<>();
-
+            log.debug("Save split enumerator state, checkpointId: {}", checkpointId);
+            List<PICDCSplit> remainingSplits = new ArrayList<>(pendingSplitsMap.values());
+            List<PICDCSplit> assignedSplits = new ArrayList<>(assignedSplitsMap.values());
             PICDCCheckpointState snapshot =
                     new PICDCCheckpointState(remainingSplits, assignedSplits);
             snapshot.setCheckpointId(checkpointId);
-
             log.debug(
-                    "Checkpoint state snapshot created - remaining splits: {}, assigned splits: {} "
-                            + "(Note: will be ignored during recovery due to complete reallocation strategy)",
+                    "Checkpoint state snapshot created - remaining: {}, assigned: {}",
                     remainingSplits.size(),
                     assignedSplits.size());
-
             return snapshot;
         }
     }
 
-    /** Handle checkpoint completion notification */
+    /**
+     * PI CDC enumerator does not need to take any action on checkpoint completion, but we update
+     * the checkpoint ID in the state for tracking purposes.
+     *
+     * @param checkpointId checkpoint identifier
+     */
     @Override
-    public void notifyCheckpointComplete(long checkpointId) throws Exception {
+    public void notifyCheckpointComplete(long checkpointId) {
         log.debug("Checkpoint completion notification, checkpointId: {}", checkpointId);
 
         synchronized (stateLock) {
@@ -348,17 +362,28 @@ public class PICDCSplitEnumerator
         }
     }
 
-    /** Close enumerator and cleanup resources */
+    /** Close enumerator and cleanup resources. */
     @Override
-    public void close() throws IOException {
-        log.info("PI CDC split enumerator closed");
+    public void close() {
         synchronized (stateLock) {
-            pendingSplits.clear();
+            log.info(
+                    "PI CDC split enumerator closed, clearing pending={}, assigned={}",
+                    pendingSplitsMap.size(),
+                    assignedSplitsMap.size());
+            pendingSplitsMap.clear();
+            assignedSplitsMap.clear();
+            splitOwnerMap.clear();
         }
     }
 
-    /** Validate PI Path count and create splits */
-    private List<PICDCSplit> validatePiPathsCountAndCreateSplits() {
+    /**
+     * Generate splits from PI Paths, each split contains up to maxWebIDsPerSplit PI Paths.
+     * Validates that expected split count does not exceed parallelism to ensure 1:1 Reader-Split
+     * allocation.
+     *
+     * @return list of generated splits
+     */
+    private List<PICDCSplit> generateSplitsFromPiPaths() {
         List<PICDCSplit> splits = new ArrayList<>();
         int maxWebIDsPerSplit = this.maxWebIDsPerSplit;
 
@@ -366,24 +391,17 @@ public class PICDCSplitEnumerator
         int expectedSplitCount = (piPaths.size() + maxWebIDsPerSplit - 1) / maxWebIDsPerSplit;
         int parallelism = Math.max(1, context.currentParallelism());
 
-        // Validate parallelism is sufficient to handle all splits
+        // Multi-split mode: Allow split count to exceed parallelism for fault tolerance
+        // When a Reader fails, other Readers can pick up its splits for automatic failover
         if (expectedSplitCount > parallelism) {
-            int maxAllowedPiPaths = parallelism * maxWebIDsPerSplit;
-            String errorMsg =
-                    String.format(
-                            "Insufficient parallelism for PICDC connector. "
-                                    + "Total PI Path count: %d, max per split: %d, expected splits: %d, current parallelism: %d. "
-                                    + "To avoid WebSocket URL length limit, each Reader can only handle one split with max %d PI Paths. "
-                                    + "Please reduce the PI Path count to %d or fewer.",
-                            piPaths.size(),
-                            maxWebIDsPerSplit,
-                            expectedSplitCount,
-                            parallelism,
-                            maxWebIDsPerSplit,
-                            maxAllowedPiPaths);
-
-            log.error(errorMsg);
-            throw new PIConnectorException(PIErrorCode.CONFIG_VALIDATION_FAILED, errorMsg);
+            log.warn(
+                    "Split count {} exceeds parallelism {}, enabling multi-split mode. "
+                            + "Normal operation: 1:1 Reader-Split ratio. "
+                            + "During failover: Remaining Readers will handle multiple splits. "
+                            + "Recommendation: Consider increasing parallelism to {} for optimal 1:1 allocation.",
+                    expectedSplitCount,
+                    parallelism,
+                    expectedSplitCount);
         }
 
         log.info(
@@ -403,13 +421,8 @@ public class PICDCSplitEnumerator
             // Only use PI Paths
             List<String> splitPiPathList = new ArrayList<>(splitPiPaths);
 
-            // Create split with current timestamp
-            PICDCSplit split =
-                    new PICDCSplit(
-                            splitId,
-                            splitPiPathList,
-                            System.currentTimeMillis() // Start from current time
-                            );
+            // Create split (initial checkpoint time is 0, Reader will advance)
+            PICDCSplit split = new PICDCSplit(splitId, splitPiPathList);
             splits.add(split);
 
             log.debug("Create CDC split: {}, PI Path count: {}", splitId, splitPiPaths.size());
@@ -423,43 +436,63 @@ public class PICDCSplitEnumerator
     }
 
     /**
-     * Distribute splits to readers using simple round-robin allocation. Direct assignment without
-     * intermediate storage.
+     * Distribute pending splits from global queue to registered readers (1:1 allocation) Assign one
+     * split per reader in round-robin.
      */
-    private void distributeSplitsToReaders(List<PICDCSplit> splits, Set<Integer> readers) {
-        synchronized (stateLock) {
-            if (readers.isEmpty()) {
-                log.info("No registered Reader, splits will remain pending");
-                return;
-            }
-
-            List<Integer> readerList = new ArrayList<>(readers);
-            log.info(
-                    "Start round-robin allocation: {} splits to {} readers",
-                    splits.size(),
-                    readers.size());
-
-            // Direct round-robin assignment to readers
-            for (int i = 0; i < splits.size(); i++) {
-                int readerId = readerList.get(i % readerList.size());
-                PICDCSplit split = splits.get(i);
-
-                try {
-                    context.assignSplit(readerId, Collections.singletonList(split));
-                    log.info("Assigned split {} to Reader-{}", split.splitId(), readerId);
-                } catch (Exception e) {
-                    log.error(
-                            "Failed to assign split {} to Reader-{}", split.splitId(), readerId, e);
-                    // Add to pending for retry
-                    pendingSplits.computeIfAbsent(readerId, k -> new ArrayList<>()).add(split);
-                }
-            }
-
-            log.info("Round-robin allocation completed");
+    private void distributeSplitsToReaders() {
+        Set<Integer> readers = context.registeredReaders();
+        if (readers.isEmpty()) {
+            log.info("No registered readers, splits will remain pending");
+            return;
         }
+
+        int distributedCount = 0;
+        for (Integer readerId : readers) {
+            PICDCSplit split = getOneSplitFromPendingMap();
+            if (split != null) {
+                assignedSplitsMap.put(split.splitId(), split);
+                splitOwnerMap.put(split.splitId(), readerId);
+                context.assignSplit(readerId, Collections.singletonList(split));
+                distributedCount++;
+                log.info("Distributed split {} to Reader-{}", split.splitId(), readerId);
+            }
+        }
+
+        if (distributedCount > 0) {
+            log.info(
+                    "Distributed {} splits to {} readers, remaining pending: {}, assigned: {}",
+                    distributedCount,
+                    readers.size(),
+                    pendingSplitsMap.size(),
+                    assignedSplitsMap.size());
+        }
+
+        // Do NOT send signalNoMoreSplits here - let Readers request more splits as needed
+        // This maintains the standard 1:1 Reader-Split allocation pattern
     }
 
-    /** Validate split configuration */
+    /**
+     * Get and remove one split from pending map (arbitrary order).
+     *
+     * @return a split or null when no pending split
+     */
+    private PICDCSplit getOneSplitFromPendingMap() {
+        if (pendingSplitsMap.isEmpty()) {
+            return null;
+        }
+        // get first entry
+        String firstKey = null;
+        for (Map.Entry<String, PICDCSplit> e : pendingSplitsMap.entrySet()) {
+            firstKey = e.getKey();
+            break;
+        }
+        if (firstKey == null) {
+            return null;
+        }
+        return pendingSplitsMap.remove(firstKey);
+    }
+
+    /** Validate split configuration. */
     private void validateSplitConfiguration() {
         int totalPiPaths = piPaths.size();
         int maxWebIDsPerSplit = this.maxWebIDsPerSplit;

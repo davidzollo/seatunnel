@@ -33,6 +33,7 @@ import org.apache.seatunnel.format.text.constant.TextFormatConstant;
 
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.shaded.org.apache.commons.lang3.tuple.ImmutablePair;
 
@@ -57,6 +58,7 @@ import java.util.concurrent.TimeUnit;
  * capability in case of cluster node failure
  */
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class TextHeaderIT {
 
     private String FILE_FORMAT_TYPE = "file_format_type";

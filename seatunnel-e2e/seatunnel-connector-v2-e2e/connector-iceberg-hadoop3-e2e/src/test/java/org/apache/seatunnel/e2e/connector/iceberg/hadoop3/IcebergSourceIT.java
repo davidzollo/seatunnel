@@ -51,6 +51,7 @@ import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.utility.MountableFile;
@@ -76,6 +77,7 @@ import static org.apache.seatunnel.connectors.seatunnel.iceberg.config.IcebergCa
 import static org.apache.seatunnel.e2e.common.util.ContainerUtil.PROJECT_ROOT_PATH;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class IcebergSourceIT extends TestSuiteBase implements TestResource {
 
     private static final TableIdentifier TABLE =

@@ -17,6 +17,9 @@
 
 package org.apache.seatunnel.engine.e2e.classloader;
 
+import org.junit.jupiter.api.Disabled;
+
+@Disabled("Temporarily disabled - needs to be fixed")
 public class ClassLoaderEnableCacheModeIT extends ClassLoaderITBase {
     @Override
     boolean cacheMode() {

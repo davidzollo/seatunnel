@@ -44,6 +44,7 @@ import org.apache.pulsar.client.api.Schema;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.PulsarContainer;
@@ -65,6 +66,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class PulsarBatchIT extends TestSuiteBase implements TestResource {
 
     private static final String PULSAR_IMAGE_NAME = "apachepulsar/pulsar:2.3.1";

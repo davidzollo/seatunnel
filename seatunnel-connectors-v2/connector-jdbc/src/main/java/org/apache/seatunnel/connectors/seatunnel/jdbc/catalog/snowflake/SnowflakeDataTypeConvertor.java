@@ -38,6 +38,7 @@ import java.util.Map;
 import static org.apache.seatunnel.shade.com.google.common.base.Preconditions.checkNotNull;
 
 @AutoService(DataTypeConvertor.class)
+@Deprecated
 public class SnowflakeDataTypeConvertor implements DataTypeConvertor<String> {
 
     public static final String PRECISION = "precision";
@@ -182,7 +183,7 @@ public class SnowflakeDataTypeConvertor implements DataTypeConvertor<String> {
             case DATE:
                 return SNOWFLAKE_DATE;
             case BYTES:
-                return SNOWFLAKE_GEOMETRY;
+                return SNOWFLAKE_VARBINARY;
             case TIME:
                 return SNOWFLAKE_TIME;
             case TIMESTAMP:

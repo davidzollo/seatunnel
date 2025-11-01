@@ -466,10 +466,17 @@ public class PISourceReader implements SourceReader<SeaTunnelRow, PISplit> {
         try {
             JsonNode response = queryBatchData();
             List<SeaTunnelRow> rows = parseResponseToRows(response);
+            if (rows.isEmpty()) {
+                log.info(
+                        "No data returned for batch window [{} - {}], advancing to next batch.",
+                        currentBatchStart,
+                        currentBatchEnd);
+                moveToNextBatch();
+                return;
+            }
 
             // Add rows to buffer queue
             int recordCount = addRowsToBufferQueue(rows);
-            log.info("Added {} records to buffer queue", recordCount);
 
             // Always move to next batch after processing current batch
             if (recordCount > 0) {

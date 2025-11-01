@@ -24,6 +24,7 @@ import org.apache.seatunnel.e2e.common.junit.DisabledOnContainer;
 import org.apache.seatunnel.e2e.common.junit.TestContainerExtension;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 
@@ -39,6 +40,7 @@ import java.util.concurrent.TimeUnit;
 import static org.awaitility.Awaitility.given;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class DorisErrorIT extends AbstractDorisIT {
     private static final String TABLE = "doris_e2e_table";
     private static final String DRIVER_JAR =

@@ -36,32 +36,40 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
-/** PI real-time data reader - based on WebSocket real-time push mode */
+/**
+ * PI real-time data reader - based on WebSocket real-time push mode
+ *
+ * <p>Handles WebSocket connection, message processing, and buffering for real-time data capture
+ * Uses a BlockingQueue to buffer incoming messages from the Netty WebSocket client
+ */
 public class PIRealtimeReader implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(PIRealtimeReader.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final PIConfigHelper config;
-    private PIWebSocketClient piWebSocketClient; // Changed to non-final, support delayed setting
+    private PIWebSocketClient piWebSocketClient;
     private final PIWebIdResolver webIdResolver;
     private final PIHttpClient httpClient;
     private final List<String> webIds;
     private final SeaTunnelRowType rowType;
 
     // Connection status
-    private boolean connected = false;
+    private volatile boolean connected = false;
 
-    // Heartbeat detection
-    private long lastMessageTime = System.currentTimeMillis();
-    private final long heartbeatTimeoutMs;
+    // Message queue capacity (configurable)
+    private final int messageQueueCapacity;
 
     // Message queue - used to store messages received from Netty WebSocket client
-    private final ConcurrentLinkedQueue<SeaTunnelRow> messageQueue = new ConcurrentLinkedQueue<>();
+    private final BlockingQueue<SeaTunnelRow> messageQueue;
+
+    // Dropped message counter for monitoring
+    private final AtomicLong droppedMessageCount = new AtomicLong(0);
 
     public PIRealtimeReader(
             PIConfigHelper config,
@@ -77,148 +85,72 @@ public class PIRealtimeReader implements AutoCloseable {
         this.webIds = webIds;
         this.rowType = rowType;
 
-        // Heartbeat timeout is 5 times the polling interval
-        this.heartbeatTimeoutMs = config.getChannelPollingIntervalMs() * 5;
-    }
+        int configuredCapacity = config.getDataBufferQueueSize();
 
-    /** Poll data */
-    public void handleData(Collector<SeaTunnelRow> output) throws Exception {
-        // Check if WebSocket client is set
-        if (piWebSocketClient == null) {
-            if (log.isDebugEnabled()) {
-                log.debug("WebSocket client not set, waiting for completion...");
-            }
-            Thread.sleep(100);
-            return;
+        // Defensive validation: check lower bound (min 1000)
+        if (configuredCapacity < 1000) {
+            log.warn(
+                    "Configured data_buffer_queue_size ({}) too small (min: 1000), fallback to default 300000",
+                    configuredCapacity);
+            configuredCapacity = 300000;
         }
 
-        // Check WebSocket connection status - support two client implementations
-        boolean isConnected = isWebSocketConnected();
-        boolean isConnecting = isWebSocketConnecting();
+        // Defensive validation: check upper bound (max 10M to prevent OOM)
+        if (configuredCapacity > 10_000_000) {
+            log.warn(
+                    "Configured data_buffer_queue_size ({}) too large (max: 10,000,000 to prevent OOM), capped to 10M",
+                    configuredCapacity);
+            configuredCapacity = 10_000_000;
+        }
 
-        if (!isConnected) {
-            // Distinguish between connected and connection failed states
-            if (isConnecting) {
-                // Connected, silent wait
-                if (log.isDebugEnabled()) {
-                    log.debug(
-                            "WebSocket {} is connecting, waiting for completion...",
-                            config.getServerUrl());
-                }
-                Thread.sleep(200);
-                return;
-            }
+        this.messageQueueCapacity = configuredCapacity;
+        this.messageQueue = new LinkedBlockingQueue<>(messageQueueCapacity);
+    }
 
-            if (!connected) {
-                // Short wait, not recorded as error
-                Thread.sleep(500);
+    /**
+     * Handle data from the WebSocket message queue and emit to collector.
+     *
+     * @param output collector supplied by framework
+     * @param checkpointLock framework checkpoint lock for consistent emission
+     * @return true if any data was processed, false if no data available
+     */
+    public boolean handleData(Collector<SeaTunnelRow> output, Object checkpointLock)
+            throws Exception {
+        // Check if WebSocket client is set
+        if (piWebSocketClient == null) {
+            // log.debug("handleData: piWebSocketClient is null, returning false");
+            return false;
+        }
 
-                // Check connection status again
-                if (!isWebSocketConnected() && !isWebSocketConnecting()) {
-                    // Connection neither established nor in progress
-                    long currentTime = System.currentTimeMillis();
-                    if (currentTime - lastMessageTime
-                            > 30000) { // 30 seconds after last message received
-                        log.warn(
-                                "WebSocket connection timeout after 30 seconds, attempting reconnect");
-                        try {
-                            reconnectWebSocket();
-                            connected = true;
-                            lastMessageTime = currentTime;
-                        } catch (Exception e) {
-                            log.error("WebSocket {} reconnect failed", config.getServerUrl(), e);
-                            Thread.sleep(5000); // Increase wait time to avoid frequent retries
-                        }
-                    }
-                }
-            } else {
-                // Already tried connecting, waiting for automatic reconnect
-                Thread.sleep(1000);
-            }
-            return;
+        // Check WebSocket connection status
+        if (!piWebSocketClient.isConnected()) {
+            // Wait for PIWebSocketClient automatic reconnection
+            // log.debug("handleData: WebSocket not connected, returning false");
+            return false;
         }
 
         // Update connection status
         if (!connected) {
             connected = true;
+            // log.debug("handleData: Connection status updated to connected");
         }
-
-        // Check heartbeat
-        checkHeartbeat();
 
         // Process data from message queue (from Netty WebSocket client)
-        List<SeaTunnelRow> rows = new ArrayList<>();
+        boolean hasData = false;
         SeaTunnelRow row;
         while ((row = messageQueue.poll()) != null) {
-            rows.add(row);
-        }
-
-        // Process data updates
-        for (SeaTunnelRow dataRow : rows) {
-            output.collect(dataRow);
-            lastMessageTime = System.currentTimeMillis();
-        }
-
-        // If no data, sleep briefly to avoid CPU spinning
-        if (rows.isEmpty()) {
-            Thread.sleep(100);
-        }
-    }
-
-    /** Check WebSocket connection status - support two client implementations */
-    private boolean isWebSocketConnected() {
-        return piWebSocketClient != null && piWebSocketClient.isConnected();
-    }
-
-    /** Check if WebSocket is connecting */
-    private boolean isWebSocketConnecting() {
-        return piWebSocketClient != null && piWebSocketClient.isConnecting();
-    }
-
-    /** Reconnect WebSocket - support two client implementations */
-    private void reconnectWebSocket() throws Exception {
-        if (piWebSocketClient != null) {
-            // Check current connection status, avoid duplicate operations
-            if (piWebSocketClient.isConnected()) {
-                return;
+            if (checkpointLock != null) {
+                synchronized (checkpointLock) {
+                    output.collect(row);
+                }
+            } else {
+                output.collect(row);
             }
-
-            // Netty client reconnects by stop and start
-            try {
-                log.info("Starting to reconnect WebSocket client to {}", config.getServerUrl());
-                piWebSocketClient.stop();
-                Thread.sleep(2000); // Increase wait time to ensure connection is fully closed
-                piWebSocketClient.start();
-
-            } catch (Exception e) {
-                log.error(
-                        "Netty WebSocket client reconnect to {} failed", config.getServerUrl(), e);
-                throw e;
-            }
-        } else {
-            throw new PIConnectorException(
-                    PIErrorCode.CONNECTION_FAILED, "No available WebSocket client for reconnect");
+            hasData = true;
         }
-    }
 
-    /** Check heartbeat */
-    private void checkHeartbeat() throws Exception {
-        long now = System.currentTimeMillis();
-        if (now - lastMessageTime > heartbeatTimeoutMs) {
-            log.warn(
-                    "Heartbeat timeout for WebSocket {}, attempting to reconnect",
-                    config.getServerUrl());
-            try {
-                reconnectWebSocket();
-                lastMessageTime = now;
-            } catch (Exception e) {
-                log.error("Reconnect WebSocket {} failed", config.getServerUrl(), e);
-                throw new PIConnectorException(
-                        PIErrorCode.WEBSOCKET_RECONNECT_FAILED,
-                        "WebSocket reconnect failed: " + e.getMessage(),
-                        e);
-            }
-        }
+        // Return whether data was processed (no more sleep here!)
+        return hasData;
     }
 
     /**
@@ -226,11 +158,9 @@ public class PIRealtimeReader implements AutoCloseable {
      *
      * @param message WebSocket message content
      */
-    public void onWebSocketMessage(String message) {
+    public void onWebSocketMessage(String message)
+            throws PIConnectorException, JsonProcessingException {
         try {
-            // Update heartbeat time
-            lastMessageTime = System.currentTimeMillis();
-
             // Parse message
             JsonNode rootNode = OBJECT_MAPPER.readTree(message);
 
@@ -250,79 +180,116 @@ public class PIRealtimeReader implements AutoCloseable {
                 }
 
                 for (JsonNode item : items) {
-                    try {
-                        // Correctly parse PI Web API data structure
-                        SeaTunnelRow dataRow = parsePIWebAPIItem(item);
-                        if (dataRow != null) {
-                            messageQueue.add(dataRow);
-                        }
-                    } catch (Exception e) {
-                        log.warn(
-                                "Parse data update item failed: {}, item content: {}",
-                                e.getMessage(),
-                                item.toString());
-                    }
+                    // Parse PI Web API data structure and enqueue all data points
+                    // log.debug("Processing item: {}", item.path("Name").asText("unknown"));
+                    parsePIWebAPIItemAndEnqueue(item);
                 }
-
             } else {
-                log.warn(
-                        "Received WebSocket message format does not match expectations, does not contain valid Items array: {}",
-                        message);
+                log.error("Received invalid WebSocket message format (missing Items array)");
             }
-        } catch (JsonProcessingException e) {
-            log.error(
-                    "Parse WebSocket message failed: {}, message content: {}",
-                    e.getMessage(),
-                    message);
-        } catch (Exception e) {
-            log.error("Error processing WebSocket message", e);
+        } catch (PIConnectorException e) {
+            // Propagate CDC critical errors (queue full, etc) to fail-fast
+            throw e;
+        } catch (JsonProcessingException e1) {
+            log.error("Parse WebSocket message failed: {}", e1.getMessage());
+            throw e1;
+        } catch (Exception e2) {
+            log.error("Error processing WebSocket message: {}", e2.getMessage());
+            throw e2;
         }
     }
 
     /**
-     * Parse PI Web API data item
+     * Parse PI Web API data item and enqueue all data points
      *
-     * <p>Data format example: { "WebId": "Name": "811.821-CY-input-consume_sum_day", "Path":
+     * <p>Data format example: { "WebId": "...", "Name": "811.821-CY-input-consume_sum_day", "Path":
      * "\\\\pims.huafeng.com\\811.821-CY-input-consume_sum_day", "Items": [{ "Timestamp":
      * "2025-06-30T07:30:00Z", "Value": 0.0, "UnitsAbbreviation": "", "Good": true, "Questionable":
      * false, "Substituted": false, "Annotated": false }] }
+     *
+     * <p>Items array may contain multiple points from reconnection catch-up or high-frequency
+     * buffering. All points must be processed for CDC completeness.
      */
-    private SeaTunnelRow parsePIWebAPIItem(JsonNode itemNode) {
-        try {
-            // Process data point array
-            if (itemNode.has("Items") && itemNode.get("Items").isArray()) {
-                JsonNode dataItems = itemNode.get("Items");
+    private void parsePIWebAPIItemAndEnqueue(JsonNode itemNode) throws PIConnectorException {
+        // Process data point array
+        if (itemNode.has("Items") && itemNode.get("Items").isArray()) {
+            JsonNode dataItems = itemNode.get("Items");
 
-                // Usually take the latest data point (first)
-                if (dataItems.size() > 0) {
-                    JsonNode dataPoint = dataItems.get(0);
+            if (dataItems.isEmpty()) {
+                return;
+            }
 
-                    // Use generic data type converter to convert directly to SeaTunnelRow
-                    return PIDataTypeConverter.convertFromJson(
-                            itemNode, dataPoint, rowType, config.getJsonField());
+            // Process ALL data points
+            for (JsonNode dataPoint : dataItems) {
+                // Use generic data type converter to convert to SeaTunnelRow
+                SeaTunnelRow row =
+                        PIDataTypeConverter.convertFromJson(
+                                itemNode, dataPoint, rowType, config.getJsonField());
+
+                // CDC queue full triggers fail-fast to prevent data loss
+                boolean success = messageQueue.offer(row);
+                if (!success) {
+                    long droppedCount = droppedMessageCount.incrementAndGet();
+                    String errorMsg =
+                            String.format(
+                                    "CDC queue full (capacity: %d), stream: %s, dropped: %d",
+                                    messageQueueCapacity,
+                                    itemNode.path("Name").asText("unknown"),
+                                    droppedCount);
+                    log.error(errorMsg);
+                    throw new PIConnectorException(PIErrorCode.CDC_QUEUE_BACKPRESSURE, errorMsg);
                 }
             }
 
-            log.warn("Data item does not contain valid data point: {}", itemNode.toString());
-            return null;
-
-        } catch (Exception e) {
-            log.error("Error parsing PI Web API data item: {}", e.getMessage(), e);
-            return null;
+        } else {
+            log.error("Data item missing Items array");
         }
     }
 
+    /** Get the number of messages dropped due to queue being full (for monitoring) */
+    public long getDroppedMessageCount() {
+        return droppedMessageCount.get();
+    }
+
+    /** Get current message queue size (for monitoring) */
+    public int getMessageQueueSize() {
+        return messageQueue.size();
+    }
+
+    /** Get message queue capacity (for monitoring) */
+    public int getMessageQueueCapacity() {
+        return messageQueueCapacity;
+    }
+
+    /**
+     * Reset connection status to disconnected state. Called when WebSocket connection is lost.
+     * PIWebSocketClient will handle automatic reconnection.
+     */
+    public void resetConnection() {
+        connected = false;
+        log.debug(
+                "PIRealtimeReader connection status reset, waiting for PIWebSocketClient reconnection");
+    }
+
     @Override
+    /** Close the reader and release resources */
     public void close() throws IOException {
         // Only clean up resources owned by this reader
         // WebSocket and HTTP clients are owned by PICDCSourceReader
-
         // Clear message queue to release memory
-        if (messageQueue != null) {
-            messageQueue.clear();
-        }
+        messageQueue.clear();
 
         // Reset connection status
         connected = false;
+
+        if (piWebSocketClient != null) {
+            try {
+                piWebSocketClient.stop();
+            } catch (Exception e) {
+                log.warn("Error while stopping WebSocket client during close", e);
+            } finally {
+                piWebSocketClient = null;
+            }
+        }
     }
 }

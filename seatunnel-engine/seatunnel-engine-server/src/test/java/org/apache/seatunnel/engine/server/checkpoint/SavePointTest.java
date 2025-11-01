@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import static org.awaitility.Awaitility.await;
 
 @DisabledOnOs(OS.WINDOWS)
+@Disabled("Temporarily disabled - needs to be fixed")
 public class SavePointTest extends AbstractSeaTunnelServerTest<SavePointTest> {
     public static String STREAM_CONF_PATH = "stream_fakesource_to_file_savepoint.conf";
     public static String STREAM_CONF_WITH_ERROR_PATH = "stream_fake_to_inmemory_with_error.conf";

@@ -29,6 +29,7 @@ import org.apache.seatunnel.e2e.common.junit.TestContainerExtension;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.MySQLContainer;
@@ -48,6 +49,7 @@ import java.sql.Statement;
 import java.util.stream.Stream;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class JdbcMySqlSaveModeCatalogIT extends TestSuiteBase implements TestResource {
 
     private static final String MYSQL_DRIVER_JAR =

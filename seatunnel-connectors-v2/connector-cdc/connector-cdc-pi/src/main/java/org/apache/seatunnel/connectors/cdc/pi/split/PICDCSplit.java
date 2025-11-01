@@ -36,56 +36,74 @@ public class PICDCSplit implements SourceSplit {
     private final List<String> piPaths;
     private final long lastCheckpointTime;
 
+    /**
+     * Create a PI CDC split with given PI paths.
+     *
+     * @param splitId split identifier
+     * @param piPaths list of PI paths
+     */
     public PICDCSplit(String splitId, List<String> piPaths) {
         this(splitId, piPaths, 0L);
     }
 
+    /**
+     * Create a PI CDC split with given PI paths and last checkpoint time.
+     *
+     * @param splitId split identifier
+     * @param piPaths list of PI paths
+     * @param lastCheckpointTime last checkpoint time in millis
+     */
     public PICDCSplit(String splitId, List<String> piPaths, long lastCheckpointTime) {
+
         this.splitId = splitId;
         this.piPaths = piPaths;
         this.lastCheckpointTime = lastCheckpointTime;
     }
 
+    /**
+     * Get split identifier.
+     *
+     * @return split id
+     */
     @Override
     public String splitId() {
         return splitId;
     }
 
+    /**
+     * Get PI paths contained in this split.
+     *
+     * @return list of PI paths
+     */
     public List<String> getPiPaths() {
         return piPaths;
     }
 
-    public List<String> getWebIds() {
-        return null; // Only for backward compatibility, always return null
-    }
-
+    /**
+     * Get last checkpoint time.
+     *
+     * @return last checkpoint time in millis
+     */
     public long getLastCheckpointTime() {
         return lastCheckpointTime;
     }
 
-    /** Get split size (number of PI Paths contained) */
+    /**
+     * Get split size (number of PI paths contained).
+     *
+     * @return number of PI paths in this split
+     */
     public int getSize() {
         return piPaths != null ? piPaths.size() : 0;
     }
 
-    /** Check if split is empty */
+    /**
+     * Check if split is empty.
+     *
+     * @return true if no PI paths present
+     */
     public boolean isEmpty() {
         return piPaths == null || piPaths.isEmpty();
-    }
-
-    /** Create a split copy with new checkpoint time */
-    public PICDCSplit withCheckpointTime(long checkpointTime) {
-        return new PICDCSplit(splitId, piPaths, checkpointTime);
-    }
-
-    /** CDC split recovery - create new split with updated start time */
-    public PICDCSplit withStartTime(long startTime) {
-        return new PICDCSplit(splitId, piPaths, startTime);
-    }
-
-    /** Get start time for CDC processing */
-    public long getStartTime() {
-        return lastCheckpointTime;
     }
 
     @Override

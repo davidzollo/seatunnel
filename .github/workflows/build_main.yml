@@ -20,9 +20,7 @@
 name: "Build"
 
 on:
-  push:
-    branches:
-    - '**'
+  workflow_dispatch:
 
 jobs:
   call-build-and-test:

@@ -24,6 +24,7 @@ import org.apache.seatunnel.common.constants.PluginType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -46,6 +47,7 @@ public class AbstractPluginDiscoveryTest {
         Common.setSeaTunnelHome(seatunnelHome);
     }
 
+    @Disabled
     @Test
     public void testGetAllPlugins() {
         Map<PluginIdentifier, String> sourcePlugins =

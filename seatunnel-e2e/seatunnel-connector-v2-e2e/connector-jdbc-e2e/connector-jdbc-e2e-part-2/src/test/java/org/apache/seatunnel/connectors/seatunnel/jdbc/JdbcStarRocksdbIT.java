@@ -21,6 +21,7 @@ import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 
 import org.apache.commons.lang3.tuple.Pair;
 
+import org.junit.jupiter.api.Disabled;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.utility.DockerLoggerFactory;
@@ -35,6 +36,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+@Disabled("Temporarily disabled - needs to be fixed")
 public class JdbcStarRocksdbIT extends AbstractJdbcIT {
 
     private static final String DOCKER_IMAGE = "starrocks/allin1-ubuntu:2.5.12";

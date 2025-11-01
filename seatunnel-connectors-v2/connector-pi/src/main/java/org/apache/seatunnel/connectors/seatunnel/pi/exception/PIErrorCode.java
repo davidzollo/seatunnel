@@ -70,6 +70,7 @@ public enum PIErrorCode implements SeaTunnelErrorCode {
     DATA_SCHEMA_MISMATCH("PI_DATA_502", "Data schema mismatch"),
     DATA_QUALITY_ISSUE("PI_DATA_503", "Data quality issue"),
     DATA_RECOVERY_FAILED("PI_DATA_504", "Data recovery failed"),
+    CDC_QUEUE_BACKPRESSURE("PI_DATA_505", "CDC queue backpressure - downstream too slow"),
 
     // State management errors (PI_STATE_600 ~ PI_STATE_699)
     STATE_SERIALIZATION_FAILED("PI_STATE_600", "State serialization failed"),

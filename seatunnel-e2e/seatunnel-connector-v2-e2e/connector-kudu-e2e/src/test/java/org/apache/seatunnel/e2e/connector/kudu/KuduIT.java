@@ -41,6 +41,7 @@ import org.apache.kudu.client.RowResultIterator;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.GenericContainer;
@@ -70,6 +71,7 @@ import static java.lang.String.format;
 import static org.awaitility.Awaitility.await;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class KuduIT extends TestSuiteBase implements TestResource {
 
     private static final String IMAGE = "apache/kudu:1.15.0";

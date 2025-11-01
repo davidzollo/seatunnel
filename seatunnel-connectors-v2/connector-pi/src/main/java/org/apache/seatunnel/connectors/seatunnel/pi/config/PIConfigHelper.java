@@ -92,6 +92,18 @@ public class PIConfigHelper implements Serializable {
         return config.getOptional(PIConfig.RETRY_ATTEMPTS).orElse(3);
     }
 
+    public long getRetryBackoffMultiplierMs() {
+        return config.getOptional(PIConfig.RETRY_BACKOFF_MULTIPLIER_MS).orElse(1000L);
+    }
+
+    public long getRetryBackoffMaxMs() {
+        return config.getOptional(PIConfig.RETRY_BACKOFF_MAX_MS).orElse(10000L);
+    }
+
+    public int getWebSocketMaxRetries() {
+        return config.getOptional(PIConfig.WEBSOCKET_MAX_RETRIES).orElse(5);
+    }
+
     public boolean isTrustAllCerts() {
         return config.getOptional(PIConfig.TRUST_ALL_CERTS).orElse(true);
     }

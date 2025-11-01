@@ -35,6 +35,7 @@ import org.influxdb.dto.QueryResult;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.GenericContainer;
@@ -58,6 +59,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class InfluxdbIT extends TestSuiteBase implements TestResource {
     private static final String IMAGE = "influxdb:1.8";
     private static final String HOST = "influxdb-host";

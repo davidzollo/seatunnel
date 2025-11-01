@@ -22,7 +22,12 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseI
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectTypeMapper;
 
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
+
+import java.util.Arrays;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class SnowflakeDialect implements JdbcDialect {
     @Override
@@ -41,6 +46,67 @@ public class SnowflakeDialect implements JdbcDialect {
     }
 
     @Override
+    public String quoteIdentifier(String identifier) {
+        return "\"" + identifier + "\"";
+    }
+
+    public String getInsertIntoStatement(String database, String tableName, String[] fieldNames) {
+        String columns =
+                Arrays.stream(fieldNames)
+                        .map(this::quoteIdentifier)
+                        .collect(Collectors.joining(", "));
+        String placeholders =
+                Arrays.stream(fieldNames)
+                        .map(fieldName -> ":" + fieldName)
+                        .collect(Collectors.joining(", "));
+        return String.format(
+                "INSERT INTO %s (%s) VALUES (%s)",
+                tableIdentifier(database, tableName), columns, placeholders);
+    }
+
+    @Override
+    public String tableIdentifier(String database, String tableName) {
+        if (tableName.contains(".")) {
+            Pair<String, String> parsed = parseTable(tableName);
+            String left = quoteIdentifier(parsed.getLeft());
+            String right = quoteIdentifier(parsed.getRight());
+            return database == null
+                    ? left + "." + right
+                    : quoteDatabaseIdentifier(database) + "." + left + "." + right;
+        }
+        return database == null
+                ? quoteIdentifier(tableName)
+                : quoteDatabaseIdentifier(database) + "." + quoteIdentifier(tableName);
+    }
+
+    @Override
+    public String quoteDatabaseIdentifier(String identifier) {
+        return "\"" + identifier + "\"";
+    }
+
+    public Pair<String, String> parseTable(String fullName) {
+        return Optional.ofNullable(fullName)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .flatMap(
+                        input -> {
+                            int dotIndex = input.indexOf('.');
+
+                            if (dotIndex > 0 && dotIndex < input.length() - 1) {
+                                return Optional.of(
+                                        ImmutablePair.of(
+                                                input.substring(0, dotIndex),
+                                                input.substring(dotIndex + 1)));
+                            }
+                            return Optional.empty();
+                        })
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "Invalid format: must be 'schema.table' with non-empty parts"));
+    }
+
+    @Override
     public Optional<String> getUpsertStatement(
             String database,
             String tableName,
@@ -51,7 +117,7 @@ public class SnowflakeDialect implements JdbcDialect {
             return Optional.empty();
         }
 
-        String fullTableName = database != null ? database + "." + tableName : tableName;
+        String fullTableName = tableIdentifier(database, tableName);
 
         // Build the MERGE statement for Snowflake
         StringBuilder merge = new StringBuilder();
@@ -61,7 +127,7 @@ public class SnowflakeDialect implements JdbcDialect {
         // Add parameter placeholders for all fields
         for (int i = 0; i < fieldNames.length; i++) {
             if (i > 0) merge.append(", ");
-            merge.append("? AS ").append(fieldNames[i]);
+            merge.append("? AS ").append(quoteIdentifier(fieldNames[i]));
         }
         merge.append(") AS source ");
 
@@ -70,9 +136,9 @@ public class SnowflakeDialect implements JdbcDialect {
         for (int i = 0; i < uniqueKeyFields.length; i++) {
             if (i > 0) merge.append(" AND ");
             merge.append("target.")
-                    .append(uniqueKeyFields[i])
+                    .append(quoteIdentifier(uniqueKeyFields[i]))
                     .append(" = source.")
-                    .append(uniqueKeyFields[i]);
+                    .append(quoteIdentifier(uniqueKeyFields[i]));
         }
 
         // Add WHEN MATCHED UPDATE clause
@@ -89,7 +155,9 @@ public class SnowflakeDialect implements JdbcDialect {
             }
             if (!isUniqueKey || isPrimaryKeyUpdated) {
                 if (!first) merge.append(", ");
-                merge.append(field).append(" = source.").append(field);
+                merge.append(quoteIdentifier(field))
+                        .append(" = source.")
+                        .append(quoteIdentifier(field));
                 first = false;
             }
         }
@@ -98,12 +166,12 @@ public class SnowflakeDialect implements JdbcDialect {
         merge.append(" WHEN NOT MATCHED THEN INSERT (");
         for (int i = 0; i < fieldNames.length; i++) {
             if (i > 0) merge.append(", ");
-            merge.append(fieldNames[i]);
+            merge.append(quoteIdentifier(fieldNames[i]));
         }
         merge.append(") VALUES (");
         for (int i = 0; i < fieldNames.length; i++) {
             if (i > 0) merge.append(", ");
-            merge.append("source.").append(fieldNames[i]);
+            merge.append("source.").append(quoteIdentifier(fieldNames[i]));
         }
         merge.append(")");
 

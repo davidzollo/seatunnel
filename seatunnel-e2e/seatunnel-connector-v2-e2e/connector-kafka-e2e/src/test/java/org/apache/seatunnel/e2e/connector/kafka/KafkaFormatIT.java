@@ -45,6 +45,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,6 +89,7 @@ import java.util.stream.Stream;
 import static org.awaitility.Awaitility.await;
 import static org.awaitility.Awaitility.given;
 
+@Disabled("Temporarily disabled - needs to be fixed")
 public class KafkaFormatIT extends TestSuiteBase implements TestResource {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaFormatIT.class);

@@ -303,8 +303,8 @@ public class SnowflakeTypeConverter implements TypeConverter<BasicTypeDefine> {
                 builder.dataType(SNOWFLAKE_DATE);
                 break;
             case BYTES:
-                builder.columnType(SNOWFLAKE_GEOMETRY);
-                builder.dataType(SNOWFLAKE_GEOMETRY);
+                builder.columnType(SNOWFLAKE_VARBINARY);
+                builder.dataType(SNOWFLAKE_VARBINARY);
                 break;
             case TIME:
                 if (column.getScale() > 9) {

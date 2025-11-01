@@ -26,6 +26,7 @@ import io.debezium.connector.sqlserver.SqlServerConnector;
 
 import java.util.Properties;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -75,6 +76,7 @@ public class SqlServerSourceConfigFactory extends JdbcSourceConfigFactory {
                     tableList.stream()
                             .map(
                                     table -> {
+                                        String result;
                                         if (table.contains("].[")) {
                                             String[] parts =
                                                     table.substring(1, table.length() - 1)
@@ -82,10 +84,14 @@ public class SqlServerSourceConfigFactory extends JdbcSourceConfigFactory {
                                             String databaseName = parts[0];
                                             String schemaName = parts[1];
                                             String tableName = parts[2];
-                                            return schemaName + "." + tableName;
+                                            result = schemaName + "." + tableName;
                                         } else {
-                                            return table.substring(table.indexOf(".") + 1);
+                                            result = table.substring(table.indexOf(".") + 1);
                                         }
+                                        // Escape special regex characters for Debezium pattern
+                                        // matching in table.include.list using SqlServer-specific
+                                        // method
+                                        return escapeTableNameForRegex(result);
                                     })
                             .collect(Collectors.joining(","));
             props.setProperty("table.include.list", tableIncludeList);
@@ -131,5 +137,17 @@ public class SqlServerSourceConfigFactory extends JdbcSourceConfigFactory {
                 exactlyOnce,
                 whereCondition,
                 readColumnsMap);
+    }
+
+    /**
+     * Escape special regex characters for SqlServer table names in Debezium pattern matching. Uses
+     * Pattern.quote for comprehensive escaping of all regex special characters including spaces,
+     * dollar signs, and other special characters that may appear in SqlServer table names.
+     */
+    private static String escapeTableNameForRegex(String tableName) {
+        if (tableName == null) {
+            return null;
+        }
+        return Pattern.quote(tableName);
     }
 }

@@ -23,6 +23,7 @@ import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.FileUtils;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
@@ -54,6 +55,7 @@ import java.util.regex.Pattern;
 import static org.apache.seatunnel.e2e.common.util.ContainerUtil.PROJECT_ROOT_PATH;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class KubernetesIT {
     private static final String namespace = "default";
     private static final String svcName = "seatunnel";

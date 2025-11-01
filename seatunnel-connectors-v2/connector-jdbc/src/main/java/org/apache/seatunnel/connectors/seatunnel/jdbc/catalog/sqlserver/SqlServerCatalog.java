@@ -52,14 +52,14 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
     public static final String SELECT_COLUMNS_SQL_TEMPLATE =
             "SELECT tbl.name AS table_name,\n"
                     + "       col.name AS column_name,\n"
-                    + "       ext.value AS comment,\n"
+                    + "       CONVERT(NVARCHAR(4000), ext.value) AS comment,\n"
                     + "       col.column_id AS column_id,\n"
                     + "       types.name AS type,\n"
                     + "       col.max_length AS max_length,\n"
                     + "       col.precision AS precision,\n"
                     + "       col.scale AS scale,\n"
                     + "       col.is_nullable AS is_nullable,\n"
-                    + "       def.definition AS default_value\n"
+                    + "       CONVERT(NVARCHAR(4000), def.definition) AS default_value\n"
                     + "FROM sys.objects tbl\n"
                     + "    INNER JOIN sys.columns col ON tbl.object_id = col.object_id\n"
                     + "    LEFT JOIN sys.types types ON col.system_type_id = types.user_type_id\n"
@@ -67,6 +67,18 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
                     + "    LEFT JOIN sys.default_constraints def ON col.default_object_id = def.object_id AND ext.minor_id = col.column_id AND ext.name = 'MS_Description'\n"
                     + "WHERE schema_name(tbl.schema_id) = '%s' %s\n"
                     + "ORDER BY tbl.name, col.column_id";
+
+    // SQL to query table comment; p.value is sql_variant so we cast it to
+    // NVARCHAR to avoid driver issues
+    static final String SELECT_TABLE_COMMENT_SQL =
+            "select\n"
+                    + "  CONVERT(NVARCHAR(4000), p.value)\n"
+                    + "from\n"
+                    + "  sys.tables t\n"
+                    + "  join sys.extended_properties p on t.object_id = p.major_id\n"
+                    + "  and p.minor_id = '0'\n"
+                    + "  and schema_name(t.schema_id) = ? \n"
+                    + "  and t.name = ?";
 
     public SqlServerCatalog(
             String catalogName,
@@ -87,8 +99,8 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
         return String.format(
                 getListTableSql(tablePath.getDatabaseName())
                         + "  and  TABLE_SCHEMA = N'%s' and TABLE_NAME = N'%s'",
-                tablePath.getSchemaName(),
-                tablePath.getTableName());
+                escapeSqlServerIdentifier(tablePath.getSchemaName()),
+                escapeSqlServerIdentifier(tablePath.getTableName()));
     }
 
     @Override
@@ -165,7 +177,9 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
     protected String getSelectColumnsSql(TablePath tablePath) {
         String tableSql =
                 StringUtils.isNotEmpty(tablePath.getTableName())
-                        ? "AND tbl.name = N'" + tablePath.getTableName() + "'"
+                        ? "AND tbl.name = N'"
+                                + escapeSqlServerIdentifier(tablePath.getTableName())
+                                + "'"
                         : "";
 
         return String.format(SELECT_COLUMNS_SQL_TEMPLATE, tablePath.getSchemaName(), tableSql);
@@ -245,15 +259,7 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
     @Override
     protected String getTableComment(DatabaseMetaData metaData, TablePath tablePath)
             throws SQLException {
-        String sql =
-                "select\n"
-                        + "  p.value\n"
-                        + "from\n"
-                        + "  sys.tables t\n"
-                        + "  join sys.extended_properties p on t.object_id = p.major_id\n"
-                        + "  and p.minor_id = '0'\n"
-                        + "  and schema_name(t.schema_id) = ? \n"
-                        + "  and t.name = ?";
+        String sql = SELECT_TABLE_COMMENT_SQL;
         try (PreparedStatement statement =
                 getConnection(getJdbcURL(tablePath)).prepareStatement(sql)) {
             statement.setString(1, tablePath.getSchemaName());
@@ -279,5 +285,16 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
             dbUrl = getUrlFromDatabaseName(defaultDatabase);
         }
         return dbUrl;
+    }
+
+    /**
+     * Escape SQL Server identifiers for safe SQL generation. Handles single quotes by doubling them
+     * as per SQL Server standard. example: 'user's_table' -> 'user''s_table'
+     */
+    private String escapeSqlServerIdentifier(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        return identifier.replace("'", "''");
     }
 }

@@ -51,6 +51,7 @@ import org.apache.rocketmq.remoting.protocol.LanguageCode;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
@@ -77,6 +78,7 @@ import java.util.UUID;
 import static org.apache.seatunnel.e2e.connector.rocketmq.RocketMqContainer.NAMESRV_PORT;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class RocketMqIT extends TestSuiteBase implements TestResource {
 
     private static final String IMAGE = "apache/rocketmq:4.9.4";

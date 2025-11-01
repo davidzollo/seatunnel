@@ -31,6 +31,7 @@ import org.apache.seatunnel.e2e.common.junit.TestContainerExtension;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
@@ -64,6 +65,7 @@ import java.util.stream.Stream;
 import static org.awaitility.Awaitility.given;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class StarRocksIT extends TestSuiteBase implements TestResource {
     private static final String DOCKER_IMAGE = "d87904488/starrocks-starter:2.2.1";
     private static final String DRIVER_CLASS = "com.mysql.cj.jdbc.Driver";

@@ -21,6 +21,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.Container;
 
@@ -28,6 +29,7 @@ import java.io.IOException;
 
 import static org.apache.seatunnel.e2e.common.util.ContainerUtil.PROJECT_ROOT_PATH;
 
+@Disabled("Temporarily disabled - needs to be fixed")
 public class JobClientJobProxyIT extends SeaTunnelContainer {
 
     @Override

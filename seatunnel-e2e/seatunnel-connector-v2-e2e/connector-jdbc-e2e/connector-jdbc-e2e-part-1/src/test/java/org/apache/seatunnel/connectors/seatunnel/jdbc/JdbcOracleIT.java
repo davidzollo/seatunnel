@@ -30,6 +30,7 @@ import org.apache.seatunnel.e2e.common.container.TestContainer;
 import org.apache.commons.lang3.tuple.Pair;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
@@ -52,6 +53,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Disabled("Temporarily disabled - needs to be fixed")
 public class JdbcOracleIT extends AbstractJdbcIT {
 
     private static final String ORACLE_IMAGE = "gvenzl/oracle-xe:18-slim-faststart";

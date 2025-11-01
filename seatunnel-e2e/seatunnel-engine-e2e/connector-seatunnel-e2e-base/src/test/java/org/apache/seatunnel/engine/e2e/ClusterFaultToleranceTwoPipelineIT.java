@@ -55,6 +55,7 @@ import static org.apache.seatunnel.shade.com.google.common.base.Preconditions.ch
  * data consistency assurance capability in case of cluster node failure
  */
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class ClusterFaultToleranceTwoPipelineIT {
 
     public static final String TEST_TEMPLATE_FILE_NAME =

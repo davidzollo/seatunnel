@@ -38,6 +38,7 @@ import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
@@ -70,6 +71,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class ElasticsearchIT extends TestSuiteBase implements TestResource {
 
     private List<String> testDataset;

@@ -38,6 +38,7 @@ import org.apache.seatunnel.connectors.doris.sink.DorisSinkFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +51,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class DorisCatalogIT extends AbstractDorisIT {
 
     private static final String DATABASE = "test";

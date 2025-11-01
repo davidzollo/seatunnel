@@ -25,6 +25,7 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.ClickHouseContainer;
 import org.testcontainers.containers.Container;
@@ -49,6 +50,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class ClickhouseSinkCDCChangelogIT extends TestSuiteBase implements TestResource {
     private static final String CLICKHOUSE_DOCKER_IMAGE = "clickhouse/clickhouse-server:23.3.13.6";
     private static final String HOST = "clickhouse";

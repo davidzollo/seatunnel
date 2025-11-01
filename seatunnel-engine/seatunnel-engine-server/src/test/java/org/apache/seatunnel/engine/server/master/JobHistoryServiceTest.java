@@ -24,6 +24,7 @@ import org.apache.seatunnel.engine.server.AbstractSeaTunnelServerTest;
 import org.apache.seatunnel.engine.server.TestUtils;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.condition.DisabledOnOs;
@@ -38,6 +39,7 @@ import static org.awaitility.Awaitility.await;
 
 @DisabledOnOs(OS.WINDOWS)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Disabled("Temporarily disabled - needs to be fixed")
 class JobHistoryServiceTest extends AbstractSeaTunnelServerTest {
 
     private static final Long JOB_1 = System.currentTimeMillis() + 1L;

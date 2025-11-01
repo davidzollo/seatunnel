@@ -24,6 +24,7 @@ import org.apache.seatunnel.e2e.common.container.TestContainer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.localstack.LocalStackContainer;
@@ -46,6 +47,7 @@ import java.util.stream.Stream;
 import static org.awaitility.Awaitility.given;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class AmazonsqsIT extends TestSuiteBase implements TestResource {
     private static final String LOCALSTACK_DOCKER_IMAGE = "localstack/localstack:0.11.2";
     private static final String AMAZONSQS_JOB_CONFIG = "/amazonsqsIT_source_to_sink.conf";

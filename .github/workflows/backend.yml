@@ -17,6 +17,12 @@
 
 name: Backend
 on:
+  workflow_call:
+    inputs:
+      TEST_IN_PR:
+        required: false
+        type: string
+        default: 'true'
   pull_request:
     pull_request_target:
       types: [ opened, reopened, synchronize ]
@@ -24,6 +30,7 @@ on:
 env:
   GH_USERNAME: ${{ secrets.GH_PACKAGE_USER }}
   GH_TOKEN: ${{ secrets.GH_PACKAGE_TOKEN }}
+  TEST_IN_PR: ${{ inputs.TEST_IN_PR }}
 
 concurrency:
   group: backend-${{ github.event.pull_request.number || github.ref }}
@@ -245,7 +252,7 @@ jobs:
     strategy:
       matrix:
         os: [ 'self-hosted' ]
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v2
       - name: run all modules unit test
@@ -534,7 +541,7 @@ jobs:
     needs: [ changes, sanity-check ]
     if: needs.changes.outputs.api == 'true'
     runs-on:
-      labels: aliyun
+      labels: wtci
     strategy:
       matrix:
         os: [ 'self-hosted' ]

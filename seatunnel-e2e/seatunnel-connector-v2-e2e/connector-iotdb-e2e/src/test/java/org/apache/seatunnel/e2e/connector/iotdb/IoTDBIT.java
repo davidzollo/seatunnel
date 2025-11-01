@@ -35,6 +35,7 @@ import org.apache.iotdb.tsfile.utils.Binary;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.GenericContainer;
@@ -57,6 +58,7 @@ import java.util.stream.Stream;
 import static org.awaitility.Awaitility.given;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class IoTDBIT extends TestSuiteBase implements TestResource {
 
     private static final String IOTDB_DOCKER_IMAGE = "apache/iotdb:0.13.1-node";

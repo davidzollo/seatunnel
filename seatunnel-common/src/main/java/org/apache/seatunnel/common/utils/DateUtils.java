@@ -40,14 +40,9 @@ public class DateUtils {
     private static final Map<Formatter, DateTimeFormatter> FORMATTER_MAP = new HashMap<>();
 
     static {
-        FORMATTER_MAP.put(
-                Formatter.YYYY_MM_DD, DateTimeFormatter.ofPattern(Formatter.YYYY_MM_DD.value));
-        FORMATTER_MAP.put(
-                Formatter.YYYY_MM_DD_SPOT,
-                DateTimeFormatter.ofPattern(Formatter.YYYY_MM_DD_SPOT.value));
-        FORMATTER_MAP.put(
-                Formatter.YYYY_MM_DD_SLASH,
-                DateTimeFormatter.ofPattern(Formatter.YYYY_MM_DD_SLASH.value));
+        for (Formatter f : Formatter.values()) {
+            FORMATTER_MAP.put(f, DateTimeFormatter.ofPattern(f.value));
+        }
     }
 
     public static final Pattern[] PATTERN_ARRAY =
@@ -60,6 +55,12 @@ public class DateUtils {
                 Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?Z?"),
                 Pattern.compile("\\d{2}:\\d{2}:\\d{2}\\+\\d{2}:\\d{2}"),
                 Pattern.compile("\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?"),
+                Pattern.compile("\\d{4}-\\d{1,2}-\\d{1,2}"),
+                Pattern.compile("\\d{4}/\\d{1,2}/\\d{1,2}"),
+                Pattern.compile("\\d{4}\\.\\d{1,2}\\.\\d{1,2}"),
+                Pattern.compile("\\d{1,2}-\\d{1,2}-\\d{4}"),
+                Pattern.compile("\\d{1,2}\\.\\d{1,2}\\.\\d{4}"),
+                Pattern.compile("\\d{1,2}/\\d{1,2}/\\d{4}"),
             };
 
     public static final Map<Pattern, DateTimeFormatter> DATE_FORMATTER_MAP = new HashMap();
@@ -147,6 +148,91 @@ public class DateUtils {
                         .toFormatter());
         DATE_FORMATTER_MAP.put(PATTERN_ARRAY[6], ISO_OFFSET_TIME);
         DATE_FORMATTER_MAP.put(PATTERN_ARRAY[7], ISO_LOCAL_TIME);
+
+        // yyyy-M-d
+        DATE_FORMATTER_MAP.put(
+                PATTERN_ARRAY[8],
+                new DateTimeFormatterBuilder()
+                        .parseCaseInsensitive()
+                        .append(
+                                new DateTimeFormatterBuilder()
+                                        .appendValue(YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
+                                        .appendLiteral('-')
+                                        .appendValue(MONTH_OF_YEAR, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .appendLiteral('-')
+                                        .appendValue(DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .toFormatter())
+                        .toFormatter());
+        // yyyy/M/d
+        DATE_FORMATTER_MAP.put(
+                PATTERN_ARRAY[9],
+                new DateTimeFormatterBuilder()
+                        .parseCaseInsensitive()
+                        .append(
+                                new DateTimeFormatterBuilder()
+                                        .appendValue(YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
+                                        .appendLiteral('/')
+                                        .appendValue(MONTH_OF_YEAR, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .appendLiteral('/')
+                                        .appendValue(DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .toFormatter())
+                        .toFormatter());
+        // yyyy.M.d
+        DATE_FORMATTER_MAP.put(
+                PATTERN_ARRAY[10],
+                new DateTimeFormatterBuilder()
+                        .parseCaseInsensitive()
+                        .append(
+                                new DateTimeFormatterBuilder()
+                                        .appendValue(YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
+                                        .appendLiteral('.')
+                                        .appendValue(MONTH_OF_YEAR, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .appendLiteral('.')
+                                        .appendValue(DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .toFormatter())
+                        .toFormatter());
+        // M-d-yyyy
+        DATE_FORMATTER_MAP.put(
+                PATTERN_ARRAY[11],
+                new DateTimeFormatterBuilder()
+                        .parseCaseInsensitive()
+                        .append(
+                                new DateTimeFormatterBuilder()
+                                        .appendValue(MONTH_OF_YEAR, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .appendLiteral('-')
+                                        .appendValue(DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .appendLiteral('-')
+                                        .appendValue(YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
+                                        .toFormatter())
+                        .toFormatter());
+        // M.d.yyyy
+        DATE_FORMATTER_MAP.put(
+                PATTERN_ARRAY[12],
+                new DateTimeFormatterBuilder()
+                        .parseCaseInsensitive()
+                        .append(
+                                new DateTimeFormatterBuilder()
+                                        .appendValue(MONTH_OF_YEAR, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .appendLiteral('.')
+                                        .appendValue(DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .appendLiteral('.')
+                                        .appendValue(YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
+                                        .toFormatter())
+                        .toFormatter());
+        // M/d/yyyy
+        DATE_FORMATTER_MAP.put(
+                PATTERN_ARRAY[13],
+                new DateTimeFormatterBuilder()
+                        .parseCaseInsensitive()
+                        .append(
+                                new DateTimeFormatterBuilder()
+                                        .appendValue(MONTH_OF_YEAR, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .appendLiteral('/')
+                                        .appendValue(DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
+                                        .appendLiteral('/')
+                                        .appendValue(YEAR, 4, 10, SignStyle.EXCEEDS_PAD)
+                                        .toFormatter())
+                        .toFormatter());
     }
 
     /**
@@ -184,8 +270,17 @@ public class DateUtils {
 
     public enum Formatter {
         YYYY_MM_DD("yyyy-MM-dd"),
+        YYYY_M_D("yyyy-M-d"),
         YYYY_MM_DD_SPOT("yyyy.MM.dd"),
-        YYYY_MM_DD_SLASH("yyyy/MM/dd");
+        YYYY_M_D_SPOT("yyyy.M.d"),
+        YYYY_M_D_SLASH("yyyy/M/d"),
+        YYYY_MM_DD_SLASH("yyyy/MM/dd"),
+        MM_DD_YYYY("MM-dd-yyyy"),
+        M_D_YYYY("M-d-yyyy"),
+        MM_DD_YYYY_SPOT("MM.dd.yyyy"),
+        M_D_YYYY_SPOT("M.d.yyyy"),
+        MM_DD_YYYY_SLASH("MM/dd/yyyy"),
+        M_D_YYYY_SLASH("M/d/yyyy");
         private final String value;
 
         Formatter(String value) {

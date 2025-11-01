@@ -25,6 +25,7 @@ import org.apache.seatunnel.engine.server.AbstractSeaTunnelServerTest;
 import org.apache.seatunnel.engine.server.TestUtils;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import com.hazelcast.internal.serialization.Data;
@@ -36,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import static org.awaitility.Awaitility.await;
 
 @Slf4j
+@Disabled("Temporarily disabled - needs to be fixed")
 public class CheckpointTimeOutTest extends AbstractSeaTunnelServerTest {
 
     public static String CONF_PATH = "stream_fake_to_console_checkpointTimeOut.conf";

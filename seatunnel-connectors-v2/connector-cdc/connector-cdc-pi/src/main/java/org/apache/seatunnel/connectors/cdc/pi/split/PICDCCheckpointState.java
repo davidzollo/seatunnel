@@ -37,23 +37,49 @@ public class PICDCCheckpointState implements Serializable {
     private final List<PICDCSplit> remainingSplits;
     private final List<PICDCSplit> assignedSplits;
 
+    /**
+     * Create checkpoint state.
+     *
+     * @param remainingSplits pending splits not yet assigned
+     * @param assignedSplits splits assigned at checkpoint time
+     */
     public PICDCCheckpointState(List<PICDCSplit> remainingSplits, List<PICDCSplit> assignedSplits) {
         this.remainingSplits = remainingSplits;
         this.assignedSplits = assignedSplits;
     }
 
+    /**
+     * Get remaining (unassigned) splits.
+     *
+     * @return remaining splits
+     */
     public List<PICDCSplit> getRemainingSplits() {
         return remainingSplits;
     }
 
+    /**
+     * Get assigned splits captured at checkpoint time.
+     *
+     * @return assigned splits
+     */
     public List<PICDCSplit> getAssignedSplits() {
         return assignedSplits;
     }
 
+    /**
+     * Get checkpoint id.
+     *
+     * @return checkpoint id
+     */
     public long getCheckpointId() {
         return checkpointId;
     }
 
+    /**
+     * Set checkpoint id.
+     *
+     * @param checkpointId checkpoint identifier
+     */
     public void setCheckpointId(long checkpointId) {
         this.checkpointId = checkpointId;
     }

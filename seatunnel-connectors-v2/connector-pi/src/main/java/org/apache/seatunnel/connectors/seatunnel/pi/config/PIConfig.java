@@ -319,7 +319,7 @@ public class PIConfig {
     public static final Option<Integer> MAX_WEBIDS_PER_SPLIT =
             Options.key("max_webids_per_split")
                     .intType()
-                    .defaultValue(25)
+                    .defaultValue(50)
                     .withDescription(
                             "Maximum number of PI Paths per split for CDC mode (limited by WebSocket URL length)");
 

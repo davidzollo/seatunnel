@@ -167,7 +167,7 @@ public class SnowflakeDataTypeConvertorTest {
                 "DATE",
                 convertor.toConnectorType("test_field", LocalTimeType.LOCAL_DATE_TYPE, null));
         assertEquals(
-                "GEOMETRY",
+                "VARBINARY",
                 convertor.toConnectorType("test_field", PrimitiveByteArrayType.INSTANCE, null));
         assertEquals(
                 "TIME",
