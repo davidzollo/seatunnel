@@ -13,9 +13,10 @@ PI CDC 连接器是基于 SeaTunnel 框架的实时数据变更捕获组件，�
 - **背压监控**: 队列使用率>90%触发告警,队列满时立即Fail-Fast
 
 ### 负载均衡原则
-- **动态Split请求**: Reader持续向Enumerator请求新Split,确保高吞吐不被锁死
-- **1:1 优先模式**: 标准情况下1个Reader处理1个Split，确保最优性能
+- **动态Split请求**: Reader在初始化完成后主动请求新Split,实现动态负载均衡
+- **1:1 优先模式**: 初始分配1个Reader对应1个Split,后续可动态扩展为多Split
 - **故障接管**: Reader可接管失败Reader的Split,实现自动容错
+- **WebSocket长连接**: 每个Split维护独立的WebSocket长连接,持续运行直到任务结束
 
 ### 可靠性保障
 - **Fail-Fast策略**: 队列满时立即抛出PIConnectorException(PI_DATA_505),任务失败后从Checkpoint恢复
@@ -102,9 +103,14 @@ public void addSplitsBack(List<PICDCSplit> splits, int subtaskId) {
 
 #### 分片分配流程
 1. **初始化阶段**: `PICDCSplitEnumerator.run()` 创建所有分片；当 Split 数量超过并行度时只记录告警，仍允许多 Split 以支持故障接管
-2. **Reader 注册**: `registerReader()` 为新 Reader 分配初始分片
-3. **动态分配**: `handleSplitRequest()` 处理 Reader 的额外分片请求
+2. **Reader 注册**: `registerReader()` 为新 Reader 分配初始分片(1个Split)
+3. **动态分配**: Reader初始化完成后,通过`handleSplitRequest()`主动请求额外Split
 4. **故障恢复**: `addSplitsBack()` 处理失败分片的重新分配
+
+**关键说明**:
+- **WebSocket长连接特性**: 每个Split对应一个持久化WebSocket连接,连接建立后持续运行,不会"完成"
+- **动态请求触发条件**: Reader在本地所有Split的WebSocket连接初始化完成后(`unprocessedSplits == 0`),会主动请求新Split
+- **最终状态**: 部分Reader可能处理多个Split(每个Split独立的WebSocket连接),所有连接持续运行直到任务结束
 
 ### 2. 实时数据处理 (Real-time Data Processing)
 
@@ -299,138 +305,307 @@ ERROR - PIConnectorException: PI_DATA_505 - CDC queue backpressure - downstream 
 - 根据数据量和处理能力合理设置并行度
 - 避免过度并行导致资源竞争
 
-## 故障排查
+## ⚠️ 风险点和故障场景
 
-### 常见问题
+### 🔴 高风险场景（会导致任务失败）
 
-#### 1. 分片数量超过并行度
-**错误**: `Expected splits count X exceeds parallelism Y`
-**解决方案**:
-- 增加并行度: `parallelism >= X`
-- 或增加分片大小: `max_webids_per_split = ceil(piPaths.size() / parallelism)`
-- 或减少 PI Path 数量
+#### 1. 队列背压导致任务失败
+**触发条件**:
+- 上游PI服务器推送速度 > 下游Sink消费速度
+- 队列使用率持续>90%,最终队列满
 
-#### 2. WebSocket 连接不稳定
-**现象**: 频繁重连日志
-**解决方案**:
-- 检查网络连接质量
-- 调整 `connection_timeout_ms` 和 `retry_backoff_max_ms`
-- 确认 PI 服务器状态和负载
+**失败机制**:
+```
+PI Server推送数据 → WebSocket接收 → messageQueue.offer(row) 返回false
+→ 抛出PIConnectorException(PI_DATA_505) → Split标记fatal error
+→ Reader在pollNext()时抛出异常 → 任务失败 → 从Checkpoint恢复
+```
 
-#### 3. 数据处理延迟
-**现象**: 队列积压，处理延迟增加
-**解决方案**:
-- 提升下游消费并发/批量处理能力，缩短队列停留时间
-- 检查下游处理能力
-- 监控系统资源使用情况
+**影响范围**: 单个Split失败会导致整个任务失败
 
-#### 4. 内存使用过高
-**现象**: 频繁 GC，内存占用持续增长
-**解决方案**:
-- 减少 `data_buffer_queue_size`
-- 优化下游消费速度
-- 检查是否存在内存泄漏
+**预防措施**:
+- 监控队列使用率: `queueUtilization > 90%` 触发告警
+- 增加队列容量: `data_buffer_queue_size` (默认300K, 最大10M)
+- 提升下游性能: 优化Sink批量写入、异步写入
+- 增加并行度: 分散单Split负载
+- 减少Split大小: 降低`max_webids_per_split`(默认25)
 
-#### 5. 队列背压和任务失败问题
-**现象**: 任务频繁失败,错误码PI_DATA_505,日志显示"CDC queue full"
-**根本原因**: 下游消费速度 < 上游推送速度,队列满后Fail-Fast导致任务失败
-**排查步骤**:
-- 检查队列使用率: `getQueueUtilization() > 90%` 为Fail-Fast触发条件
-- 检查下游Sink写入性能是否匹配上游推送速度
-- 检查是否存在网络延迟或下游系统响应慢
-- 评估是否需要增加队列容量或增加并行度
-**解决方案**:
-1. **扩容队列**: 增加`data_buffer_queue_size`(默认300K, 最大10M)
-2. **提升并行度**: 增加Reader数量分散负载
-3. **优化下游**: 提升Sink写入性能(批量写入、异步写入等)
-4. **减少负载**: 减少单Split的PI Path数量(默认50个/split)
-**为何Fail-Fast而非丢弃**:
+**为何Fail-Fast而非丢弃数据**:
 - CDC场景要求数据完整性,不能容忍静默丢失
 - 任务失败后从Checkpoint恢复,确保数据零丢失
 - Fail-Fast快速暴露问题,便于及时处理
 
-## 安全注意事项
+---
 
-- 默认配置 (`trust_all_certs=true`, `verify_hostname=false`) 会信任任意证书且跳过主机名校验，仅适用于测试环境。生产环境务必显式设置 `trust_all_certs=false` 与 `verify_hostname=true` 并提供有效证书，避免中间人攻击。
-- 当前实现会在 WebSocket 握手阶段关闭主机名校验（`PIWebSocketClient` 中写死 `SSLParameters#setEndpointIdentificationAlgorithm(null)`），若计划启用严格校验需同步调整代码逻辑，使配置项能够生效。
+#### 2. WebSocket重连失败导致任务失败
+**触发条件**:
+- 网络持续不稳定超过127秒(默认配置)
+- PI服务器宕机或负载过高
+- 防火墙/代理中断连接
 
-## 数据处理完整性保障
-
-### Items数组完整处理
-
-**关键修复**: PI CDC现已正确处理WebSocket消息中的所有数据点
-
-#### 数据结构
-PI Web API WebSocket Channel消息包含两层Items结构:
-```json
-{
-  "Links": {},
-  "Items": [                          // 外层: 多个流(stream)
-    {
-      "WebId": "F1...",
-      "Name": "Temperature",
-      "Path": "\\\\server\\tag1",
-      "Items": [                      // 内层: 该流的多个数据点
-        {
-          "Timestamp": "2025-10-06T21:50:00Z",
-          "Value": 25.3,
-          "Good": true
-        },
-        {
-          "Timestamp": "2025-10-06T21:50:01Z",
-          "Value": 25.4,
-          "Good": true
-        }
-      ]
-    }
-  ]
-}
+**失败机制**:
+```
+WebSocket断连 → 自动重连(最多3次,指数退避)
+→ 重连失败 → onError callback触发
+→ Split标记fatal error → Reader抛出异常 → 任务失败
 ```
 
-#### 多数据点场景
-内层Items数组可能包含多个数据点的情况:
+**重试时间计算** (默认配置):
+| 重试阶段 | 连接超时 | 退避延迟 | 阶段耗时 | 累计时间 |
+|---------|---------|---------|---------|---------|
+| Attempt 0 | 30s | 1s | 31s | 31s |
+| Attempt 1 | 30s | 2s | 32s | 63s |
+| Attempt 2 | 30s | 4s | 34s | 97s |
+| Attempt 3 | 30s | - | 30s | **127s** |
 
-1. **WebSocket重连补发**
-   - 断连期间积累的所有变化
-   - PI服务器使用marker机制确保不丢失
-   - 示例: 10秒断连,10个数据点一次性推送
+**影响范围**: 单个Split的WebSocket失败会导致整个任务失败
 
-2. **高频数据缓冲**
-   - 更新频率 > WebSocket推送频率
-   - PI服务器批量缓冲多个变化
-   - 示例: 0.1秒/次更新,5个点批量发送
+**预防措施**:
+- 调整重试参数: 增加`retry_attempts`(默认3次)
+- 延长超时时间: 增加`connection_timeout_ms`(默认30秒)
+- 调整退避策略: 增加`retry_backoff_max_ms`(默认10秒)
+- 网络优化: 确保PI服务器网络稳定,避免防火墙中断
+- 监控告警: 监控WebSocket重连日志,及时发现网络问题
 
-3. **初始值包含**
-   - `includeInitialValues=true`时
-   - 首条消息包含历史快照
-   - 可能包含多个历史数据点
+---
 
-4. **网络延迟/背压**
-   - 客户端处理较慢
-   - 服务端合并多个更新发送
+#### 3. Split数量超过并行度导致负载不均
+**触发条件**:
+- `ceil(piPaths.size() / max_webids_per_split) > parallelism`
+- 例如: 325个PI Path, 每Split 50个, 需要7个Split, 但并行度只有5
 
-#### 当前实现
+**问题表现**:
+- 初始分配: 5个Reader各分配1个Split
+- 剩余2个Split等待动态分配
+- 部分Reader处理2个Split(2个WebSocket连接),部分只处理1个
+- 负载不均衡,可能导致部分Reader队列背压
+
+**影响范围**: 不会导致任务失败,但影响性能和稳定性
+
+**解决方案**:
+- **推荐**: 增加并行度 `parallelism >= ceil(piPaths.size() / max_webids_per_split)`
+- 或增加Split大小: `max_webids_per_split = ceil(piPaths.size() / parallelism)`
+- 或减少PI Path数量
+
+**日志示例**:
+```
+WARN - Split count 7 exceeds parallelism 5, enabling multi-split mode.
+       Recommendation: Consider increasing parallelism to 7 for optimal 1:1 allocation.
+```
+
+---
+
+### 🟡 中风险场景（影响性能但不会立即失败）
+
+#### 4. 下游消费速度慢导致队列积压
+**触发条件**:
+- Sink写入速度 < PI推送速度
+- 下游数据库/存储系统响应慢
+- 网络延迟高
+
+**问题表现**:
+- 队列使用率持续上升: `queueUtilization` 从50% → 70% → 90%
+- 日志出现高队列使用率告警
+- 最终可能触发队列满,导致任务失败(风险点1)
+
+**影响范围**: 所有Reader,尤其是处理多Split的Reader
+
+**预防措施**:
+- 监控队列使用率: 设置告警阈值(建议70%)
+- 优化下游Sink: 批量写入、异步写入、连接池优化
+- 增加并行度: 分散负载
+- 增加队列容量: 临时缓解,但治标不治本
+
+---
+
+#### 5. 内存使用过高导致频繁GC
+**触发条件**:
+- 队列容量过大: `data_buffer_queue_size` 设置过高(如 10000000大小的队列，10M)
+- 多个Reader同时处理多个Split
+- 数据积压导致队列长时间满载
+
+**问题表现**:
+- JVM堆内存持续增长
+- 频繁Full GC,STW时间长
+- 任务处理延迟增加
+- 可能触发OOM
+
+**影响范围**: 整个JVM进程,影响所有任务
+
+**预防措施**:
+- 合理设置队列容量: 根据内存大小和并行度计算
+  - 单Split队列内存 ≈ `data_buffer_queue_size × 每行数据大小`
+  - 总内存 ≈ `单Split队列内存 × 最大Split数 × Reader数`
+- 监控JVM内存: 设置堆内存告警
+- 优化下游消费: 避免队列长时间积压
+- 调整GC参数: 使用G1GC或ZGC
+
+---
+
+#### 6. 网络抖动导致频繁重连
+**触发条件**:
+- 网络不稳定,间歇性断连
+- PI服务器负载波动
+- 防火墙/代理超时设置过短
+
+**问题表现**:
+- 日志频繁出现重连信息
+- WebSocket连接状态频繁切换
+- 数据处理延迟增加
+- 如果重连失败次数超过限制,会导致任务失败(风险点2)
+
+**影响范围**: 受影响的Split,可能导致整个任务失败
+
+**预防措施**:
+- 网络优化: 确保PI服务器网络稳定
+- 调整超时参数: 增加`connection_timeout_ms`
+- 调整重试参数: 增加`retry_attempts`和`retry_backoff_max_ms`
+- 监控告警: 监控重连频率,及时发现网络问题
+
+---
+
+### 🟢 低风险场景（不影响任务运行）
+
+#### 7. 数据解析错误
+**触发条件**:
+- PI服务器返回异常数据格式
+- JSON解析失败
+- 数据类型转换失败
+
+**问题表现**:
+- 日志记录错误信息
+- 跳过错误数据点,继续处理后续数据
+- 不会导致任务失败
+
+**影响范围**: 单个数据点
+
+**处理方式**:
+- 记录错误日志,便于排查
+- 跳过错误数据,不影响其他数据处理
+- 建议定期检查错误日志,修复数据源问题
+
+---
+
+#### 8. Split分配不均导致负载倾斜
+**触发条件**:
+- PI Path数量不是`max_webids_per_split`的整数倍
+- 例如: 325个PI Path, 每Split 50个, 最后一个Split只有25个
+
+**问题表现**:
+- 部分Split处理的PI Path数量少
+- 负载不均衡,但不影响正确性
+
+**影响范围**: 性能优化空间
+
+**优化建议**:
+- 调整`max_webids_per_split`,使Split数量更均衡
+- 或接受负载倾斜,影响通常不大
+
+---
+
+### 资源泄漏风险点
+
+#### 9. WebSocket连接未正确关闭
+**风险场景**:
+- Reader异常退出时,WebSocket连接未关闭
+- 任务取消时,连接未释放
+
+**预防措施**:
+- `PICDCSourceReader.close()` 正确关闭所有WebSocket连接
+- `PIWebSocketClient.close()` 正确释放Netty资源
+- 使用`activeConnections` AtomicInteger跟踪连接数
+
+**代码保障**:
 ```java
-// PIRealtimeReader.java:357-397
-// 遍历并处理所有数据点,使用非阻塞入队
-for (JsonNode dataPoint : dataItems) {
-    SeaTunnelRow row = PIDataTypeConverter.convertFromJson(
-        itemNode, dataPoint, rowType, config.getJsonField());
-
-    // CRITICAL: Non-blocking offer() - never blocks Netty EventLoop
-    boolean success = messageQueue.offer(row);
-    if (success) {
-        processedCount++;
-    } else {
-        // Queue full - Fail-Fast: throw exception immediately
-        String errorMsg = String.format(
-            "CDC queue full (capacity: %d), cannot accept new data. Task will fail to prevent data loss.",
-            messageQueueCapacity);
-        throw new PIConnectorException(PIErrorCode.CDC_QUEUE_BACKPRESSURE, errorMsg);
+@Override
+public void close() {
+    for (SplitAndRealtimeReader entry : piSplitAndRealtimeReaders.values()) {
+        entry.getRealtimeReader().close(); // 关闭WebSocket连接
     }
+    piSplitAndRealtimeReaders.clear();
 }
 ```
 
+---
+
+#### 10. 队列内存未释放
+**风险场景**:
+- Reader关闭时,队列中的数据未清理
+- 大量SeaTunnelRow对象占用内存
+
+**预防措施**:
+- Reader关闭时清空队列
+- 及时消费队列数据,避免长时间积压
+
+---
+
+### 📊 风险等级总结
+
+| 风险场景 | 风险等级 | 是否导致任务失败 | 预防优先级 |
+|---------|---------|----------------|-----------|
+| 队列背压 | 🔴 高 | ✅ 是 | ⭐⭐⭐⭐⭐ |
+| WebSocket重连失败 | 🔴 高 | ✅ 是 | ⭐⭐⭐⭐⭐ |
+| Split数量超过并行度 | 🔴 高 | ❌ 否(负载不均) | ⭐⭐⭐⭐ |
+| 下游消费慢 | 🟡 中 | ⚠️ 可能(触发队列满) | ⭐⭐⭐⭐ |
+| 内存使用过高 | 🟡 中 | ⚠️ 可能(OOM) | ⭐⭐⭐ |
+| 网络抖动 | 🟡 中 | ⚠️ 可能(重连失败) | ⭐⭐⭐ |
+| 数据解析错误 | 🟢 低 | ❌ 否 | ⭐⭐ |
+| 负载倾斜 | 🟢 低 | ❌ 否 | ⭐ |
+| 连接泄漏 | 🟡 中 | ❌ 否(资源耗尽) | ⭐⭐⭐ |
+| 队列内存泄漏 | 🟡 中 | ⚠️ 可能(OOM) | ⭐⭐⭐ |
+
+---
+
+## 故障排查
+
+### 快速故障排查指南
+
+#### 任务失败 - 错误码 PI_DATA_505
+**错误信息**: `CDC queue full (capacity: 300000), cannot accept new data`
+
+**快速诊断**:
+1. 查看日志中的队列使用率: `QueueUtil=XX%`
+2. 检查是否有`high queue utilization`告警
+3. 对比上游推送速度和下游消费速度
+
+**解决方案**: 参考上方"风险点1: 队列背压导致任务失败"
+
+---
+
+#### 任务失败 - WebSocket重连失败
+**错误信息**: `WebSocket connection failed after maximum retries`
+
+**快速诊断**:
+1. 查看日志中的重连尝试次数和耗时
+2. 检查网络连接状态
+3. 确认PI服务器是否正常
+
+**解决方案**: 参考上方"风险点2: WebSocket重连失败导致任务失败"
+
+---
+
+#### 性能问题 - 数据处理延迟
+**现象**: 队列积压,处理延迟增加
+
+**快速诊断**:
+1. 查看队列使用率趋势
+2. 检查下游Sink写入性能
+3. 监控系统资源使用情况(CPU/内存/网络)
+
+**解决方案**: 参考上方"风险点4: 下游消费速度慢导致队列积压"
+
+---
+
+#### 配置问题 - Split数量超过并行度
+**警告信息**: `Split count X exceeds parallelism Y, enabling multi-split mode`
+
+**快速诊断**:
+1. 计算期望Split数: `ceil(piPaths.size() / max_webids_per_split)`
+2. 对比当前并行度
+3. 查看日志中的Split分配情况
+
+**解决方案**: 参考上方"风险点3: Split数量超过并行度导致负载不均"
+          
 **关键特性**:
 - ✅ 处理所有数据点,确保CDC数据完整性
 - ✅ **非阻塞入队**: 保护Netty EventLoop不被阻塞
@@ -675,6 +850,29 @@ ORDER BY timestamp;
 
 ---
 
+## 📝 文档变更记录
+
+### 2025年11月1日 - 重大更新
+**变更内容**:
+1. ✅ **修正误导性描述**: 明确WebSocket是长连接,Split不会"完成"
+2. ✅ **完善Split分配机制**: 详细说明动态请求触发条件和最终状态
+3. ✅ **新增风险点章节**: 列出10大风险场景,按风险等级分类
+4. ✅ **优化故障排查指南**: 提供快速诊断和解决方案索引
+5. ✅ **新增日志功能**: Reader在收到no-more-splits信号时打印最终Split分配状态
+
+**关键修正**:
+- ❌ 错误描述: "Reader完成第一个Split后请求第二个Split"
+- ✅ 正确描述: "Reader在本地所有Split的WebSocket连接初始化完成后,主动请求新Split"
+- ✅ 强调: 所有WebSocket连接持续运行直到任务结束,不会"完成"
+
+**新增风险点**:
+- 🔴 高风险: 队列背压、WebSocket重连失败、Split数量超过并行度
+- 🟡 中风险: 下游消费慢、内存使用过高、网络抖动
+- 🟢 低风险: 数据解析错误、负载倾斜
+- 🔧 资源泄漏: WebSocket连接泄漏、队列内存泄漏
+
+---
+
 **版本**: 2.6-WS-test-SNAPSHOT
-**更新时间**: 2025年10月6日
+**更新时间**: 2025年11月1日
 **维护状态**: 生产级稳定版本

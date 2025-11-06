@@ -87,10 +87,10 @@ public class PIRealtimeReader implements AutoCloseable {
 
         int configuredCapacity = config.getDataBufferQueueSize();
 
-        // Defensive validation: check lower bound (min 1000)
-        if (configuredCapacity < 1000) {
+        // Defensive validation: check lower bound (min 100000)
+        if (configuredCapacity < 100_000) {
             log.warn(
-                    "Configured data_buffer_queue_size ({}) too small (min: 1000), fallback to default 300000",
+                    "Configured data_buffer_queue_size ({}) too small (min: 100000), fallback to default 300000",
                     configuredCapacity);
             configuredCapacity = 300000;
         }
@@ -138,6 +138,7 @@ public class PIRealtimeReader implements AutoCloseable {
         // Process data from message queue (from Netty WebSocket client)
         boolean hasData = false;
         SeaTunnelRow row;
+        //Consume data from the queue use a non-blocking poll
         while ((row = messageQueue.poll()) != null) {
             if (checkpointLock != null) {
                 synchronized (checkpointLock) {

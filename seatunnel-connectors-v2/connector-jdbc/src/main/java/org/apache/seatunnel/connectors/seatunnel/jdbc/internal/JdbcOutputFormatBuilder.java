@@ -384,8 +384,13 @@ public class JdbcOutputFormatBuilder {
             TableSchema pkTableSchema,
             TableSchema databaseTableSchema) {
         String deleteSQL = dialect.getDeleteStatement(database, table, pkNames);
-        return createSimpleExecutor(
-                deleteSQL, pkTableSchema, databaseTableSchema, dialect.getRowConverter());
+        return new SimpleBatchStatementExecutor(
+                connection ->
+                        FieldNamedPreparedStatement.prepareStatement(
+                                connection, deleteSQL, pkNames),
+                pkTableSchema,
+                databaseTableSchema,
+                dialect.getRowConverter());
     }
 
     private static JdbcBatchStatementExecutor<SeaTunnelRow> createSimpleExecutor(

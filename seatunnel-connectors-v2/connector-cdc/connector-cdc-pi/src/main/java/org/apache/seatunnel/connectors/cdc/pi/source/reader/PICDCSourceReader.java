@@ -139,7 +139,7 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
             return;
         }
 
-        // Request more splits proactively to avoid throughput lock
+        // Request more splits to avoid throughput lock
         requestMoreSplitsIfNeeded();
 
         // Check for fatal errors from failed split initializations
@@ -297,12 +297,25 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
         synchronized (pendingSplits) {
             hasMoreSplitsReceived = false;
         }
-        log.info(
-                "Reader-{} received no-more-splits signal with {} pending splits and {} active connections. "
-                        + "Stopping proactive requests until new splits available.",
-                readerContext.getIndexOfSubtask(),
-                pendingSplits.size(),
-                piSplitAndRealtimeReaders.size());
+        // Log final split assignment state for this Reader
+        if (!piSplitAndRealtimeReaders.isEmpty()) {
+            String splitIds =
+                    String.join(
+                            ", ",
+                            piSplitAndRealtimeReaders.keySet().stream()
+                                    .sorted()
+                                    .toArray(String[]::new));
+            log.info(
+                    "Reader-{} received no-more-splits signal. Final split assignment: {} active splits [{}]",
+                    readerContext.getIndexOfSubtask(),
+                    piSplitAndRealtimeReaders.size(),
+                    splitIds);
+        } else {
+            log.info(
+                    "Reader-{} received no-more-splits signal with no active splits",
+                    readerContext.getIndexOfSubtask());
+        }
+
         // Update throttle time to avoid immediate re-request
         lastSplitRequestTime = System.currentTimeMillis();
     }
@@ -545,10 +558,10 @@ public class PICDCSourceReader implements SourceReader<SeaTunnelRow, PICDCSplit>
 
         if (shouldRequest) {
             // Important for fault tolerance: Even when all local splits are initialized,
-            // proactively request more splits from Enumerator.
+            // still need to request more splits from Enumerator.
             // This allows the Reader to pick up splits from failed Readers for automatic failover.
 
-            // Throttle requests to avoid overwhelming the Enumerator with empty requests
+            // Reduce request frequency so the Enumerator isn’t flooded with empty requests.
             long currentTime = System.currentTimeMillis();
             if (currentTime - lastSplitRequestTime >= SPLIT_REQUEST_INTERVAL_MS) {
                 try {

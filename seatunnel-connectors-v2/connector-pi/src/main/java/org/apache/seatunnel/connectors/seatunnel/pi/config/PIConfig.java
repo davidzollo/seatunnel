@@ -319,9 +319,9 @@ public class PIConfig {
     public static final Option<Integer> MAX_WEBIDS_PER_SPLIT =
             Options.key("max_webids_per_split")
                     .intType()
-                    .defaultValue(50)
+                    .defaultValue(25)
                     .withDescription(
-                            "Maximum number of PI Paths per split for CDC mode (limited by WebSocket URL length)");
+                            "Maximum number of PI Paths per split for CDC mode (limited by WebSocket URL length). Default is 25 for AF Attributes with long paths. For PI Points with short paths, you can increase this value to 40-50.");
 
     /** Recommended maximum PI Path count for optimal performance */
     public static final Option<Integer> RECOMMENDED_MAX_PI_PATHS =

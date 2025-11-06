@@ -22,11 +22,15 @@ import org.apache.seatunnel.api.table.type.RowKind;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.executor.FieldNamedPreparedStatement;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 public class JdbcOutputFormatBuilderTest {
@@ -70,5 +74,30 @@ public class JdbcOutputFormatBuilderTest {
         Assertions.assertNotEquals(keyExtractor.apply(insertRow), keyExtractor.apply(updateBefore));
         updateAfter.setField(0, "2");
         Assertions.assertNotEquals(keyExtractor.apply(insertRow), keyExtractor.apply(updateAfter));
+    }
+
+    @Test
+    public void testDeleteStatementParameterParsing() {
+        // Test case for issue: DELETE statement parameter parsing with quoted identifiers
+        // This tests the fix for: mateid doesn't exist in the parameters of SQL statement
+        String deleteSQL =
+                "DELETE FROM `qa_sink`.`murmur-64-source` WHERE `mateid` = :mateid AND `col1` = :col1";
+        String[] pkNames = {"mateid", "col1"};
+
+        Map<String, List<Integer>> parameterMap = new HashMap<>();
+        String parsedSQL = FieldNamedPreparedStatement.parseNamedStatement(deleteSQL, parameterMap);
+
+        // Verify that all parameters are correctly parsed
+        Assertions.assertTrue(
+                parameterMap.containsKey("mateid"), "Parameter 'mateid' should be found");
+        Assertions.assertTrue(parameterMap.containsKey("col1"), "Parameter 'col1' should be found");
+        Assertions.assertEquals(2, parameterMap.size(), "Should have exactly 2 parameters");
+
+        // Verify that the parsed SQL has placeholders
+        Assertions.assertTrue(parsedSQL.contains("?"), "Parsed SQL should contain placeholders");
+        Assertions.assertFalse(
+                parsedSQL.contains(":mateid"), "Parsed SQL should not contain named parameters");
+        Assertions.assertFalse(
+                parsedSQL.contains(":col1"), "Parsed SQL should not contain named parameters");
     }
 }

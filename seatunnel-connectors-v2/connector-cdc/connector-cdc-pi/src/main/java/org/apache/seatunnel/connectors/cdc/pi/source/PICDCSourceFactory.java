@@ -85,6 +85,9 @@ public class PICDCSourceFactory implements TableSourceFactory {
                 .optional(PIConfig.WEBSOCKET_ALLOW_BACKGROUND_CONNECTION) // Whether to allow
                 // background connection
 
+                // ================= Split configuration =================
+                .optional(PIConfig.MAX_WEBIDS_PER_SPLIT) // Maximum PI Paths per split
+
                 // ================= Authentication conditional dependencies =================
                 // When auth_type=Basic, username and password are required
                 .conditional(PIConfig.AUTH_TYPE, AuthType.BASIC, PIConfig.USERNAME)

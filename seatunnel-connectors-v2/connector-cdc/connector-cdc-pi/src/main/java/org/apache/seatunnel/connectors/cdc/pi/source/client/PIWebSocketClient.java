@@ -413,7 +413,7 @@ public class PIWebSocketClient implements AutoCloseable {
             throw new IllegalArgumentException(
                     String.format(
                             "WebSocket URL too long (%d chars, max: 8192). "
-                                    + "WebID count: %d. Please reduce PI Path count or increase parallelism.",
+                                    + "WebID count: %d. Please reduce max_webids_per_split or reduce PI Path count.",
                             webSocketUrl.length(), webIds != null ? webIds.size() : 0));
         }
 

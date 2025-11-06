@@ -686,7 +686,7 @@ public class FieldNamedPreparedStatement implements PreparedStatement {
                 connection.prepareStatement(parsedSQL), indexMapping);
     }
 
-    private static String parseNamedStatement(String sql, Map<String, List<Integer>> paramMap) {
+    public static String parseNamedStatement(String sql, Map<String, List<Integer>> paramMap) {
         StringBuilder parsedSql = new StringBuilder();
         int fieldIndex = 1; // SQL statement parameter index starts from 1
         int length = sql.length();
