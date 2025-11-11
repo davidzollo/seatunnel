@@ -694,12 +694,10 @@ public class FieldNamedPreparedStatement implements PreparedStatement {
             char c = sql.charAt(i);
             if (':' == c) {
                 int j = i + 1;
-                while (j < length
-                        && (Character.isJavaIdentifierPart(sql.charAt(j))
-                                || sql.charAt(j) == ' ')) {
+                while (j < length && Character.isJavaIdentifierPart(sql.charAt(j))) {
                     j++;
                 }
-                String parameterName = sql.substring(i + 1, j).trim();
+                String parameterName = sql.substring(i + 1, j);
                 checkArgument(
                         !parameterName.isEmpty(),
                         "Named parameters in SQL statement must not be empty.");

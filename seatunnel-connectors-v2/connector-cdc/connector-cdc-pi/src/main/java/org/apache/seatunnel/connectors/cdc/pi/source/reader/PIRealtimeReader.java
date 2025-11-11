@@ -138,7 +138,7 @@ public class PIRealtimeReader implements AutoCloseable {
         // Process data from message queue (from Netty WebSocket client)
         boolean hasData = false;
         SeaTunnelRow row;
-        //Consume data from the queue use a non-blocking poll
+        // Consume data from the queue use a non-blocking poll
         while ((row = messageQueue.poll()) != null) {
             if (checkpointLock != null) {
                 synchronized (checkpointLock) {

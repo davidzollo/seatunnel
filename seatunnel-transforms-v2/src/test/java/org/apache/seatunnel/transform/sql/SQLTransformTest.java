@@ -343,4 +343,76 @@ public class SQLTransformTest {
         Assertions.assertEquals(true, result.get(0).getField(1));
         Assertions.assertEquals(false, result.get(0).getField(2));
     }
+
+    @Test
+    public void testTrimWithCastExpression() {
+        String tableName = "test";
+        String[] fields = new String[] {"id", "code"};
+        CatalogTable table =
+                CatalogTableUtil.getCatalogTable(
+                        tableName,
+                        new SeaTunnelRowType(
+                                fields,
+                                new SeaTunnelDataType[] {BasicType.INT_TYPE, BasicType.INT_TYPE}));
+        SQLTransform sqlTransform =
+                new SQLTransform(
+                        new SQLTransformConfig() {
+                            {
+                                setQuery(
+                                        "select `id`, trim(cast(`code` as string)) as trimmed_code from dual");
+                                setEngineType(SQLEngineFactory.EngineType.ZETA);
+                            }
+                        },
+                        READONLY_CONFIG,
+                        table);
+        List<SeaTunnelRow> result =
+                Collections.singletonList(
+                        sqlTransform.transformRow(
+                                new SeaTunnelRow(new Object[] {Integer.valueOf(1), 12345})));
+        Assertions.assertEquals(1, result.get(0).getField(0));
+        Assertions.assertEquals("12345", result.get(0).getField(1));
+    }
+
+    @Test
+    public void testCastDecimalToInteger() {
+        String tableName = "test";
+        String[] fields = new String[] {"id", "price", "amount"};
+        CatalogTable table =
+                CatalogTableUtil.getCatalogTable(
+                        tableName,
+                        new SeaTunnelRowType(
+                                fields,
+                                new SeaTunnelDataType[] {
+                                    BasicType.INT_TYPE, BasicType.DOUBLE_TYPE, BasicType.STRING_TYPE
+                                }));
+        SQLTransform sqlTransform =
+                new SQLTransform(
+                        new SQLTransformConfig() {
+                            {
+                                setQuery(
+                                        "select `id`, cast(`price` as int) as price_int, cast(`amount` as bigint) as amount_long from dual");
+                                setEngineType(SQLEngineFactory.EngineType.ZETA);
+                            }
+                        },
+                        READONLY_CONFIG,
+                        table);
+
+        // Test casting double to int
+        List<SeaTunnelRow> result =
+                Collections.singletonList(
+                        sqlTransform.transformRow(
+                                new SeaTunnelRow(new Object[] {Integer.valueOf(1), 313, "999"})));
+        Assertions.assertEquals(1, result.get(0).getField(0));
+        Assertions.assertEquals(313, result.get(0).getField(1));
+        Assertions.assertEquals(999L, result.get(0).getField(2));
+
+        // Test casting string decimal to int
+        result =
+                Collections.singletonList(
+                        sqlTransform.transformRow(
+                                new SeaTunnelRow(new Object[] {Integer.valueOf(2), 100, "12345"})));
+        Assertions.assertEquals(2, result.get(0).getField(0));
+        Assertions.assertEquals(100, result.get(0).getField(1));
+        Assertions.assertEquals(12345L, result.get(0).getField(2));
+    }
 }
