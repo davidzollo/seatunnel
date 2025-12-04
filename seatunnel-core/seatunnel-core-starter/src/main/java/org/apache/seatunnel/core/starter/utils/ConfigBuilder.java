@@ -30,8 +30,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static org.apache.seatunnel.core.starter.utils.ConfigShadeUtils.DEFAULT_SENSITIVE_KEYWORDS;
 
 /** Used to build the {@link Config} from config file. */
 @Slf4j
@@ -118,5 +123,41 @@ public class ConfigBuilder {
                     configAdapter.getClass().getName());
             return ofInner(filePath, cryptoMode);
         }
+    }
+
+    public static Map<String, Object> configDesensitization(Map<String, Object> configMap) {
+        return configMap.entrySet().stream()
+                .collect(
+                        LinkedHashMap::new,
+                        (m, p) -> {
+                            String key = p.getKey();
+                            Object value = p.getValue();
+                            if (DEFAULT_SENSITIVE_KEYWORDS.contains(key.toLowerCase())) {
+                                m.put(key, "******");
+                            } else {
+                                if (value instanceof Map<?, ?>) {
+                                    m.put(key, configDesensitization((Map<String, Object>) value));
+                                } else if (value instanceof List<?>) {
+                                    List<?> listValue = (List<?>) value;
+                                    List<Object> newList =
+                                            listValue.stream()
+                                                    .map(
+                                                            v -> {
+                                                                if (v instanceof Map<?, ?>) {
+                                                                    return configDesensitization(
+                                                                            (Map<String, Object>)
+                                                                                    v);
+                                                                } else {
+                                                                    return v;
+                                                                }
+                                                            })
+                                                    .collect(Collectors.toList());
+                                    m.put(key, newList);
+                                } else {
+                                    m.put(key, value);
+                                }
+                            }
+                        },
+                        LinkedHashMap::putAll);
     }
 }

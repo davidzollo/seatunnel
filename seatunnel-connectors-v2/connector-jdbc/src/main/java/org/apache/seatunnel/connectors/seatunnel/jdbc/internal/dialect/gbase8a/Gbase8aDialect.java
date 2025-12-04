@@ -22,6 +22,10 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseI
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectTypeMapper;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.Optional;
 
 public class Gbase8aDialect implements JdbcDialect {
@@ -48,5 +52,14 @@ public class Gbase8aDialect implements JdbcDialect {
             String[] uniqueKeyFields,
             boolean isPrimaryKeyUpdated) {
         return Optional.empty();
+    }
+
+    @Override
+    public ResultSetMetaData getResultSetMetaData(Connection conn, String query)
+            throws SQLException {
+        String metadataQuery = String.format("SELECT * FROM (%s) AS temp WHERE 1 = 0", query);
+        try (PreparedStatement preparedStatement = conn.prepareStatement(metadataQuery)) {
+            return preparedStatement.getMetaData();
+        }
     }
 }

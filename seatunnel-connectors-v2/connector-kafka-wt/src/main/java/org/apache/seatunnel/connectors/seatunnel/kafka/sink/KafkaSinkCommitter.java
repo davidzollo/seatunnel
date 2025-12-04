@@ -87,7 +87,8 @@ public class KafkaSinkCommitter implements SinkCommitter<KafkaCommitInfo> {
                     new KafkaInternalProducer<>(
                             commitInfo.getKafkaProperties(), commitInfo.getTransactionId());
         }
-        kafkaProducer.resumeTransaction(commitInfo.getProducerId(), commitInfo.getEpoch());
+        kafkaProducer.resumeTransaction(
+                commitInfo.getProducerId(), commitInfo.getEpoch(), commitInfo.isTxnStarted());
         return kafkaProducer;
     }
 }

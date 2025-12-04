@@ -25,10 +25,13 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseI
 import javax.annotation.Nullable;
 
 import java.io.ByteArrayInputStream;
+import java.io.StringReader;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.oracle.OracleTypeConverter.ORACLE_BLOB;
+import static org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.oracle.OracleTypeConverter.ORACLE_CLOB;
+import static org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.oracle.OracleTypeConverter.ORACLE_NCLOB;
 
 public class OracleJdbcRowConverter extends AbstractJdbcRowConverter {
 
@@ -50,6 +53,16 @@ public class OracleJdbcRowConverter extends AbstractJdbcRowConverter {
                 statement.setBinaryStream(statementIndex, new ByteArrayInputStream((byte[]) value));
             } else {
                 statement.setBytes(statementIndex, (byte[]) value);
+            }
+        } else if (seaTunnelDataType.getSqlType().equals(SqlType.STRING)) {
+            // Handle CLOB/NCLOB types to avoid ORA-01461 in batch mode
+            // Oracle JDBC driver may bind setString() as LONG when writing to CLOB columns,
+            // which causes "can bind a LONG value only for insert into a LONG column" error
+            if (ORACLE_CLOB.equals(sourceType) || ORACLE_NCLOB.equals(sourceType)) {
+                // Use setCharacterStream for CLOB/NCLOB columns to ensure correct binding
+                statement.setCharacterStream(statementIndex, new StringReader((String) value));
+            } else {
+                statement.setString(statementIndex, (String) value);
             }
         } else {
             super.setValueToStatementByDataType(

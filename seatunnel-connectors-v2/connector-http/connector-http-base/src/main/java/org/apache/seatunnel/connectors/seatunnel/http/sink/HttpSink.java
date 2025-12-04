@@ -61,7 +61,7 @@ public class HttpSink extends AbstractSimpleSink<SeaTunnelRow, Void> {
                                             (v1, v2) -> v2)));
         }
         if (pluginConfig.hasPath(HttpConfig.PARAMS.key())) {
-            httpParameter.setHeaders(
+            httpParameter.setParams(
                     pluginConfig.getConfig(HttpConfig.PARAMS.key()).entrySet().stream()
                             .collect(
                                     Collectors.toMap(

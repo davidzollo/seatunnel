@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.mongodb;
 import org.apache.seatunnel.api.configuration.Option;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.source.SeaTunnelSource;
+import org.apache.seatunnel.api.source.SourceReader;
 import org.apache.seatunnel.api.source.SupportParallelism;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
@@ -32,6 +33,8 @@ import org.apache.seatunnel.connectors.cdc.base.option.StartupMode;
 import org.apache.seatunnel.connectors.cdc.base.option.StopMode;
 import org.apache.seatunnel.connectors.cdc.base.source.IncrementalSource;
 import org.apache.seatunnel.connectors.cdc.base.source.offset.OffsetFactory;
+import org.apache.seatunnel.connectors.cdc.base.source.split.SourceRecords;
+import org.apache.seatunnel.connectors.cdc.base.source.split.state.SourceSplitStateBase;
 import org.apache.seatunnel.connectors.cdc.debezium.DebeziumDeserializationSchema;
 import org.apache.seatunnel.connectors.cdc.debezium.DeserializeFormat;
 import org.apache.seatunnel.connectors.cdc.debezium.row.DebeziumJsonDeserializeSchema;
@@ -39,8 +42,10 @@ import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourc
 import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceConfigProvider;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceOptions;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.sender.MongoDBConnectorDeserializationSchema;
+import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.source.MongoDBRecordEmitter;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.source.dialect.MongodbDialect;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.source.offset.ChangeStreamOffsetFactory;
+import org.apache.seatunnel.connectors.seatunnel.common.source.reader.RecordEmitter;
 
 import org.apache.kafka.connect.data.Struct;
 
@@ -173,6 +178,12 @@ public class MongodbIncrementalSource<T> extends IncrementalSource<T, MongodbSou
         } catch (Exception e) {
             throw new SeaTunnelException(e);
         }
+    }
+
+    @Override
+    protected RecordEmitter<SourceRecords, T, SourceSplitStateBase> createRecordEmitter(
+            SourceConfig sourceConfig, SourceReader.Context context) {
+        return new MongoDBRecordEmitter<>(deserializationSchema, offsetFactory, context);
     }
 
     @Override

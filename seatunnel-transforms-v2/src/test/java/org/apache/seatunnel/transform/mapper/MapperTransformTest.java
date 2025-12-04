@@ -26,6 +26,7 @@ import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
 import org.apache.seatunnel.api.table.type.BasicType;
+import org.apache.seatunnel.api.table.type.DecimalType;
 import org.apache.seatunnel.api.table.type.LocalTimeType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SqlType;
@@ -37,6 +38,7 @@ import org.junit.jupiter.api.Test;
 
 import com.google.common.collect.Lists;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -95,6 +97,15 @@ public class MapperTransformTest {
                                                 Boolean.FALSE,
                                                 null,
                                                 null))
+                                .column(
+                                        PhysicalColumn.of(
+                                                "amount",
+                                                new DecimalType(10, 2),
+                                                10L,
+                                                2,
+                                                Boolean.FALSE,
+                                                null,
+                                                null))
                                 .build(),
                         new HashMap<>(),
                         new ArrayList<>(),
@@ -105,7 +116,8 @@ public class MapperTransformTest {
                     "value2",
                     LocalDateTime.of(2000, 10, 29, 10, 29, 11, 111111000),
                     LocalDateTime.of(2000, 10, 29, 10, 29, 11, 111111000),
-                    "value5"
+                    "value5",
+                    new BigDecimal("123.45")
                 };
         inputRow = new SeaTunnelRow(values);
     }
@@ -188,12 +200,22 @@ public class MapperTransformTest {
                                                 .build(),
                                         MapperConfig.Column.builder()
                                                 .position(6)
+                                                .inputName("amount")
+                                                .outputName("amount")
+                                                .dataType(SqlType.DECIMAL)
+                                                .length(20L)
+                                                .scale(5)
+                                                .nullable(false)
+                                                .action(MapperConfig.Action.MODIFY)
+                                                .build(),
+                                        MapperConfig.Column.builder()
+                                                .position(7)
                                                 .outputName("new_col_1")
                                                 .dataType(SqlType.STRING)
                                                 .action(MapperConfig.Action.ADD)
                                                 .build(),
                                         MapperConfig.Column.builder()
-                                                .position(7)
+                                                .position(8)
                                                 .outputName("new_col_2")
                                                 .dataType(SqlType.STRING)
                                                 .sqlFunction("UPPER(key2)")
@@ -232,7 +254,15 @@ public class MapperTransformTest {
                 "default.schema.table",
                 mapperTransform.transformTableIdentifier().toTablePath().getFullName());
         Assertions.assertIterableEquals(
-                Arrays.asList("name", "id", "time1", "time2", "key5s", "new_col_1", "new_col_2"),
+                Arrays.asList(
+                        "name",
+                        "id",
+                        "time1",
+                        "time2",
+                        "key5s",
+                        "amount",
+                        "new_col_1",
+                        "new_col_2"),
                 Arrays.asList(
                         Arrays.stream(mapperTransform.getOutputColumns())
                                 .map(Column::getName)
@@ -244,9 +274,24 @@ public class MapperTransformTest {
                         "2000_10_29_10_29_11_111111",
                         LocalDateTime.of(2000, 10, 29, 10, 29, 0, 0),
                         "value5",
+                        new BigDecimal("123.45"),
                         null,
                         "VALUE2"),
                 Arrays.asList(
                         mapperTransform.getOutputFieldValues(new SeaTunnelRowAccessor(inputRow))));
+
+        Column amountColumn =
+                Arrays.stream(mapperTransform.getOutputColumns())
+                        .filter(col -> col.getName().equals("amount"))
+                        .findFirst()
+                        .orElse(null);
+        Assertions.assertNotNull(amountColumn);
+        Assertions.assertEquals(SqlType.DECIMAL, amountColumn.getDataType().getSqlType());
+        Assertions.assertEquals(20L, amountColumn.getColumnLength());
+        Assertions.assertEquals(5, amountColumn.getScale());
+        Assertions.assertTrue(amountColumn.getDataType() instanceof DecimalType);
+        DecimalType decimalType = (DecimalType) amountColumn.getDataType();
+        Assertions.assertEquals(20, decimalType.getPrecision());
+        Assertions.assertEquals(5, decimalType.getScale());
     }
 }

@@ -332,7 +332,7 @@
                 </dependency>
                 <dependency>
                     <groupId>org.apache.seatunnel</groupId>
-                    <artifactId>connector-clickhouse</artifactId>
+                    <artifactId>connector-jdbc-clickhouse</artifactId>
                     <version>${project.version}</version>
                     <scope>provided</scope>
                 </dependency>

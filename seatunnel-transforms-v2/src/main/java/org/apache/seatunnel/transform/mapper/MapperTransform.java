@@ -207,15 +207,17 @@ public class MapperTransform extends MultipleFieldOutputTransform {
                                                     conditionColumn.getOutputName())) {
                                                 tgt.setOutputName(conditionColumn.getOutputName());
                                             }
+                                            boolean dataTypeChanged = false;
+                                            boolean lengthOrScaleChanged = false;
+                                            SqlType newDataType = tgt.getDataType();
+                                            Long newLength = tgt.getLength();
+                                            Integer newScale = tgt.getScale();
+
                                             if (isPresent(conditionColumn.getDataType())
                                                     && conditionColumn.getDataType()
                                                             != tgt.getDataType()) {
-                                                cw.setTypeChanged(true);
-                                                cw.setDataType(
-                                                        transTypeWithBasicType(
-                                                                conditionColumn.getDataType(),
-                                                                conditionColumn.getLength(),
-                                                                conditionColumn.getScale()));
+                                                dataTypeChanged = true;
+                                                newDataType = conditionColumn.getDataType();
                                                 tgt.setDataType(conditionColumn.getDataType());
                                             }
                                             if (StringUtils.isNotBlank(
@@ -223,10 +225,32 @@ public class MapperTransform extends MultipleFieldOutputTransform {
                                                 tgt.setDateFormat(conditionColumn.getDateFormat());
                                             }
                                             if (isPresent(conditionColumn.getLength())) {
+                                                if (!Objects.equals(
+                                                        tgt.getLength(),
+                                                        conditionColumn.getLength())) {
+                                                    lengthOrScaleChanged = true;
+                                                }
+                                                newLength = conditionColumn.getLength();
                                                 tgt.setLength(conditionColumn.getLength());
                                             }
                                             if (isPresent(conditionColumn.getScale())) {
+                                                if (!Objects.equals(
+                                                        tgt.getScale(),
+                                                        conditionColumn.getScale())) {
+                                                    lengthOrScaleChanged = true;
+                                                }
+                                                newScale = conditionColumn.getScale();
                                                 tgt.setScale(conditionColumn.getScale());
+                                            }
+
+                                            if (dataTypeChanged) {
+                                                cw.setTypeChanged(true);
+                                            }
+
+                                            if (dataTypeChanged || lengthOrScaleChanged) {
+                                                cw.setDataType(
+                                                        transTypeWithBasicType(
+                                                                newDataType, newLength, newScale));
                                             }
                                             tgt.setNullable(conditionColumn.isNullable());
                                             if (conditionColumn.getDefaultValue() != null) {

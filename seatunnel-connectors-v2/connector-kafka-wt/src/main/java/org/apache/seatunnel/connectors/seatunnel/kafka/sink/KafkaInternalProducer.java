@@ -55,21 +55,43 @@ public class KafkaInternalProducer<K, V> extends KafkaProducer<K, V> {
 
     @Override
     public void beginTransaction() throws ProducerFencedException {
+        if (log.isDebugEnabled()) {
+            log.debug("Begin kafka transaction: {}", transactionalId);
+        }
         super.beginTransaction();
     }
 
     @Override
     public void commitTransaction() throws ProducerFencedException {
+        if (log.isDebugEnabled()) {
+            log.debug("Commit kafka transaction: {}", transactionalId);
+        }
         super.commitTransaction();
     }
 
     @Override
     public void abortTransaction() throws ProducerFencedException {
+        if (log.isDebugEnabled()) {
+            log.debug("Abort kafka transaction: {}", transactionalId);
+        }
         super.abortTransaction();
+    }
+
+    public void initTransactionId(String transactionalId) {
+        if (!transactionalId.equals(this.transactionalId)) {
+            setTransactionalId(transactionalId);
+            super.initTransactions();
+        }
     }
 
     public void setTransactionalId(String transactionalId) {
         if (!transactionalId.equals(this.transactionalId)) {
+            if (log.isDebugEnabled()) {
+                log.debug(
+                        "Set kafka transactional.id to {} (prev: {})",
+                        transactionalId,
+                        this.transactionalId);
+            }
             Object transactionManager = getTransactionManager();
             synchronized (transactionManager) {
                 ReflectionUtils.setField(transactionManager, "transactionalId", transactionalId);
@@ -97,7 +119,7 @@ public class KafkaInternalProducer<K, V> extends KafkaProducer<K, V> {
         return (long) ReflectionUtils.getField(producerIdAndEpoch, "producerId").get();
     }
 
-    public void resumeTransaction(long producerId, short epoch) {
+    public void resumeTransaction(long producerId, short epoch, boolean txnStarted) {
 
         log.info(
                 "Attempting to resume transaction {} with producerId {} and epoch {}",
@@ -125,8 +147,13 @@ public class KafkaInternalProducer<K, V> extends KafkaProducer<K, V> {
             transitionTransactionManagerStateTo(transactionManager, "READY");
 
             transitionTransactionManagerStateTo(transactionManager, "IN_TRANSACTION");
-            ReflectionUtils.setField(transactionManager, "transactionStarted", true);
+            ReflectionUtils.setField(transactionManager, "transactionStarted", txnStarted);
         }
+    }
+
+    public boolean isTxnStarted() {
+        Object transactionManager = getTransactionManager();
+        return (boolean) ReflectionUtils.getField(transactionManager, "transactionStarted").get();
     }
 
     private static Object createProducerIdAndEpoch(long producerId, short epoch) {

@@ -29,7 +29,10 @@ public enum KafkaConnectorErrorCode implements SeaTunnelErrorCode {
     CONSUME_THREAD_RUN_ERROR(
             "KAFKA-05", "Error occurred when the kafka consumer thread was running"),
     CONSUME_DATA_FAILED("KAFKA-06", "Kafka failed to consume data"),
-    CONSUMER_CLOSE_FAILED("KAFKA-07", "Kafka failed to close consumer");
+    CONSUMER_CLOSE_FAILED("KAFKA-07", "Kafka failed to close consumer"),
+    TRANSACTION_ABORT_FAILED(
+            "KAFKA-08",
+            "Failed to abort Kafka transaction after maximum retry attempts, producer epoch is still not reset to 0");
 
     private final String code;
     private final String description;

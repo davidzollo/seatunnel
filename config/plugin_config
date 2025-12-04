@@ -27,7 +27,7 @@ connector-cdc-mysql
 connector-cdc-mongodb
 connector-cdc-sqlserver
 connector-cdc-tidb
-connector-clickhouse
+connector-jdbc-clickhouse
 connector-datahub
 connector-dingtalk
 connector-doris

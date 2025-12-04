@@ -857,7 +857,7 @@
                                     <mkdir dir="src/main/resources/connector-cdc-oracle" />
                                     <mkdir dir="src/main/resources/connector-cdc-postgres" />
                                     <mkdir dir="src/main/resources/connector-cdc-sqlserver" />
-                                    <mkdir dir="src/main/resources/connector-clickhouse" />
+                                    <mkdir dir="src/main/resources/connector-jdbc-clickhouse" />
                                     <mkdir dir="src/main/resources/connector-console" />
                                     <mkdir dir="src/main/resources/connector-datahub" />
                                     <mkdir dir="src/main/resources/connector-dingtalk" />

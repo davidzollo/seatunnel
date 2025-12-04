@@ -51,9 +51,9 @@ import java.io.Serializable;
 import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -359,7 +359,7 @@ public class MongoDBConnectorDeserializationSchema
                             + "' of type "
                             + bsonValue.getBsonType());
         }
-        return Timestamp.from(instant).toLocalDateTime();
+        return LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 
     @SuppressWarnings("unchecked")

@@ -31,8 +31,10 @@ import org.bson.json.JsonWriterSettings;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class MongodbSourceOptions extends SourceOptions {
 
@@ -49,6 +51,10 @@ public class MongodbSourceOptions extends SourceOptions {
     public static final String FALSE_FALSE = "false";
 
     public static final String OPERATION_TYPE_INSERT = "insert";
+
+    public static final String HEARTBEAT_KEY_FIELD = "HEARTBEAT";
+
+    public static final String COPY_KEY_FIELD = "copy";
 
     public static final String SNAPSHOT_TRUE = "true";
 
@@ -91,6 +97,25 @@ public class MongodbSourceOptions extends SourceOptions {
     public static final String SHARD_FIELD = "shard";
 
     public static final String DIALECT_NAME = "MongoDB";
+
+    public static final int INVALIDATED_RESUME_TOKEN_ERROR = 260;
+    public static final int CHANGE_STREAM_FATAL_ERROR = 280;
+    public static final int CHANGE_STREAM_HISTORY_LOST = 286;
+    public static final int BSON_OBJECT_TOO_LARGE = 10334;
+
+    public static final Set<Integer> INVALID_CHANGE_STREAM_ERRORS =
+            new HashSet<>(
+                    Arrays.asList(
+                            INVALIDATED_RESUME_TOKEN_ERROR,
+                            CHANGE_STREAM_FATAL_ERROR,
+                            CHANGE_STREAM_HISTORY_LOST,
+                            BSON_OBJECT_TOO_LARGE));
+
+    public static final String RESUME_TOKEN = "resume token";
+    public static final String NOT_FOUND = "not found";
+    public static final String DOES_NOT_EXIST = "does not exist";
+    public static final String INVALID_RESUME_TOKEN = "invalid resume token";
+    public static final String NO_LONGER_IN_THE_OPLOG = "no longer be in the oplog";
 
     public static final BsonDouble COMMAND_SUCCEED_FLAG = new BsonDouble(1.0d);
 

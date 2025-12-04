@@ -856,7 +856,15 @@ public class CoordinatorService {
         if (pendingJobMasterMap.containsKey(jobId)) {
             return pendingJobMasterMap.get(jobId)._2().getJobDAGInfo();
         }
-        return runningJobMasterMap.get(jobId).getJobDAGInfo();
+        JobMaster jobMaster = runningJobMasterMap.get(jobId);
+        if (jobMaster == null) {
+            logger.warning(
+                    String.format(
+                            "Job %s information has been cleaned up, possibly due to system restart",
+                            jobId));
+            return null;
+        }
+        return jobMaster.getJobDAGInfo();
     }
 
     /**

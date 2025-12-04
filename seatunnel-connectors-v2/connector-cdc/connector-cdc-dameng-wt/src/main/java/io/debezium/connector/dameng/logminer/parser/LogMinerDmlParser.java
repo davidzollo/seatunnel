@@ -279,7 +279,7 @@ public class LogMinerDmlParser implements DmlParser {
     @SuppressWarnings("MagicNumber")
     private static Object readValue(SQLReader reader) {
         if (reader.current(VALUE_QUOTE)) {
-            return reader.loadInQuote(50, ESCAPE);
+            return reader.loadInQuote(50);
         }
         String tmp = readString(reader, "Can't found function name");
         if (Boolean.TRUE.toString().equalsIgnoreCase(tmp)) {
