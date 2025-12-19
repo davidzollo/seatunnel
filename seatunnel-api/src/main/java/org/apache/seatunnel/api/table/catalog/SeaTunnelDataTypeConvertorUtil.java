@@ -33,6 +33,9 @@ import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.api.table.type.SqlType;
 import org.apache.seatunnel.common.exception.CommonError;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class SeaTunnelDataTypeConvertorUtil {
 
     /** Convert sqlType to SeaTunnelDataType */
@@ -100,10 +103,50 @@ public class SeaTunnelDataTypeConvertorUtil {
         if (column.startsWith(SqlType.DECIMAL.name())) {
             return parseDecimalType(columnStr);
         }
+        if (column.startsWith(SqlType.ROW.name())) {
+            return parseRowType(field, columnStr);
+        }
         if (column.trim().startsWith("{")) {
             return parseRowType(columnStr);
         }
         throw CommonError.unsupportedDataType("SeaTunnel", columnStr, field);
+    }
+
+    private static SeaTunnelDataType<?> parseRowType(String field, String columnStr) {
+        String genericType = getGenericType(columnStr).trim();
+        List<String> fieldInfoStrs = new ArrayList<>();
+        int bracketCount = 0;
+        int start = 0;
+        for (int i = 0; i < genericType.length(); i++) {
+            char c = genericType.charAt(i);
+            if (c == '<') {
+                bracketCount++;
+            } else if (c == '>') {
+                bracketCount--;
+            } else if (c == ',' && bracketCount == 0) {
+                fieldInfoStrs.add(genericType.substring(start, i));
+                start = i + 1;
+            }
+        }
+        fieldInfoStrs.add(genericType.substring(start));
+
+        String[] fieldNames = new String[fieldInfoStrs.size()];
+        SeaTunnelDataType<?>[] fieldTypes = new SeaTunnelDataType[fieldInfoStrs.size()];
+
+        for (int i = 0; i < fieldInfoStrs.size(); i++) {
+            String fieldInfoStr = fieldInfoStrs.get(i).trim();
+            int firstSpaceIndex = fieldInfoStr.indexOf(" ");
+            if (firstSpaceIndex == -1) {
+                throw CommonError.unsupportedDataType("SeaTunnel", fieldInfoStr, field);
+            }
+            String fieldName = fieldInfoStr.substring(0, firstSpaceIndex).trim();
+            String fieldTypeStr = fieldInfoStr.substring(firstSpaceIndex + 1).trim();
+
+            fieldNames[i] = fieldName;
+            fieldTypes[i] = deserializeSeaTunnelDataType(fieldName, fieldTypeStr);
+        }
+
+        return new SeaTunnelRowType(fieldNames, fieldTypes);
     }
 
     private static SeaTunnelDataType<?> parseRowType(String columnStr) {
