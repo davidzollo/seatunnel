@@ -53,11 +53,6 @@ import java.util.stream.Collectors;
 @AutoService(CopyBatchStatementExecutor.class)
 public class PostgresCopyBatchStatementExecutor implements CopyBatchStatementExecutor {
 
-    private static final String COMMA = ",";
-    private static final String DOUBLE_QUOTE = Character.valueOf('"').toString();
-    private static final char LF = '\n';
-    private static final String EMPTY = "";
-
     protected String copySql;
     @Getter protected TableSchema tableSchema;
     private Connection connection;
@@ -146,15 +141,6 @@ public class PostgresCopyBatchStatementExecutor implements CopyBatchStatementExe
                     Object val = record.getField(fieldIndex);
                     if (val != null) {
                         String strVal = val.toString();
-                        boolean containsQuote = strVal.contains(DOUBLE_QUOTE);
-                        if (strVal.contains(COMMA) || containsQuote) {
-                            strVal =
-                                    containsQuote
-                                            ? strVal.replace(
-                                                    DOUBLE_QUOTE, DOUBLE_QUOTE + DOUBLE_QUOTE)
-                                            : strVal;
-                            strVal = DOUBLE_QUOTE + strVal + DOUBLE_QUOTE;
-                        }
                         strVal = strVal.replace("\u0000", "");
                         csvRecord.add(strVal);
                     } else {
