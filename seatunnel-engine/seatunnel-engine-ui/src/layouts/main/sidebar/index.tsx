@@ -19,13 +19,7 @@ import { defineComponent, ref, type PropType, onMounted, h, type Component } fro
 import { NIcon, NLayoutSider, NMenu } from 'naive-ui'
 import { useRoute, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import {
-  DesktopOutline,
-  GitNetworkOutline,
-  ListOutline,
-  PeopleOutline,
-  PersonOutline
-} from '@vicons/ionicons5'
+import { DesktopOutline, ListOutline, PeopleOutline, PersonOutline } from '@vicons/ionicons5'
 
 const Sidebar = defineComponent({
   name: 'Sidebar',
@@ -77,21 +71,6 @@ const Sidebar = defineComponent({
           ),
         key: 'jobs',
         icon: renderIcon(ListOutline)
-      },
-      {
-        label: () =>
-          h(
-            RouterLink,
-            {
-              to: {
-                path: '/trace'
-              },
-              exact: false
-            },
-            { default: () => t('menu.trace') }
-          ),
-        key: 'trace',
-        icon: renderIcon(GitNetworkOutline)
       },
       {
         label: () =>
