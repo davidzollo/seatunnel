@@ -64,7 +64,7 @@ import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class StainTraceFlowIT {
+public class StainTraceFlowTest {
 
     @Test
     void testEndToEndStagesAndSingleEventReport() throws Exception {
