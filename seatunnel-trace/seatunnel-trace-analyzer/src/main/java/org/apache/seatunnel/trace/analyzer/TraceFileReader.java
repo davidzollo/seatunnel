@@ -20,7 +20,6 @@ package org.apache.seatunnel.trace.analyzer;
 import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.apache.seatunnel.api.event.StainTraceEvent;
 import org.apache.seatunnel.trace.analyzer.model.TraceEntry;
 import org.apache.seatunnel.trace.analyzer.model.TraceRecord;
 
@@ -85,8 +84,8 @@ public class TraceFileReader {
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
                 try {
-                    StainTraceEvent event = MAPPER.readValue(line, StainTraceEvent.class);
-                    TraceRecord record = parseTraceRecord(event);
+                    JsonNode root = MAPPER.readTree(line);
+                    TraceRecord record = parseTraceRecord(root);
                     if (record != null) {
                         records.add(record);
                     }
@@ -101,12 +100,12 @@ public class TraceFileReader {
         }
     }
 
-    private TraceRecord parseTraceRecord(StainTraceEvent event) {
+    private TraceRecord parseTraceRecord(JsonNode root) {
         List<TraceEntry> entries = new ArrayList<>();
 
-        if (event.getSpans() != null && !event.getSpans().isEmpty()) {
-            JsonNode spanNode = MAPPER.valueToTree(event.getSpans().get(0));
-            JsonNode eventsNode = spanNode.get("events");
+        JsonNode spansNode = root.get("spans");
+        if (spansNode != null && spansNode.isArray() && spansNode.size() > 0) {
+            JsonNode eventsNode = spansNode.get(0).get("events");
             if (eventsNode != null && eventsNode.isArray()) {
                 for (JsonNode eventNode : eventsNode) {
                     JsonNode attrs = eventNode.get("attributes");
@@ -131,11 +130,11 @@ public class TraceFileReader {
         }
 
         return new TraceRecord(
-                event.getTraceId(),
-                event.getSinkTaskId(),
-                event.getJobId(),
-                event.getTableId(),
-                event.getCreatedTime(),
+                root.path("traceId").asLong(0),
+                root.path("sinkTaskId").asLong(0),
+                root.path("jobId").asText(""),
+                root.path("tableId").asText(""),
+                root.path("createdTime").asLong(0),
                 entries);
     }
 
