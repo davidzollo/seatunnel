@@ -190,24 +190,29 @@ public class SeaTunnelSourceCollector<T> implements Collector<T> {
                 metricsContext.counter(StainTraceConstants.METRIC_ENTRIES_TRUNCATED_TOTAL);
         this.stainTraceMaxEntriesPerTrace = engineConfig.getStainTraceMaxEntriesPerTrace();
 
-        // Compute effective stain trace settings with optional task-level overrides
-        boolean effectiveEnabled = engineConfig.isStainTraceEnabled();
+        // Compute effective stain trace settings.
+        // When taskEnvOption is null (test / legacy path): engine config alone controls tracing.
+        // When taskEnvOption is non-null (production job path): BOTH engine switch AND task-level
+        // stain_trace.enabled=true must be set (double-switch requirement per docs).
+        boolean effectiveEnabled;
         int effectiveSampleRate = engineConfig.getStainTraceSampleRate();
-        if (taskEnvOption != null) {
+        if (taskEnvOption == null) {
+            effectiveEnabled = engineConfig.isStainTraceEnabled();
+        } else {
+            boolean taskStainTraceEnabled = false;
             Object stainTraceObj = taskEnvOption.get("stain_trace");
             if (stainTraceObj instanceof Map) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> stainTraceMap = (Map<String, Object>) stainTraceObj;
                 Object enabledObj = stainTraceMap.get("enabled");
-                if (enabledObj != null) {
-                    effectiveEnabled =
-                            effectiveEnabled && Boolean.parseBoolean(String.valueOf(enabledObj));
-                }
+                taskStainTraceEnabled =
+                        enabledObj != null && Boolean.parseBoolean(String.valueOf(enabledObj));
                 Object intervalObj = stainTraceMap.get("sample_interval");
                 if (intervalObj instanceof Number) {
                     effectiveSampleRate = ((Number) intervalObj).intValue();
                 }
             }
+            effectiveEnabled = engineConfig.isStainTraceEnabled() && taskStainTraceEnabled;
         }
 
         if (effectiveEnabled) {

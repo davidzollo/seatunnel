@@ -81,7 +81,7 @@ public class TraceFileWriter implements Closeable {
         writer.write(jsonLine);
         writer.newLine();
         eventCount.incrementAndGet();
-        fileSize.addAndGet(jsonLine.length() + 1); // +1 for newline
+        fileSize.addAndGet(jsonLine.getBytes(StandardCharsets.UTF_8).length + 1); // +1 for newline
     }
 
     public void flush() throws IOException {

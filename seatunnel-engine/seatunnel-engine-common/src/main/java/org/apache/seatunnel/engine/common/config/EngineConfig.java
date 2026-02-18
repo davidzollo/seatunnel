@@ -229,4 +229,25 @@ public class EngineConfig {
     public void setStainTraceFileBasePath(String stainTraceFileBasePath) {
         this.stainTraceFileBasePath = stainTraceFileBasePath;
     }
+
+    public void setStainTraceFileMaxEventsPerFile(int stainTraceFileMaxEventsPerFile) {
+        checkPositive(
+                stainTraceFileMaxEventsPerFile,
+                ServerConfigOptions.STAIN_TRACE_FILE_MAX_EVENTS_PER_FILE + " must be > 0");
+        this.stainTraceFileMaxEventsPerFile = stainTraceFileMaxEventsPerFile;
+    }
+
+    public void setStainTraceFileMaxSizeMb(int stainTraceFileMaxSizeMb) {
+        checkPositive(
+                stainTraceFileMaxSizeMb,
+                ServerConfigOptions.STAIN_TRACE_FILE_MAX_SIZE_MB + " must be > 0");
+        this.stainTraceFileMaxSizeMb = stainTraceFileMaxSizeMb;
+    }
+
+    public void setStainTraceFileFlushIntervalSeconds(int stainTraceFileFlushIntervalSeconds) {
+        checkPositive(
+                stainTraceFileFlushIntervalSeconds,
+                ServerConfigOptions.STAIN_TRACE_FILE_FLUSH_INTERVAL_SECONDS + " must be > 0");
+        this.stainTraceFileFlushIntervalSeconds = stainTraceFileFlushIntervalSeconds;
+    }
 }
