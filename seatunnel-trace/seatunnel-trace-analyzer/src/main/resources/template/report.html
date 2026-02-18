@@ -1449,6 +1449,9 @@
         const traceNo = trace.__no;
         const sinkTaskId = trace.sinkTaskId;
 
+        // Track consumed END indices to prevent the same _END from being paired twice
+        const consumedEndIdx = new Set();
+
         entries.forEach((entry, idx) => {
           const prevEntry = idx > 0 ? entries[idx - 1] : null;
           const duration = prevEntry ? (entry.timestampMs - prevEntry.timestampMs) : 0;
@@ -1473,14 +1476,20 @@
 
           if (entry.stageName.includes('_START')) {
             const endStageName = entry.stageName.replace('_START', '_END');
-            const endEntry = entries.find(
-              (e, i) =>
-                i > idx
-                && e.stageName === endStageName
-                && String(e.taskId) === String(entry.taskId)
-            );
-            if (endEntry) {
-              const endIndex = entries.indexOf(endEntry);
+            let endIndex = -1;
+            for (let i = idx + 1; i < entries.length; i++) {
+              if (
+                entries[i].stageName === endStageName
+                && String(entries[i].taskId) === String(entry.taskId)
+                && !consumedEndIdx.has(i)
+              ) {
+                endIndex = i;
+                break;
+              }
+            }
+            if (endIndex >= 0) {
+              consumedEndIdx.add(endIndex);
+              const endEntry = entries[endIndex];
               segments.push({
                 traceKey: traceKey,
                 traceId: trace.traceId,

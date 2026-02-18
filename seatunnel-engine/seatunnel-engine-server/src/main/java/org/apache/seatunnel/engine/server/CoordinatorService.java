@@ -360,6 +360,9 @@ public class CoordinatorService {
             String reportHttpEndpoint,
             Map<String, String> reportHttpHeaders,
             String stainTraceFileBasePath,
+            int stainTraceFileMaxEventsPerFile,
+            int stainTraceFileMaxSizeMb,
+            int stainTraceFileFlushIntervalSeconds,
             NodeEngineImpl nodeEngine) {
         List<EventHandler> handlers =
                 EventProcessor.loadEventHandlers(Thread.currentThread().getContextClassLoader());
@@ -398,7 +401,13 @@ public class CoordinatorService {
                                     .setAsyncBackupCount(1)
                                     .setTimeToLiveSeconds(0));
             Ringbuffer ringbuffer = nodeEngine.getHazelcastInstance().getRingbuffer(ringBufferName);
-            handlers.add(new JobEventLocalFileHandler(stainTraceFileBasePath, ringbuffer));
+            handlers.add(
+                    new JobEventLocalFileHandler(
+                            stainTraceFileBasePath,
+                            java.time.Duration.ofSeconds(stainTraceFileFlushIntervalSeconds),
+                            ringbuffer,
+                            stainTraceFileMaxEventsPerFile,
+                            (long) stainTraceFileMaxSizeMb * 1024 * 1024L));
             logger.info(
                     "StainTrace local file handler enabled, writing to: " + stainTraceFileBasePath);
         }
@@ -454,6 +463,9 @@ public class CoordinatorService {
                         engineConfig.getEventReportHttpApi(),
                         engineConfig.getEventReportHttpHeaders(),
                         engineConfig.getStainTraceFileBasePath(),
+                        engineConfig.getStainTraceFileMaxEventsPerFile(),
+                        engineConfig.getStainTraceFileMaxSizeMb(),
+                        engineConfig.getStainTraceFileFlushIntervalSeconds(),
                         nodeEngine);
 
         // If the user has configured the connector package service, create it  on the master node.

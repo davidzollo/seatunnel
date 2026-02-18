@@ -99,6 +99,7 @@ public class SeaTunnelSourceCollector<T> implements Collector<T> {
                 tablePaths,
                 runningTask,
                 engineConfig,
+                null,
                 System::currentTimeMillis);
     }
 
@@ -111,6 +112,54 @@ public class SeaTunnelSourceCollector<T> implements Collector<T> {
             List<TablePath> tablePaths,
             SeaTunnelTask runningTask,
             EngineConfig engineConfig,
+            LongSupplier currentTimeMillisSupplier) {
+        this(
+                checkpointLock,
+                outputs,
+                metricsContext,
+                flowControlStrategy,
+                rowType,
+                tablePaths,
+                runningTask,
+                engineConfig,
+                null,
+                currentTimeMillisSupplier);
+    }
+
+    /** Constructor with task-level stain trace overrides from job env block. */
+    public SeaTunnelSourceCollector(
+            Object checkpointLock,
+            List<OneInputFlowLifeCycle<Record<?>>> outputs,
+            MetricsContext metricsContext,
+            FlowControlStrategy flowControlStrategy,
+            SeaTunnelDataType rowType,
+            List<TablePath> tablePaths,
+            SeaTunnelTask runningTask,
+            EngineConfig engineConfig,
+            Map<String, Object> taskEnvOption) {
+        this(
+                checkpointLock,
+                outputs,
+                metricsContext,
+                flowControlStrategy,
+                rowType,
+                tablePaths,
+                runningTask,
+                engineConfig,
+                taskEnvOption,
+                System::currentTimeMillis);
+    }
+
+    SeaTunnelSourceCollector(
+            Object checkpointLock,
+            List<OneInputFlowLifeCycle<Record<?>>> outputs,
+            MetricsContext metricsContext,
+            FlowControlStrategy flowControlStrategy,
+            SeaTunnelDataType rowType,
+            List<TablePath> tablePaths,
+            SeaTunnelTask runningTask,
+            EngineConfig engineConfig,
+            Map<String, Object> taskEnvOption,
             LongSupplier currentTimeMillisSupplier) {
         this.checkpointLock = checkpointLock;
         this.outputs = outputs;
@@ -140,11 +189,32 @@ public class SeaTunnelSourceCollector<T> implements Collector<T> {
         this.stainTraceEntriesTruncatedTotal =
                 metricsContext.counter(StainTraceConstants.METRIC_ENTRIES_TRUNCATED_TOTAL);
         this.stainTraceMaxEntriesPerTrace = engineConfig.getStainTraceMaxEntriesPerTrace();
-        if (engineConfig.isStainTraceEnabled()) {
+
+        // Compute effective stain trace settings with optional task-level overrides
+        boolean effectiveEnabled = engineConfig.isStainTraceEnabled();
+        int effectiveSampleRate = engineConfig.getStainTraceSampleRate();
+        if (taskEnvOption != null) {
+            Object stainTraceObj = taskEnvOption.get("stain_trace");
+            if (stainTraceObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> stainTraceMap = (Map<String, Object>) stainTraceObj;
+                Object enabledObj = stainTraceMap.get("enabled");
+                if (enabledObj != null) {
+                    effectiveEnabled =
+                            effectiveEnabled && Boolean.parseBoolean(String.valueOf(enabledObj));
+                }
+                Object intervalObj = stainTraceMap.get("sample_interval");
+                if (intervalObj instanceof Number) {
+                    effectiveSampleRate = ((Number) intervalObj).intValue();
+                }
+            }
+        }
+
+        if (effectiveEnabled) {
             this.stainTraceSampler =
                     new StainTraceSampler(
                             true,
-                            engineConfig.getStainTraceSampleRate(),
+                            effectiveSampleRate,
                             engineConfig.getStainTraceMaxTracesPerSecondPerWorker(),
                             engineConfig.getStainTraceMaxEntriesPerTrace(),
                             stainTraceSamplesGeneratedTotal,

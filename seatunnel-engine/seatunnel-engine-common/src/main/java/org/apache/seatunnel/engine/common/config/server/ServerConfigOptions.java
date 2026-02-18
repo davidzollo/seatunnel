@@ -75,6 +75,24 @@ public class ServerConfigOptions {
                             "Base directory for writing stain trace OTLP JSONL files. "
                                     + "If not set, local file writing is disabled.");
 
+    public static final Option<Integer> STAIN_TRACE_FILE_MAX_EVENTS_PER_FILE =
+            Options.key("stain-trace-file-max-events-per-file")
+                    .intType()
+                    .defaultValue(10000)
+                    .withDescription("Maximum number of trace events per JSONL file.");
+
+    public static final Option<Integer> STAIN_TRACE_FILE_MAX_SIZE_MB =
+            Options.key("stain-trace-file-max-size-mb")
+                    .intType()
+                    .defaultValue(10)
+                    .withDescription("Maximum size (MB) of each trace JSONL file.");
+
+    public static final Option<Integer> STAIN_TRACE_FILE_FLUSH_INTERVAL_SECONDS =
+            Options.key("stain-trace-file-flush-interval-seconds")
+                    .intType()
+                    .defaultValue(10)
+                    .withDescription("Flush interval in seconds for the trace file writer.");
+
     /////////////////////////////////////////////////
     // The options for metrics start
     public static final Option<Boolean> TELEMETRY_METRIC_ENABLED =

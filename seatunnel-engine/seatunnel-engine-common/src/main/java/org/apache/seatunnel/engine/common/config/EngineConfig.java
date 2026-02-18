@@ -110,6 +110,15 @@ public class EngineConfig {
 
     private String stainTraceFileBasePath = null;
 
+    private int stainTraceFileMaxEventsPerFile =
+            ServerConfigOptions.STAIN_TRACE_FILE_MAX_EVENTS_PER_FILE.defaultValue();
+
+    private int stainTraceFileMaxSizeMb =
+            ServerConfigOptions.STAIN_TRACE_FILE_MAX_SIZE_MB.defaultValue();
+
+    private int stainTraceFileFlushIntervalSeconds =
+            ServerConfigOptions.STAIN_TRACE_FILE_FLUSH_INTERVAL_SECONDS.defaultValue();
+
     public void setBackupCount(int newBackupCount) {
         checkBackupCount(newBackupCount, 0);
         this.backupCount = newBackupCount;
