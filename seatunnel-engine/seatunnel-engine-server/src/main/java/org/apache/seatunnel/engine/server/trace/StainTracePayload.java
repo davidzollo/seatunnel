@@ -19,7 +19,9 @@ package org.apache.seatunnel.engine.server.trace;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public final class StainTracePayload {
     private StainTracePayload() {}
@@ -85,6 +87,42 @@ public final class StainTracePayload {
         buffer.putLong(tsMs);
         writeUnsignedShort(newPayload, COUNT_OFFSET, count + 1);
         return AppendResult.appended(newPayload);
+    }
+
+    /** A single decoded payload entry: stage code, task ID, and timestamp in millis. */
+    public static final class Entry {
+        public final int stageCode;
+        public final long taskId;
+        public final long tsMs;
+
+        Entry(int stageCode, long taskId, long tsMs) {
+            this.stageCode = stageCode;
+            this.taskId = taskId;
+            this.tsMs = tsMs;
+        }
+    }
+
+    /** Decode the start timestamp (ms) from the payload header. */
+    public static long readStartTsMs(byte[] payload) {
+        return ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN).getLong(START_TS_OFFSET);
+    }
+
+    /** Decode all entries from the payload. Returns empty list if invalid. */
+    public static List<Entry> readEntries(byte[] payload) {
+        if (!isValid(payload)) {
+            return new ArrayList<>();
+        }
+        int count = readUnsignedShort(payload, COUNT_OFFSET);
+        ByteBuffer buf = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN);
+        List<Entry> entries = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            int offset = HEADER_LENGTH + i * ENTRY_LENGTH;
+            int stageCode = payload[offset] & 0xFF;
+            long taskId = buf.getLong(offset + 1);
+            long tsMs = buf.getLong(offset + 9);
+            entries.add(new Entry(stageCode, taskId, tsMs));
+        }
+        return entries;
     }
 
     private static int readUnsignedShort(byte[] bytes, int offset) {

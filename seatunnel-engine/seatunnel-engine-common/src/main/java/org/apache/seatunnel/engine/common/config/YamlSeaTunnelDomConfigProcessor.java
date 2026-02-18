@@ -246,6 +246,8 @@ public class YamlSeaTunnelDomConfigProcessor extends AbstractDomConfigProcessor 
             } else if (ServerConfigOptions.STAIN_TRACE_PROPAGATE_TO_ALL_SPLITS.key().equals(name)) {
                 engineConfig.setStainTracePropagateToAllSplits(
                         getBooleanValue(getTextContent(node)));
+            } else if (ServerConfigOptions.STAIN_TRACE_FILE_BASE_PATH.key().equals(name)) {
+                engineConfig.setStainTraceFileBasePath(getTextContent(node));
             } else if (ServerConfigOptions.MasterServerConfigOptions.EVENT_REPORT_HTTP
                     .equalsIgnoreCase(name)) {
                 NamedNodeMap attributes = node.getAttributes();

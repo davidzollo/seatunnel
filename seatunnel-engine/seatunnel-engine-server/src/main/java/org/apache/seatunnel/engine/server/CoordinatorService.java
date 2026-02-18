@@ -52,6 +52,7 @@ import org.apache.seatunnel.engine.server.diagnostic.PendingJobDiagnostic;
 import org.apache.seatunnel.engine.server.diagnostic.PendingJobsResponse;
 import org.apache.seatunnel.engine.server.diagnostic.PendingQueueSummary;
 import org.apache.seatunnel.engine.server.event.JobEventHttpReportHandler;
+import org.apache.seatunnel.engine.server.event.JobEventLocalFileHandler;
 import org.apache.seatunnel.engine.server.event.JobEventProcessor;
 import org.apache.seatunnel.engine.server.execution.ExecutionState;
 import org.apache.seatunnel.engine.server.execution.PendingJobInfo;
@@ -358,6 +359,7 @@ public class CoordinatorService {
     private JobEventProcessor createJobEventProcessor(
             String reportHttpEndpoint,
             Map<String, String> reportHttpHeaders,
+            String stainTraceFileBasePath,
             NodeEngineImpl nodeEngine) {
         List<EventHandler> handlers =
                 EventProcessor.loadEventHandlers(Thread.currentThread().getContextClassLoader());
@@ -381,6 +383,26 @@ public class CoordinatorService {
                             reportHttpEndpoint, reportHttpHeaders, ringbuffer);
             handlers.add(httpReportHandler);
         }
+
+        if (stainTraceFileBasePath != null && !stainTraceFileBasePath.isEmpty()) {
+            String ringBufferName = "zeta-stain-trace-file-event";
+            int maxBufferCapacity = 2000;
+            nodeEngine
+                    .getHazelcastInstance()
+                    .getConfig()
+                    .addRingBufferConfig(
+                            new Config()
+                                    .getRingbufferConfig(ringBufferName)
+                                    .setCapacity(maxBufferCapacity)
+                                    .setBackupCount(0)
+                                    .setAsyncBackupCount(1)
+                                    .setTimeToLiveSeconds(0));
+            Ringbuffer ringbuffer = nodeEngine.getHazelcastInstance().getRingbuffer(ringBufferName);
+            handlers.add(new JobEventLocalFileHandler(stainTraceFileBasePath, ringbuffer));
+            logger.info(
+                    "StainTrace local file handler enabled, writing to: " + stainTraceFileBasePath);
+        }
+
         logger.info("Loaded event handlers: " + handlers);
         return new JobEventProcessor(handlers);
     }
@@ -431,6 +453,7 @@ public class CoordinatorService {
                 createJobEventProcessor(
                         engineConfig.getEventReportHttpApi(),
                         engineConfig.getEventReportHttpHeaders(),
+                        engineConfig.getStainTraceFileBasePath(),
                         nodeEngine);
 
         // If the user has configured the connector package service, create it  on the master node.

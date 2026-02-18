@@ -108,6 +108,8 @@ public class EngineConfig {
     private boolean stainTracePropagateToAllSplits =
             ServerConfigOptions.STAIN_TRACE_PROPAGATE_TO_ALL_SPLITS.defaultValue();
 
+    private String stainTraceFileBasePath = null;
+
     public void setBackupCount(int newBackupCount) {
         checkBackupCount(newBackupCount, 0);
         this.backupCount = newBackupCount;
@@ -209,5 +211,13 @@ public class EngineConfig {
 
     public void setStainTracePropagateToAllSplits(boolean stainTracePropagateToAllSplits) {
         this.stainTracePropagateToAllSplits = stainTracePropagateToAllSplits;
+    }
+
+    public String getStainTraceFileBasePath() {
+        return stainTraceFileBasePath;
+    }
+
+    public void setStainTraceFileBasePath(String stainTraceFileBasePath) {
+        this.stainTraceFileBasePath = stainTraceFileBasePath;
     }
 }

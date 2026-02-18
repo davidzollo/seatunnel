@@ -31,24 +31,36 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Stream;
 
+/**
+ * Reads StainTrace OTLP JSONL files produced by {@code JobEventLocalFileHandler}.
+ *
+ * <p>Each line is an {@code ExportTraceServiceRequest} in OTLP JSON format:
+ *
+ * <pre>
+ * {
+ *   "resourceSpans": [{
+ *     "resource": {"attributes": [{"key":"seatunnel.job_id","value":{"stringValue":"..."}}]},
+ *     "scopeSpans": [{
+ *       "spans": [{
+ *         "traceId": "<32-hex>",
+ *         "spanId": "<16-hex>",
+ *         "startTimeUnixNano": "<ns-string>",
+ *         "endTimeUnixNano": "<ns-string>",
+ *         "attributes": [...],
+ *         "events": [{"name":"STAGE","timeUnixNano":"<ns>","attributes":[...]}],
+ *         "status": {"code":1}
+ *       }]
+ *     }]
+ *   }]
+ * }
+ * </pre>
+ */
 @Slf4j
 public class TraceFileReader {
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final Map<Integer, String> STAGE_NAMES = new HashMap<>();
-
-    static {
-        STAGE_NAMES.put(1, "SOURCE_EMIT");
-        STAGE_NAMES.put(2, "QUEUE_IN");
-        STAGE_NAMES.put(3, "QUEUE_OUT");
-        STAGE_NAMES.put(4, "TRANSFORM_IN");
-        STAGE_NAMES.put(5, "TRANSFORM_OUT");
-        STAGE_NAMES.put(6, "SINK_WRITE_DONE");
-    }
 
     public List<TraceRecord> readTraces(String baseDir, String jobId, String date)
             throws IOException {
@@ -100,49 +112,128 @@ public class TraceFileReader {
         }
     }
 
+    /**
+     * Parses one OTLP ExportTraceServiceRequest JSON line into a {@link TraceRecord}.
+     *
+     * <p>Navigates: resourceSpans[0] → scopeSpans[0] → spans[0] → events[]
+     */
     private TraceRecord parseTraceRecord(JsonNode root) {
+        JsonNode resourceSpans = root.path("resourceSpans");
+        if (!resourceSpans.isArray() || resourceSpans.size() == 0) {
+            return null;
+        }
+        JsonNode resourceSpan = resourceSpans.get(0);
+
+        // Extract jobId and tableId from resource attributes and span attributes
+        String jobId =
+                extractStringAttr(
+                        resourceSpan.path("resource").path("attributes"), "seatunnel.job_id");
+
+        JsonNode scopeSpans = resourceSpan.path("scopeSpans");
+        if (!scopeSpans.isArray() || scopeSpans.size() == 0) {
+            return null;
+        }
+
+        JsonNode spans = scopeSpans.get(0).path("spans");
+        if (!spans.isArray() || spans.size() == 0) {
+            return null;
+        }
+        JsonNode span = spans.get(0);
+
+        // Parse traceId: 32-hex string, keep lower 64 bits (last 16 hex chars)
+        long traceId = parseTraceIdHex(span.path("traceId").asText(""));
+
+        // Parse spanId as sinkTaskId: 16-hex string
+        long sinkTaskId = parseHexLong(span.path("spanId").asText(""));
+
+        // Parse startTimeUnixNano → ms
+        long startNs = parseLongString(span.path("startTimeUnixNano").asText("0"));
+        long createdTime = startNs / 1_000_000L;
+
+        // Extract tableId from span attributes
+        String tableId = extractStringAttr(span.path("attributes"), "seatunnel.table_id");
+
+        // Parse events
+        JsonNode eventsNode = span.path("events");
+        if (!eventsNode.isArray() || eventsNode.size() == 0) {
+            return null;
+        }
+
         List<TraceEntry> entries = new ArrayList<>();
+        for (JsonNode eventNode : eventsNode) {
+            String stageName = eventNode.path("name").asText("");
+            long timeNs = parseLongString(eventNode.path("timeUnixNano").asText("0"));
+            long timestampMs = timeNs / 1_000_000L;
 
-        JsonNode spansNode = root.get("spans");
-        if (spansNode != null && spansNode.isArray() && spansNode.size() > 0) {
-            JsonNode eventsNode = spansNode.get(0).get("events");
-            if (eventsNode != null && eventsNode.isArray()) {
-                for (JsonNode eventNode : eventsNode) {
-                    JsonNode attrs = eventNode.get("attributes");
-                    if (attrs != null) {
-                        int stage = attrs.path("seatunnel.stage_code").asInt(0);
-                        long taskId = attrs.path("seatunnel.task_id").asLong(0);
-                        String timestamp = eventNode.path("timestamp").asText();
-                        long timestampMs = parseTimestamp(timestamp);
+            JsonNode eventAttrs = eventNode.path("attributes");
+            int stageCode = (int) extractLongAttr(eventAttrs, "seatunnel.stage_code");
+            long taskId = extractLongAttr(eventAttrs, "seatunnel.task_id");
 
-                        String stageName = eventNode.path("name").asText();
-                        if (stageName == null || stageName.isEmpty()) {
-                            stageName = STAGE_NAMES.getOrDefault(stage, "UNKNOWN_" + stage);
-                        }
-                        entries.add(new TraceEntry(stage, taskId, timestampMs, stageName));
-                    }
-                }
-            }
+            entries.add(new TraceEntry(stageCode, taskId, timestampMs, stageName));
         }
 
         if (entries.isEmpty()) {
             return null;
         }
 
-        return new TraceRecord(
-                root.path("traceId").asLong(0),
-                root.path("sinkTaskId").asLong(0),
-                root.path("jobId").asText(""),
-                root.path("tableId").asText(""),
-                root.path("createdTime").asLong(0),
-                entries);
+        return new TraceRecord(traceId, sinkTaskId, jobId, tableId, createdTime, entries);
     }
 
-    private long parseTimestamp(String iso8601) {
+    /** Extracts a stringValue from an OTLP attribute array by key. */
+    private String extractStringAttr(JsonNode attrs, String key) {
+        if (!attrs.isArray()) {
+            return "";
+        }
+        for (JsonNode attr : attrs) {
+            if (key.equals(attr.path("key").asText())) {
+                return attr.path("value").path("stringValue").asText("");
+            }
+        }
+        return "";
+    }
+
+    /** Extracts an intValue (stored as string) from an OTLP attribute array by key. */
+    private long extractLongAttr(JsonNode attrs, String key) {
+        if (!attrs.isArray()) {
+            return 0L;
+        }
+        for (JsonNode attr : attrs) {
+            if (key.equals(attr.path("key").asText())) {
+                return parseLongString(attr.path("value").path("intValue").asText("0"));
+            }
+        }
+        return 0L;
+    }
+
+    /** Parses a 32-char hex traceId, returning the lower 64 bits as a long. */
+    private long parseTraceIdHex(String hex) {
+        if (hex == null || hex.length() < 16) {
+            return 0L;
+        }
+        // Take the last 16 hex characters (lower 64 bits)
+        String lower16 = hex.substring(hex.length() - 16);
+        return parseHexLong(lower16);
+    }
+
+    private long parseHexLong(String hex) {
+        if (hex == null || hex.isEmpty()) {
+            return 0L;
+        }
         try {
-            return java.time.Instant.parse(iso8601).toEpochMilli();
-        } catch (Exception e) {
-            return System.currentTimeMillis();
+            return Long.parseUnsignedLong(hex, 16);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
+    }
+
+    private long parseLongString(String value) {
+        if (value == null || value.isEmpty()) {
+            return 0L;
+        }
+        try {
+            return Long.parseUnsignedLong(value);
+        } catch (NumberFormatException e) {
+            return 0L;
         }
     }
 

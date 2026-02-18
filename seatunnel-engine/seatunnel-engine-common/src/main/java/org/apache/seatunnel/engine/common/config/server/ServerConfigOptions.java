@@ -67,6 +67,14 @@ public class ServerConfigOptions {
                             "Whether to propagate stain trace payload to all split outputs in transform (e.g. flatMap). "
                                     + "When enabled, all derived output rows will inherit payload and append TRANSFORM_OUT stage.");
 
+    public static final Option<String> STAIN_TRACE_FILE_BASE_PATH =
+            Options.key("stain-trace-file-base-path")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Base directory for writing stain trace OTLP JSONL files. "
+                                    + "If not set, local file writing is disabled.");
+
     /////////////////////////////////////////////////
     // The options for metrics start
     public static final Option<Boolean> TELEMETRY_METRIC_ENABLED =

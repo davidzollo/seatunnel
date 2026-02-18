@@ -37,7 +37,8 @@ public class TaskLogManagerService {
         try {
             path = LogUtil.getLogPath();
         } catch (IllegalArgumentException e) {
-            // When log4j appender is not configured (e.g. local example / custom log config), avoid polluting logs with stack traces
+            // When log4j appender is not configured (e.g. local example / custom log config), avoid
+            // polluting logs with stack traces
             log.debug(
                     "The corresponding log file path is not properly configured, please check the log configuration file. {}",
                     e.getMessage());
