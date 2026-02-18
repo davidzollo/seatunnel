@@ -50,6 +50,9 @@ public class HtmlReportGenerator {
         String template = loadTemplate();
 
         String traceDataJson = generateTraceDataJson(allTraces);
+        // Escape </script> to prevent premature script-tag closure inside
+        // <script type="application/json"> blocks (script injection guard).
+        String safeTraceDataJson = traceDataJson.replace("</script>", "<\\/script>");
 
         String html =
                 template.replace(
@@ -60,7 +63,7 @@ public class HtmlReportGenerator {
                         .replace("{{AVG_LATENCY}}", String.format("%.2f", stats.getAvgLatencyMs()))
                         .replace("{{MAX_LATENCY}}", String.valueOf(stats.getMaxLatencyMs()))
                         .replace("{{MIN_LATENCY}}", String.valueOf(stats.getMinLatencyMs()))
-                        .replace("__TRACE_DATA_JSON__", traceDataJson);
+                        .replace("__TRACE_DATA_JSON__", safeTraceDataJson);
 
         Files.write(Paths.get(outputFile), html.getBytes(StandardCharsets.UTF_8));
         log.info("Generated HTML report: {}", outputFile);

@@ -97,10 +97,7 @@ public class TraceFileReader {
                 lineNumber++;
                 try {
                     JsonNode root = MAPPER.readTree(line);
-                    TraceRecord record = parseTraceRecord(root);
-                    if (record != null) {
-                        records.add(record);
-                    }
+                    parseAllSpans(root, records);
                 } catch (Exception e) {
                     log.warn(
                             "Skip invalid JSON at {}:{} - {}",
@@ -113,33 +110,40 @@ public class TraceFileReader {
     }
 
     /**
-     * Parses one OTLP ExportTraceServiceRequest JSON line into a {@link TraceRecord}.
-     *
-     * <p>Navigates: resourceSpans[0] → scopeSpans[0] → spans[0] → events[]
+     * Parses one OTLP ExportTraceServiceRequest JSON line, iterating all resourceSpans → scopeSpans
+     * → spans and producing one {@link TraceRecord} per span.
      */
-    private TraceRecord parseTraceRecord(JsonNode root) {
+    private void parseAllSpans(JsonNode root, List<TraceRecord> records) {
         JsonNode resourceSpans = root.path("resourceSpans");
-        if (!resourceSpans.isArray() || resourceSpans.size() == 0) {
-            return null;
+        if (!resourceSpans.isArray()) {
+            return;
         }
-        JsonNode resourceSpan = resourceSpans.get(0);
+        for (JsonNode resourceSpan : resourceSpans) {
+            String jobId =
+                    extractStringAttr(
+                            resourceSpan.path("resource").path("attributes"), "seatunnel.job_id");
 
-        // Extract jobId and tableId from resource attributes and span attributes
-        String jobId =
-                extractStringAttr(
-                        resourceSpan.path("resource").path("attributes"), "seatunnel.job_id");
-
-        JsonNode scopeSpans = resourceSpan.path("scopeSpans");
-        if (!scopeSpans.isArray() || scopeSpans.size() == 0) {
-            return null;
+            JsonNode scopeSpans = resourceSpan.path("scopeSpans");
+            if (!scopeSpans.isArray()) {
+                continue;
+            }
+            for (JsonNode scopeSpan : scopeSpans) {
+                JsonNode spans = scopeSpan.path("spans");
+                if (!spans.isArray()) {
+                    continue;
+                }
+                for (JsonNode span : spans) {
+                    TraceRecord record = parseSpanToRecord(span, jobId);
+                    if (record != null) {
+                        records.add(record);
+                    }
+                }
+            }
         }
+    }
 
-        JsonNode spans = scopeSpans.get(0).path("spans");
-        if (!spans.isArray() || spans.size() == 0) {
-            return null;
-        }
-        JsonNode span = spans.get(0);
-
+    /** Converts a single OTLP span node into a {@link TraceRecord}. */
+    private TraceRecord parseSpanToRecord(JsonNode span, String jobId) {
         // Parse traceId: 32-hex string, keep lower 64 bits (last 16 hex chars)
         long traceId = parseTraceIdHex(span.path("traceId").asText(""));
 

@@ -353,7 +353,15 @@ public class JobEventLocalFileHandler implements EventHandler {
         log.info("Close local file report handler");
         scheduledExecutorService.shutdown();
         try {
-            reportFromRingbuffer();
+            // Wait for any in-flight scheduled report() to finish before we
+            // call report() ourselves, so committedEventIndex and currentWriter
+            // are not touched concurrently.
+            scheduledExecutorService.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            report(); // synchronized — safe after awaitTermination
         } catch (HazelcastInstanceNotActiveException e) {
             // Hazelcast shutting down — drain from local buffer instead
         } catch (IOException e) {
