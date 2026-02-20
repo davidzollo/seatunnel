@@ -32,6 +32,8 @@ public class TraceStatistics {
     private double avgLatencyMs;
     private long maxLatencyMs;
     private long minLatencyMs;
+    private long p95LatencyMs;
+    private long p99LatencyMs;
     private Map<String, Double> stageAvgDurations;
     private List<TraceRecord> topSlowTraces;
 }

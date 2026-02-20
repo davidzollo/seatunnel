@@ -50,6 +50,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Writes StainTrace events to local JSONL files in OpenTelemetry OTLP JSON format.
@@ -79,6 +80,7 @@ public class JobEventLocalFileHandler implements EventHandler {
 
     private volatile TraceFileWriter currentWriter;
     private final Object writerLock = new Object();
+    private final AtomicBoolean closing = new AtomicBoolean(false);
 
     public JobEventLocalFileHandler(String baseDir, Ringbuffer ringbuffer) {
         this(baseDir, REPORT_INTERVAL, ringbuffer, 10000, 10 * 1024 * 1024L);
@@ -107,6 +109,9 @@ public class JobEventLocalFileHandler implements EventHandler {
                                 .build());
         scheduledExecutorService.scheduleAtFixedRate(
                 () -> {
+                    if (closing.get()) {
+                        return;
+                    }
                     try {
                         report();
                     } catch (Throwable e) {
@@ -120,6 +125,9 @@ public class JobEventLocalFileHandler implements EventHandler {
 
     @Override
     public void handle(Event event) {
+        if (closing.get()) {
+            return;
+        }
         addToLocalBuffer(event);
         try {
             CompletionStage completionStage = ringbuffer.addAsync(event, OverflowPolicy.OVERWRITE);
@@ -131,10 +139,11 @@ public class JobEventLocalFileHandler implements EventHandler {
 
     @VisibleForTesting
     synchronized void report() throws IOException {
-        reportFromRingbuffer();
+        reportFromRingbuffer(false);
     }
 
-    private boolean reportFromRingbuffer() throws IOException {
+    private boolean reportFromRingbuffer(boolean allowWriterCreateDuringClosing)
+            throws IOException {
         long headSequence = ringbuffer.headSequence();
         if (headSequence > committedEventIndex) {
             log.warn(
@@ -150,7 +159,7 @@ public class JobEventLocalFileHandler implements EventHandler {
         if (resultSet.size() <= 0) {
             return false;
         }
-        if (writeEventsToFile(resultSet)) {
+        if (writeEventsToFile(resultSet, allowWriterCreateDuringClosing)) {
             committedEventIndex += resultSet.readCount();
             drainLocalBuffer(resultSet.readCount());
             return true;
@@ -158,7 +167,7 @@ public class JobEventLocalFileHandler implements EventHandler {
         return false;
     }
 
-    private void reportFromLocalBuffer() throws IOException {
+    private void reportFromLocalBuffer(boolean allowWriterCreateDuringClosing) throws IOException {
         List<Event> snapshot;
         synchronized (localBufferLock) {
             if (localBuffer.isEmpty()) {
@@ -166,14 +175,27 @@ public class JobEventLocalFileHandler implements EventHandler {
             }
             snapshot = new ArrayList<>(localBuffer);
         }
-        if (writeEventsToFile(snapshot)) {
+        if (writeEventsToFile(snapshot, allowWriterCreateDuringClosing)) {
             synchronized (localBufferLock) {
-                localBuffer.clear();
+                // Drain exactly the events we snapshotted.  Any events that arrived
+                // between snapshot copy and this drain stay in the buffer for the next
+                // flush, instead of being silently discarded by a full clear().
+                int toDrain = snapshot.size();
+                while (toDrain-- > 0 && !localBuffer.isEmpty()) {
+                    localBuffer.pollFirst();
+                }
             }
         }
     }
 
-    private boolean writeEventsToFile(Iterable<Event> events) throws IOException {
+    private boolean writeEventsToFile(
+            Iterable<Event> events, boolean allowWriterCreateDuringClosing) throws IOException {
+        // Guard before acquiring writerLock: if closing and this is not the authorized close-path
+        // flush, bail out immediately.  A mid-loop return after partial writes would leave
+        // committedEventIndex unchanged, causing close()'s re-read to duplicate those events.
+        if (closing.get() && !allowWriterCreateDuringClosing) {
+            return false;
+        }
         synchronized (writerLock) {
             for (Event event : events) {
                 if (!(event instanceof StainTraceEvent)) {
@@ -209,8 +231,12 @@ public class JobEventLocalFileHandler implements EventHandler {
                 if (currentWriter == null) {
                     currentWriter = new TraceFileWriter(baseDir, jobId, date);
                 } else if (!jobId.equals(currentWriter.getJobId())
-                        || !date.equals(currentWriter.getDate())
-                        || currentWriter.needsRotation(maxEventsPerFile, maxFileSizeBytes)) {
+                        || !date.equals(currentWriter.getDate())) {
+                    currentWriter.close();
+                    currentWriter = new TraceFileWriter(baseDir, jobId, date);
+                    log.info("Rotated trace file for job: {}", jobId);
+                } else if (!closing.get()
+                        && currentWriter.needsRotation(maxEventsPerFile, maxFileSizeBytes)) {
                     currentWriter.close();
                     currentWriter = new TraceFileWriter(baseDir, jobId, date);
                     log.info("Rotated trace file for job: {}", jobId);
@@ -351,26 +377,99 @@ public class JobEventLocalFileHandler implements EventHandler {
     @Override
     public void close() {
         log.info("Close local file report handler");
+        // Signal handle() and the scheduled lambda to stop accepting new work.
+        closing.set(true);
         scheduledExecutorService.shutdown();
+        boolean schedulerTerminated = false;
         try {
             // Wait for any in-flight scheduled report() to finish before we
             // call report() ourselves, so committedEventIndex and currentWriter
             // are not touched concurrently.
-            scheduledExecutorService.awaitTermination(5, TimeUnit.SECONDS);
+            schedulerTerminated = scheduledExecutorService.awaitTermination(5, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        try {
-            report(); // synchronized — safe after awaitTermination
-        } catch (HazelcastInstanceNotActiveException e) {
-            // Hazelcast shutting down — drain from local buffer instead
-        } catch (IOException e) {
-            log.error("Failed to flush events on close", e);
+        if (schedulerTerminated) {
+            // Scheduler has stopped cleanly; safe to call synchronized report().
+            try {
+                reportFromRingbuffer(true);
+            } catch (HazelcastInstanceNotActiveException e) {
+                // Hazelcast shutting down — drain from local buffer instead
+            } catch (IOException e) {
+                log.error("Failed to flush events on close", e);
+            }
+        } else {
+            // Scheduler did not stop within the timeout.  Interrupt it so any blocking
+            // Hazelcast call (readManyAsync / CompletableFuture.join) is unblocked.
+            scheduledExecutorService.shutdownNow();
+            boolean finallyTerminated = false;
+            try {
+                finallyTerminated = scheduledExecutorService.awaitTermination(2, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // Log how many ringbuffer events may have been skipped for observability.
+            try {
+                long tail = ringbuffer.tailSequence();
+                long unsynced = tail - committedEventIndex + 1;
+                if (unsynced > 0) {
+                    log.warn(
+                            "Scheduler timed out during close; up to {} ringbuffer event(s) were"
+                                    + " not flushed to disk. Local buffer (cap={}) will be drained"
+                                    + " as fallback.",
+                            unsynced,
+                            LOCAL_EVENT_BUFFER_CAPACITY);
+                }
+            } catch (Exception e) {
+                log.warn(
+                        "Scheduler timed out during close; relying on local buffer as fallback."
+                                + " Could not determine dropped event count: {}",
+                        e.getMessage());
+            }
+            if (!finallyTerminated) {
+                // The scheduler thread is still alive even after shutdownNow().  Draining
+                // the local buffer here would race with the scheduler on writerLock.
+                // closing=true already prevents the scheduler from opening new files,
+                // so we can safely close the current writer under the lock and return.
+                log.warn(
+                        "Scheduler thread did not terminate after shutdownNow();"
+                                + " skipping local buffer drain to avoid concurrent writer access.");
+                synchronized (writerLock) {
+                    TraceFileWriter writer = currentWriter;
+                    currentWriter = null;
+                    if (writer != null) {
+                        try {
+                            writer.close();
+                        } catch (IOException e) {
+                            log.error("Failed to close current writer", e);
+                        }
+                    }
+                }
+                return;
+            }
+            try {
+                reportFromRingbuffer(true);
+            } catch (HazelcastInstanceNotActiveException e) {
+                // Hazelcast shutting down — drain from local buffer instead
+            } catch (IOException e) {
+                log.error("Failed to flush events on close", e);
+            }
         }
+        // During Hazelcast/JVM shutdown the calling thread may have its interrupt
+        // flag set (e.g. from an interrupted awaitTermination() above, or from the
+        // engine shutdown machinery).  NIO writes check the interrupt flag and throw
+        // ClosedByInterruptException, which also permanently closes the underlying
+        // FileChannel.  Clear the flag before flushing so the write succeeds, then
+        // restore it afterwards so callers still see the interrupted state.
+        boolean wasInterrupted = Thread.interrupted();
         try {
-            reportFromLocalBuffer();
+            reportFromLocalBuffer(true);
         } catch (IOException e) {
             log.error("Failed to flush events from local buffer on close", e);
+        } finally {
+            if (wasInterrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
         synchronized (writerLock) {
             TraceFileWriter writer = currentWriter;

@@ -50,9 +50,16 @@ public class HtmlReportGenerator {
         String template = loadTemplate();
 
         String traceDataJson = generateTraceDataJson(allTraces);
-        // Escape </script> to prevent premature script-tag closure inside
-        // <script type="application/json"> blocks (script injection guard).
-        String safeTraceDataJson = traceDataJson.replace("</script>", "<\\/script>");
+        // Escape < > & to their JSON Unicode equivalents so the HTML parser can never
+        // mistake embedded JSON content for a closing </script> tag (covers all case /
+        // whitespace variants such as </SCRIPT> or </script >).
+        // \u003c / \u003e / \u0026 are valid JSON Unicode escapes; JSON.parse() will
+        // transparently decode them back to the original characters.
+        String safeTraceDataJson =
+                traceDataJson
+                        .replace("&", "\\u0026")
+                        .replace("<", "\\u003c")
+                        .replace(">", "\\u003e");
 
         String html =
                 template.replace(
@@ -63,6 +70,8 @@ public class HtmlReportGenerator {
                         .replace("{{AVG_LATENCY}}", String.format("%.2f", stats.getAvgLatencyMs()))
                         .replace("{{MAX_LATENCY}}", String.valueOf(stats.getMaxLatencyMs()))
                         .replace("{{MIN_LATENCY}}", String.valueOf(stats.getMinLatencyMs()))
+                        .replace("{{P95_LATENCY}}", String.valueOf(stats.getP95LatencyMs()))
+                        .replace("{{P99_LATENCY}}", String.valueOf(stats.getP99LatencyMs()))
                         .replace("__TRACE_DATA_JSON__", safeTraceDataJson);
 
         Files.write(Paths.get(outputFile), html.getBytes(StandardCharsets.UTF_8));

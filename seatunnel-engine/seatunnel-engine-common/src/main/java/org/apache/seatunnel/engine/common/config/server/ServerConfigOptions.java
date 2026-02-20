@@ -73,7 +73,10 @@ public class ServerConfigOptions {
                     .noDefaultValue()
                     .withDescription(
                             "Base directory for writing stain trace OTLP JSONL files. "
-                                    + "If not set, local file writing is disabled.");
+                                    + "If not set, local file writing is disabled. "
+                                    + "Should use the same storage root as "
+                                    + "checkpoint.storage.plugin-config.namespace to keep "
+                                    + "engine-level persistent data co-located.");
 
     public static final Option<Integer> STAIN_TRACE_FILE_MAX_EVENTS_PER_FILE =
             Options.key("stain-trace-file-max-events-per-file")

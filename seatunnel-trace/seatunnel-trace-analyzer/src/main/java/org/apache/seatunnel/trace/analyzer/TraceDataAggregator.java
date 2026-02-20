@@ -36,7 +36,7 @@ public class TraceDataAggregator {
 
     public TraceStatistics aggregate(List<TraceRecord> records) {
         if (records == null || records.isEmpty()) {
-            return new TraceStatistics(0, 0, 0, 0, new HashMap<>(), new ArrayList<>());
+            return new TraceStatistics(0, 0, 0, 0, 0, 0, new HashMap<>(), new ArrayList<>());
         }
 
         long totalCount = records.size();
@@ -44,20 +44,17 @@ public class TraceDataAggregator {
                 records.stream()
                         .map(TraceRecord::getE2ELatencyMs)
                         .filter(l -> l > 0)
+                        .sorted()
                         .collect(Collectors.toList());
 
         double avgLatency =
                 latencies.isEmpty()
                         ? 0
                         : latencies.stream().mapToLong(Long::longValue).average().orElse(0);
-        long maxLatency =
-                latencies.isEmpty()
-                        ? 0
-                        : latencies.stream().mapToLong(Long::longValue).max().orElse(0);
-        long minLatency =
-                latencies.isEmpty()
-                        ? 0
-                        : latencies.stream().mapToLong(Long::longValue).min().orElse(0);
+        long maxLatency = latencies.isEmpty() ? 0 : latencies.get(latencies.size() - 1);
+        long minLatency = latencies.isEmpty() ? 0 : latencies.get(0);
+        long p95Latency = percentile(latencies, 95);
+        long p99Latency = percentile(latencies, 99);
 
         Map<String, Double> stageAvgDurations = calculateStageAvgDurations(records);
 
@@ -68,14 +65,23 @@ public class TraceDataAggregator {
                         .collect(Collectors.toList());
 
         log.info(
-                "Aggregated {} traces: avg={} ms, max={} ms, min={} ms",
+                "Aggregated {} traces: avg={} ms, p95={} ms, p99={} ms, max={} ms, min={} ms",
                 totalCount,
                 String.format("%.2f", avgLatency),
+                p95Latency,
+                p99Latency,
                 maxLatency,
                 minLatency);
 
         return new TraceStatistics(
-                totalCount, avgLatency, maxLatency, minLatency, stageAvgDurations, topSlowTraces);
+                totalCount,
+                avgLatency,
+                maxLatency,
+                minLatency,
+                p95Latency,
+                p99Latency,
+                stageAvgDurations,
+                topSlowTraces);
     }
 
     public List<BottleneckPoint> analyzeBottlenecks(List<TraceRecord> records) {
@@ -104,6 +110,18 @@ public class TraceDataAggregator {
 
         log.info("Found {} bottleneck points (showing top 20)", bottlenecks.size());
         return topBottlenecks;
+    }
+
+    /**
+     * Returns the value at the given percentile (1–100) from a pre-sorted list. Uses the
+     * nearest-rank method: index = ceil(p/100 * n) - 1.
+     */
+    private static long percentile(List<Long> sorted, double p) {
+        if (sorted.isEmpty()) {
+            return 0L;
+        }
+        int idx = (int) Math.ceil(p / 100.0 * sorted.size()) - 1;
+        return sorted.get(Math.min(idx, sorted.size() - 1));
     }
 
     private Map<String, Double> calculateStageAvgDurations(List<TraceRecord> records) {

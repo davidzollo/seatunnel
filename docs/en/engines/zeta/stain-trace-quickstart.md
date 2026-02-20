@@ -7,8 +7,8 @@ StainTrace is SeaTunnel's **data lineage and end-to-end performance tracing syst
 ### Core Features
 
 - **Framework-level Implementation**: Works with all Connectors out-of-the-box, no connector code changes needed
-- **6 Basic Stages**: S0 → Q+ → Q- → T+ → T- → W! (complete end-to-end pipeline)
-- **Extended Fine-grained Stages**: 40+ extended stages for precise performance bottleneck identification
+- **6 Basic Stages**: S0 → Q+ → Q- → T+ → T- → W! (complete end-to-end pipeline, all instrumented)
+- **Extended Fine-grained Stages**: 40+ stage codes defined for future instrumentation (see stage tables below)
 - **Local File Storage**: Zero dependencies, JSON Lines format, lightweight
 - **Task-level Control**: Engine-level + task-level dual switches for flexible sampling control
 - **Offline Analysis Tool**: Standalone analyzer generates HTML reports
@@ -37,6 +37,8 @@ StainTrace is SeaTunnel's **data lineage and end-to-end performance tracing syst
 | SINK_WRITE_DONE | 6 | Sink write completed | After SinkFlowLifeCycle.writer.write() |
 
 #### Key Performance Stages (101-110)
+> ⚠️ **Planned — not yet instrumented.** These stage codes are defined in `StainTraceStage` but no production call site exists yet. They will not appear in trace files until instrumented.
+
 | Stage | Code | Description | Purpose |
 |-------|------|-------------|---------|
 | SOURCE_READ_END | 101 | Source read completed | Source read performance |
@@ -50,6 +52,8 @@ StainTrace is SeaTunnel's **data lineage and end-to-end performance tracing syst
 | SINK_COMMIT_END | 110 | Sink commit completed | Transaction commit performance |
 
 #### Extended Fine-grained Stages (201-220)
+> ⚠️ **Planned — not yet instrumented.**
+
 | Stage | Code | Description | Purpose |
 |-------|------|-------------|---------|
 | SOURCE_READ_START | 201 | Source read started | Source performance |
@@ -64,6 +68,8 @@ StainTrace is SeaTunnel's **data lineage and end-to-end performance tracing syst
 | CHECKPOINT_BARRIER_EMIT/RECEIVE | 215-216 | Checkpoint Barrier | Barrier propagation |
 
 #### Network Transfer Stages (217-220, Multi-node Cluster Only)
+> ⚠️ **Planned — not yet instrumented.** Requires hooking into the Hazelcast serialization layer for cross-node transfers.
+
 | Stage | Code | Description | When It Appears |
 |-------|------|-------------|-----------------|
 | RECORD_SERIALIZE_START | 217 | Data serialization started | Multi-node cluster, cross-node data transfer |
@@ -72,6 +78,8 @@ StainTrace is SeaTunnel's **data lineage and end-to-end performance tracing syst
 | RECORD_DESERIALIZE_END | 220 | Data deserialization ended | Same as above |
 
 #### Flow Control Audit Stages (226-227)
+> ⚠️ **Planned — not yet instrumented.**
+
 | Stage | Code | Description | Purpose |
 |-------|------|-------------|---------|
 | FLOW_CONTROL_AUDIT_START | 226 | Flow control audit started | Backpressure detection |
@@ -89,7 +97,7 @@ StainTrace uses local file storage for trace data:
 - **Zero Dependencies**: No database or external services required
 - **Lightweight**: JSON Lines format, human-readable
 - **Offline Analysis**: Standalone analyzer tool generates HTML reports
-- **Storage Path**: `/tmp/seatunnel/traces/{job_id}/{yyyy-MM-dd}/`
+- **Storage Path**: `/tmp/seatunnel/traces/traces/{job_id}/{yyyy-MM-dd}/`
 
 ---
 
@@ -166,16 +174,23 @@ cat /tmp/seatunnel/traces/traces/{job_id}/{yyyy-MM-dd}/trace-*.jsonl
 
 ### Step 5: Generate HTML Report Using Analysis Tool
 
-```bash
-cd seatunnel-trace/seatunnel-trace-analyzer
-mvn clean package
+The analyzer is a standalone tool. Place `analyze-traces.sh` and the
+`seatunnel-trace-analyzer-*-jar-with-dependencies.jar` in the same directory, then run:
 
+```bash
 # Analyze trace files and generate HTML report
 ./analyze-traces.sh /tmp/seatunnel/traces report.html
 
 # Open report in browser
 open report.html  # macOS
 xdg-open report.html  # Linux
+```
+
+**Building the JAR from source** (development only):
+```bash
+# From the project root:
+mvn clean package -pl seatunnel-trace/seatunnel-trace-analyzer -am
+# The JAR is at: seatunnel-trace/seatunnel-trace-analyzer/target/seatunnel-trace-analyzer-*-jar-with-dependencies.jar
 ```
 
 **Done!** No services needed, trace data is stored in local files.
@@ -187,36 +202,35 @@ xdg-open report.html  # Linux
 ### Directory Structure
 
 ```
-/tmp/seatunnel/traces/
+/tmp/seatunnel/traces/            ← stain-trace-file-base-path
 └── traces/
     └── {job_id}/
         └── {yyyy-MM-dd}/
-            ├── trace-0001.jsonl
-            ├── trace-0002.jsonl
+            ├── traces-14-30-00-a1b2c3d4.jsonl
+            ├── traces-14-30-10-e5f6g7h8.jsonl
             └── ...
 ```
 
 ### File Format
 
-Each file is in JSON Lines format (one JSON object per line):
+Each file is in JSON Lines format (one JSON object per line).
+Each line is an **OTLP `ExportTraceServiceRequest`** — one span per sampled row:
 
 ```json
-{"eventType":"STAIN_TRACE","jobId":"123456","timestamp":1708000000000,"spans":[{"name":"seatunnel.record","context":{"traceId":789,"spanId":789},"startTime":1708000000000,"endTime":1708000001000,"events":[{"name":"SOURCE_EMIT","timestamp":1708000000000,"attributes":{"seatunnel.stage_code":1,"seatunnel.task_id":1}}]}]}
-{"eventType":"STAIN_TRACE","jobId":"123456","timestamp":1708000000100,"spans":[{"name":"seatunnel.record","context":{"traceId":790,"spanId":790},"startTime":1708000000100,"endTime":1708000001100,"events":[{"name":"SOURCE_EMIT","timestamp":1708000000100,"attributes":{"seatunnel.stage_code":1,"seatunnel.task_id":1}}]}]}
+{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"seatunnel"}},{"key":"seatunnel.job_id","value":{"stringValue":"123456"}}]},"scopeSpans":[{"scope":{"name":"seatunnel.stain_trace"},"spans":[{"traceId":"0000000000000000000000000000007b","spanId":"000000000000007b","parentSpanId":"","name":"seatunnel.record","kind":1,"startTimeUnixNano":"1708000000000000000","endTimeUnixNano":"1708000001000000000","attributes":[{"key":"seatunnel.table_id","value":{"stringValue":"table1"}},{"key":"seatunnel.sink_task_id","value":{"intValue":"123"}}],"events":[{"name":"SOURCE_EMIT","timeUnixNano":"1708000000000000000","attributes":[{"key":"seatunnel.stage_code","value":{"intValue":"1"}},{"key":"seatunnel.task_id","value":{"intValue":"1"}}]},{"name":"SINK_WRITE_DONE","timeUnixNano":"1708000001000000000","attributes":[{"key":"seatunnel.stage_code","value":{"intValue":"6"}},{"key":"seatunnel.task_id","value":{"intValue":"2"}}]}],"status":{"code":1}}]}]}]}
 ```
 
 Each line contains:
-- `eventType`: Event type (STAIN_TRACE)
-- `jobId`: Job ID
-- `timestamp`: Event timestamp
-- `spans`: OpenTelemetry Span array
-  - `name`: Span name (seatunnel.record)
-  - `context`: Trace context (traceId, spanId)
-  - `startTime/endTime`: Start and end timestamps
-  - `events`: Stage event array
-    - `name`: Stage name (SOURCE_EMIT, QUEUE_IN, etc.)
-    - `timestamp`: Stage timestamp
-    - `attributes`: Stage attributes (stage_code, task_id, etc.)
+- `resourceSpans[].resource.attributes`: Job metadata (`service.name`, `seatunnel.job_id`)
+- `resourceSpans[].scopeSpans[].scope.name`: `"seatunnel.stain_trace"`
+- `spans[]`: One span per sampled row
+  - `traceId` / `spanId`: 128-bit / 64-bit hex (zero-extended from internal 64-bit id)
+  - `startTimeUnixNano` / `endTimeUnixNano`: First and last stage timestamps in nanoseconds (string)
+  - `attributes`: Row metadata (`seatunnel.table_id`, `seatunnel.sink_task_id`)
+  - `events[]`: One event per pipeline stage
+    - `name`: Stage name (e.g., `SOURCE_EMIT`, `QUEUE_IN`, `SINK_WRITE_DONE`)
+    - `timeUnixNano`: Stage timestamp in nanoseconds (string)
+    - `attributes`: `seatunnel.stage_code` (int), `seatunnel.task_id` (int)
 
 ---
 
@@ -251,7 +265,10 @@ seatunnel:
     stain-trace-propagate-to-all-splits: false
 
     # ==================== Local File Storage Configuration ====================
-    # File storage base directory (default: /tmp/seatunnel/traces)
+    # File storage base directory. Should use the same storage root as
+    # checkpoint.storage.plugin-config.namespace. Example:
+    #   checkpoint namespace: /data/seatunnel/checkpoint_snapshot/
+    #   trace base path:      /data/seatunnel/traces
     stain-trace-file-base-path: /tmp/seatunnel/traces
 
     # Max events per file (default: 10000)
@@ -336,14 +353,13 @@ head -n 5 /tmp/seatunnel/traces/traces/{job_id}/{yyyy-MM-dd}/trace-*.jsonl
 ### 2. Verify Data Integrity
 
 You should see:
-- Each line is a complete JSON object
-- Contains events for 6 basic stages (SOURCE_EMIT, QUEUE_IN, QUEUE_OUT, TRANSFORM_IN, TRANSFORM_OUT, SINK_WRITE_DONE)
-- Timestamps are increasing (S0 < Q+ < Q- < T+ < T- < W!)
+- Each line is a complete OTLP JSON object (`resourceSpans` → `scopeSpans` → `spans`)
+- Each span's `events[]` contains entries for the **6 basic stages** (SOURCE_EMIT, QUEUE_IN, QUEUE_OUT, TRANSFORM_IN, TRANSFORM_OUT, SINK_WRITE_DONE) — these are the only guaranteed stages; extended stages (101+) require additional instrumentation not yet in place
+- Stage timestamps are increasing (S0 < Q+ < Q- < T+ < T- < W!)
 
 ### 3. Use Analysis Tool
 
 ```bash
-cd seatunnel-trace/seatunnel-trace-analyzer
 ./analyze-traces.sh /tmp/seatunnel/traces report.html
 open report.html
 ```
@@ -501,15 +517,30 @@ stain-trace-file-flush-interval-seconds: 5  # More frequent flushing
 ```
 
 #### Production Environment Configuration (Low Overhead, Large Scale)
+
+> **Path Consistency**: `stain-trace-file-base-path` should use the **same storage root** as
+> `checkpoint.storage.plugin-config.namespace`. For example, if your checkpoint namespace is
+> `/data/seatunnel/checkpoint_snapshot/`, set the trace path to `/data/seatunnel/traces`.
+> For HDFS-backed checkpoints, both should point to the same HDFS prefix so that your storage
+> and retention policies apply uniformly.
+
 ```yaml
-stain-trace-enabled: true
-stain-trace-sample-interval: 100000  # Sample 1 out of every 100k
-stain-trace-max-traces-per-second-per-worker: 50
-stain-trace-max-entries-per-trace: 32
-stain-trace-file-base-path: /data/seatunnel/traces
-stain-trace-file-max-events-per-file: 50000  # Larger files
-stain-trace-file-max-size-mb: 50
-stain-trace-file-flush-interval-seconds: 30  # Less frequent flushing
+seatunnel:
+  engine:
+    stain-trace-enabled: true
+    stain-trace-sample-interval: 100000  # Sample 1 out of every 100k
+    stain-trace-max-traces-per-second-per-worker: 50
+    stain-trace-max-entries-per-trace: 32
+    # Keep this under the same storage root as checkpoint.storage.plugin-config.namespace
+    stain-trace-file-base-path: /data/seatunnel/traces   # matches namespace: /data/seatunnel/checkpoint_snapshot/
+    stain-trace-file-max-events-per-file: 50000  # Larger files
+    stain-trace-file-max-size-mb: 50
+    stain-trace-file-flush-interval-seconds: 30  # Less frequent flushing
+    checkpoint:
+      storage:
+        type: localfile           # or hdfs for HDFS-backed clusters
+        plugin-config:
+          namespace: /data/seatunnel/checkpoint_snapshot/
 ```
 
 #### Performance Impact
@@ -575,19 +606,165 @@ StainTrace has been optimized to ensure production readiness:
    - Batch operations share timestamps
    - System.currentTimeMillis calls reduced by **50%**
 
-3. **Network Serialization Tracing**
-   - RECORD_SERIALIZE_START/END (217-218)
-   - RECORD_DESERIALIZE_START/END (219-220)
-   - Precisely identifies network transfer bottlenecks
-
-4. **Flow Control Audit Tracing**
-   - FLOW_CONTROL_AUDIT_START/END (226-227)
-   - Identifies backpressure issues
-
-5. **Local File Storage**
+3. **Local File Storage**
    - Zero dependencies, no database required
-   - JSON Lines format, human-readable
+   - JSON Lines / OTLP JSON format, human-readable
    - Standalone analyzer tool generates HTML reports
+
+### Planned Instrumentation (Not Yet Implemented)
+
+4. **Network Serialization Tracing** *(Planned)*
+   - RECORD_SERIALIZE_START/END (217-220)
+   - Will precisely identify cross-node network transfer bottlenecks
+   - Requires hooking into the Hazelcast serialization layer
+
+5. **Flow Control Audit Tracing** *(Planned)*
+   - FLOW_CONTROL_AUDIT_START/END (226-227)
+   - Will identify backpressure issues
+
+6. **Per-transformer Execution Tracing** *(Planned)*
+   - TRANSFORM_EXECUTE_START/END (104-105)
+   - Will identify which specific transform in a chain is the bottleneck
+
+---
+
+## Planned Feature Details
+
+### Per-transformer Execution Tracing (TRANSFORM_EXECUTE_START / TRANSFORM_EXECUTE_END)
+
+**Stage codes**: 104 / 105 — **Not yet instrumented**
+
+#### Problem
+
+When a job has a chain of 3 or more Transform plugins, the 6 basic stages can only observe the
+**total chain latency** (`TRANSFORM_IN → TRANSFORM_OUT`). If one transform in the chain is slow, it
+is impossible from the trace alone to identify which one.
+
+For example, given a chain: `FieldMapper → SqlTransform → CopyField`, the trace today shows:
+
+```
+T+ (TRANSFORM_IN)  →  T- (TRANSFORM_OUT)
+      ↑                      ↑
+  chain starts           chain ends
+  (total = 120 ms, but which step took 100 ms?)
+```
+
+#### What It Will Look Like Once Instrumented
+
+Each transformer in the chain will emit its own START/END pair:
+
+```
+T+ → TRANSFORM_EXECUTE_START[FieldMapper] → TRANSFORM_EXECUTE_END[FieldMapper]
+   → TRANSFORM_EXECUTE_START[SqlTransform] → TRANSFORM_EXECUTE_END[SqlTransform]
+   → TRANSFORM_EXECUTE_START[CopyField]    → TRANSFORM_EXECUTE_END[CopyField]
+   → T-
+```
+
+This makes per-transformer bottleneck identification precise:
+
+| Stage | Time (ms) | Duration |
+|-------|-----------|----------|
+| TRANSFORM_IN | 0 | — |
+| TRANSFORM_EXECUTE_START (FieldMapper) | 1 | — |
+| TRANSFORM_EXECUTE_END (FieldMapper) | 3 | **2 ms** |
+| TRANSFORM_EXECUTE_START (SqlTransform) | 3 | — |
+| TRANSFORM_EXECUTE_END (SqlTransform) | 101 | **98 ms** ← bottleneck |
+| TRANSFORM_EXECUTE_START (CopyField) | 101 | — |
+| TRANSFORM_EXECUTE_END (CopyField) | 103 | **2 ms** |
+| TRANSFORM_OUT | 104 | — |
+
+#### Entry Budget
+
+Each transformer consumes **2 payload slots** (START + END). A 5-transformer chain adds 10 entries
+on top of the 6 basic stages. The default `stain-trace-max-entries-per-trace: 32` comfortably
+accommodates up to 13-transformer chains without truncation.
+
+If you have a very long transform chain and see truncation warnings in logs, increase the limit:
+```yaml
+stain-trace-max-entries-per-trace: 64
+```
+
+#### Current Workaround
+
+Until this feature is instrumented, you can estimate individual transform costs indirectly by:
+1. Running the job with only one transform enabled at a time and comparing `T+ → T-` gap
+2. Checking transform-specific metrics via SeaTunnel's existing metrics system
+
+---
+
+### Network Serialization Tracing (RECORD_SERIALIZE_START/END · RECORD_DESERIALIZE_START/END)
+
+**Stage codes**: 217 / 218 / 219 / 220 — **Not yet instrumented**
+
+> ⚠️ These stages are **only relevant in multi-node cluster deployments**. In single-node mode,
+> data transfers via in-memory queues and serialization never occurs — these stages will not appear
+> even after instrumentation.
+
+#### Problem
+
+In a multi-node SeaTunnel cluster, records cross node boundaries via Hazelcast's network queue.
+Each crossing incurs a **serialization cost** (on the sender node) and a **deserialization cost**
+(on the receiver node). Today this overhead is completely invisible to StainTrace; the gap appears
+as dead time between `QUEUE_IN` and `QUEUE_OUT`.
+
+Example (current trace — 2-node cluster, Source on Node A, Sink on Node B):
+
+```
+S0 (Node A) → Q+ (Node A) →  ??? 15 ms gap ???  → Q- (Node B) → … → W!
+                                   ↑
+                          network serialization cost hidden here
+```
+
+#### What It Will Look Like Once Instrumented
+
+Each network hop will emit 4 events surrounding the cross-node transfer:
+
+```
+Q+ → RECORD_SERIALIZE_START → RECORD_SERIALIZE_END
+   → [network transfer] →
+     RECORD_DESERIALIZE_START → RECORD_DESERIALIZE_END → Q-
+```
+
+This decomposes the previously opaque network gap:
+
+| Stage | Node | Meaning |
+|-------|------|---------|
+| RECORD_SERIALIZE_START | Sender | Hazelcast begins encoding the row |
+| RECORD_SERIALIZE_END | Sender | Encoding complete; bytes handed to socket |
+| RECORD_DESERIALIZE_START | Receiver | Hazelcast begins decoding received bytes |
+| RECORD_DESERIALIZE_END | Receiver | Row fully reconstructed; ready for processing |
+
+The `task_id` attribute for these events will be a reserved constant (`-1`) identifying the
+network serializer rather than a pipeline task.
+
+#### Entry Budget
+
+Each network hop adds **4 entries** (serialize-start/end + deserialize-start/end). With the
+default `stain-trace-max-entries-per-trace: 32` and 6 basic stages already consuming 6 slots,
+up to **6 cross-node hops** can be traced without truncation.
+
+#### How to Identify If You Are in a Multi-node Cluster
+
+If network serialization stages are of interest, verify your deployment:
+
+```bash
+# Check cluster members
+curl http://localhost:5801/hazelcast/rest/cluster
+# If members > 1, you are in a multi-node cluster
+```
+
+#### Current Workaround
+
+Until this feature is instrumented, estimate cross-node serialization overhead by:
+
+```
+serialization_overhead ≈ gap(Q-, Q+) - expected_queue_wait_time
+```
+
+For a lightly loaded cluster with no backpressure, nearly all of the `Q+ → Q-` gap is
+serialization + network latency.
+
+---
 
 ### Expected Results
 

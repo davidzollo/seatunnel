@@ -30,6 +30,7 @@ import org.apache.commons.cli.ParseException;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
 import java.util.List;
 
 @Slf4j
@@ -80,7 +81,9 @@ public class TraceAnalyzerMain {
             System.out.print("Analyzing data... ");
             TraceDataAggregator aggregator = new TraceDataAggregator();
             TraceStatistics stats = aggregator.aggregate(records);
-            List<BottleneckPoint> bottlenecks = aggregator.analyzeBottlenecks(records);
+            boolean doBottleneck = cmd.hasOption("bottleneck");
+            List<BottleneckPoint> bottlenecks =
+                    doBottleneck ? aggregator.analyzeBottlenecks(records) : Collections.emptyList();
             System.out.println("OK");
 
             System.out.print("Generating HTML report... ");
@@ -93,9 +96,13 @@ public class TraceAnalyzerMain {
             System.out.println("  Total Traces: " + stats.getTotalCount());
             System.out.println(
                     "  Avg Latency: " + String.format("%.2f", stats.getAvgLatencyMs()) + " ms");
+            System.out.println("  P95 Latency: " + stats.getP95LatencyMs() + " ms");
+            System.out.println("  P99 Latency: " + stats.getP99LatencyMs() + " ms");
             System.out.println("  Max Latency: " + stats.getMaxLatencyMs() + " ms");
             System.out.println("  Min Latency: " + stats.getMinLatencyMs() + " ms");
-            System.out.println("  Bottlenecks: " + bottlenecks.size());
+            if (doBottleneck) {
+                System.out.println("  Bottlenecks: " + bottlenecks.size());
+            }
             System.out.println();
             System.out.println("Report generated successfully!");
             System.out.println("Open in your browser:");
@@ -125,6 +132,11 @@ public class TraceAnalyzerMain {
                 "o", "output", true, "Output HTML file path (default: trace-report.html)");
         options.addOption("j", "job", true, "Filter by job ID (optional)");
         options.addOption("d", "date", true, "Filter by date in yyyy-MM-dd format (optional)");
+        options.addOption(
+                "b",
+                "bottleneck",
+                false,
+                "Enable bottleneck analysis between consecutive stages (default: disabled)");
         options.addOption("h", "help", false, "Print this help message");
 
         return options;
