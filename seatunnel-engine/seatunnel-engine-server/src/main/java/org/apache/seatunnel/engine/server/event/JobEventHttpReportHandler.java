@@ -112,8 +112,7 @@ public class JobEventHttpReportHandler implements EventHandler {
     public void handle(Event event) {
         addToLocalBuffer(event);
         try {
-            CompletionStage completionStage = ringbuffer.addAsync(event, OverflowPolicy.OVERWRITE);
-            completionStage.toCompletableFuture().join();
+            ringbuffer.addAsync(event, OverflowPolicy.OVERWRITE);
         } catch (HazelcastInstanceNotActiveException e) {
             // Hazelcast is shutting down, keep event in local buffer for best-effort flush.
             log.info("Skip writing event to ringbuffer because Hazelcast instance is not active");

@@ -130,8 +130,7 @@ public class JobEventLocalFileHandler implements EventHandler {
         }
         addToLocalBuffer(event);
         try {
-            CompletionStage completionStage = ringbuffer.addAsync(event, OverflowPolicy.OVERWRITE);
-            completionStage.toCompletableFuture().join();
+            ringbuffer.addAsync(event, OverflowPolicy.OVERWRITE);
         } catch (HazelcastInstanceNotActiveException e) {
             log.info("Skip writing event to ringbuffer because Hazelcast instance is not active");
         }

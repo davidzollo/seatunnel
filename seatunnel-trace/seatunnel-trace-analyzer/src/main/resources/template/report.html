@@ -22,13 +22,25 @@
   <title id="pageTitle">SeaTunnel StainTrace 分析报告</title>
   <style>
     :root {
-      --bg: #0b1020;
-      --panel: rgba(255, 255, 255, 0.06);
-      --panel2: rgba(255, 255, 255, 0.09);
-      --border: rgba(255, 255, 255, 0.12);
-      --text: rgba(255, 255, 255, 0.92);
-      --muted: rgba(255, 255, 255, 0.72);
-      --muted2: rgba(255, 255, 255, 0.54);
+      /* light theme (default) */
+      --bg: #f5f7fa;
+      --panel: rgba(0, 0, 0, 0.04);
+      --panel2: rgba(0, 0, 0, 0.06);
+      --border: rgba(0, 0, 0, 0.09);
+      --text: rgba(0, 0, 0, 0.88);
+      --muted: rgba(0, 0, 0, 0.60);
+      --muted2: rgba(0, 0, 0, 0.42);
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      --surface-a: rgba(0, 0, 0, 0.05);
+      --surface-b: rgba(0, 0, 0, 0.08);
+      --surface-c: rgba(0, 0, 0, 0.03);
+      --surface-d: rgba(0, 0, 0, 0.05);
+      --surface-e: rgba(0, 0, 0, 0.02);
+      --inset-bg: rgba(0, 0, 0, 0.04);
+      --header-bg: rgba(248, 249, 252, 0.92);
+      --tooltip-bg: rgba(255, 255, 255, 0.98);
+      --select-glow: rgba(0, 0, 0, 0.22);
+      /* category colors and fonts — shared */
       --source: #4da3ff;
       --transform: #b48bff;
       --queue: #ff8a4a;
@@ -36,9 +48,28 @@
       --flow: #f472b6;
       --other: #a3a3a3;
       --danger: #ff3b6a;
-      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #0b1020;
+      --panel: var(--surface-a);
+      --panel2: rgba(255, 255, 255, 0.09);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: rgba(255, 255, 255, 0.92);
+      --muted: rgba(255, 255, 255, 0.72);
+      --muted2: rgba(255, 255, 255, 0.54);
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      --surface-a: var(--surface-a);
+      --surface-b: var(--surface-b);
+      --surface-c: var(--surface-c);
+      --surface-d: var(--surface-d);
+      --surface-e: rgba(255, 255, 255, 0.02);
+      --inset-bg: var(--inset-bg);
+      --header-bg: rgba(11, 16, 32, 0.85);
+      --tooltip-bg: rgba(20, 25, 40, 0.98);
+      --select-glow: rgba(255, 255, 255, 0.55);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -46,18 +77,25 @@
     body {
       font-family: var(--sans);
       color: var(--text);
+      background: radial-gradient(900px 500px at 40% 0%, rgba(77, 163, 255, 0.10), transparent 60%),
+        radial-gradient(900px 500px at 80% 10%, rgba(180, 139, 255, 0.08), transparent 60%),
+        radial-gradient(900px 500px at 20% 30%, rgba(52, 211, 153, 0.07), transparent 60%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    html[data-theme="dark"] body {
       background: radial-gradient(900px 500px at 40% 0%, rgba(77, 163, 255, 0.20), transparent 60%),
         radial-gradient(900px 500px at 80% 10%, rgba(180, 139, 255, 0.16), transparent 60%),
         radial-gradient(900px 500px at 20% 30%, rgba(52, 211, 153, 0.14), transparent 60%),
         var(--bg);
-      min-height: 100vh;
     }
 
     header {
       padding: 20px 24px;
       border-bottom: 1px solid var(--border);
       backdrop-filter: blur(12px);
-      background: rgba(11, 16, 32, 0.85);
+      background: var(--header-bg);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -125,7 +163,7 @@
 
     .btn {
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--surface-a);
       color: var(--text);
       padding: 6px 10px;
       border-radius: 10px;
@@ -136,14 +174,14 @@
     }
 
     .btn:hover {
-      background: rgba(255, 255, 255, 0.10);
+      background: var(--surface-b);
     }
 
     .navLink {
       text-decoration: none;
       color: var(--muted);
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--surface-c);
       padding: 6px 10px;
       border-radius: 10px;
       font-size: 12px;
@@ -152,7 +190,7 @@
 
     .navLink:hover {
       color: var(--text);
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--surface-d);
     }
 
     .container {
@@ -241,7 +279,7 @@
       padding: 3px 8px;
       border-radius: 999px;
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--surface-a);
       color: var(--muted);
       white-space: nowrap;
     }
@@ -250,7 +288,7 @@
       font-size: 11px;
       padding: 3px 10px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--surface-d);
       color: var(--muted);
       white-space: nowrap;
     }
@@ -259,7 +297,7 @@
       overflow: auto;
       border-radius: 12px;
       border: 1px solid var(--border);
-      background: rgba(0, 0, 0, 0.18);
+      background: var(--inset-bg);
     }
 
     .timeline {
@@ -303,7 +341,7 @@
       overflow: auto;
       border-radius: 12px;
       border: 1px solid var(--border);
-      background: rgba(0, 0, 0, 0.18);
+      background: var(--inset-bg);
     }
 
     table {
@@ -313,7 +351,7 @@
     }
 
     th {
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--surface-d);
       padding: 10px 12px;
       text-align: left;
       border-bottom: 1px solid var(--border);
@@ -329,14 +367,14 @@
 
     td {
       padding: 10px 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid var(--surface-c);
       color: var(--text);
       font-family: var(--mono);
       font-size: 12px;
     }
 
     tr:hover td {
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--surface-c);
       cursor: pointer;
     }
 
@@ -358,7 +396,7 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
-      background: rgba(0, 0, 0, 0.18);
+      background: var(--inset-bg);
     }
 
     .traceCol {
@@ -368,7 +406,7 @@
 
     .traceColLeft {
       border-right: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--surface-e);
     }
 
     .traceHeaderRow {
@@ -377,7 +415,7 @@
       gap: 10px;
       padding: 10px 12px;
       border-bottom: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--surface-a);
       position: sticky;
       top: 0;
       z-index: 5;
@@ -395,7 +433,7 @@
       gap: 10px;
       padding: 10px 12px;
       border-bottom: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--surface-a);
       position: sticky;
       top: 0;
       z-index: 5;
@@ -417,7 +455,7 @@
       position: absolute;
       top: 0;
       height: 18px;
-      border-left: 1px solid rgba(255, 255, 255, 0.10);
+      border-left: 1px solid var(--surface-b);
     }
 
     .axisTick span {
@@ -426,7 +464,7 @@
       left: 6px;
       font-family: var(--mono);
       font-size: 10px;
-      color: rgba(255, 255, 255, 0.54);
+      color: var(--muted2);
       white-space: nowrap;
     }
 
@@ -435,7 +473,7 @@
       grid-template-columns: 1fr 90px;
       gap: 10px;
       padding: 7px 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid var(--surface-c);
       font-size: 12px;
       align-items: center;
     }
@@ -463,7 +501,7 @@
     .traceRowRight {
       position: relative;
       height: 30px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid var(--surface-c);
       width: 1000px;
       flex: 0 0 auto;
     }
@@ -491,11 +529,11 @@
     }
 
     .traceRowLeft.isSelected {
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--surface-a);
     }
 
     .traceRowRight.isSelected {
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--surface-c);
     }
 
     .traceBar,
@@ -507,16 +545,16 @@
     .traceBar.isSelected,
     .traceMarker.isSelected {
       opacity: 1;
-      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
+      box-shadow: 0 0 0 2px var(--select-glow), 0 6px 18px rgba(0, 0, 0, 0.35);
     }
 
     tbody tr.isSelected td {
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--surface-d);
     }
 
     .tooltip {
       position: fixed;
-      background: rgba(20, 25, 40, 0.98);
+      background: var(--tooltip-bg);
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 12px 14px;
@@ -540,7 +578,7 @@
       color: var(--text);
       margin-bottom: 10px;
       padding-bottom: 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+      border-bottom: 1px solid var(--surface-b);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -625,6 +663,7 @@
       </div>
       <button class="btn" id="resetFilters" type="button" data-i18n="btnReset">重置</button>
       <button class="btn" id="exportJson" type="button" data-i18n="btnExport">导出当前 Trace JSON</button>
+      <button class="btn" id="themeBtn" type="button">◐</button>
       <button class="btn" id="langBtn" type="button">EN</button>
       <div class="spacer"></div>
       <a class="navLink" href="#section-trace" data-i18n="navTrace">链路追踪</a>
@@ -764,8 +803,20 @@
 
   <script id="traceData" type="application/json">__TRACE_DATA_JSON__</script>
   <script>
+    // ===== theme =====
+    let currentTheme = 'light';
+    function applyTheme(theme) {
+      currentTheme = theme;
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+      document.getElementById('themeBtn').textContent = theme === 'dark' ? '☀' : '◐';
+    }
+
     // ===== i18n =====
-    let currentLang = 'zh';
+    let currentLang = (navigator.language || navigator.userLanguage || 'zh').toLowerCase().startsWith('zh') ? 'zh' : 'en';
     const I18N = {
       zh: {
         title: 'SeaTunnel StainTrace 分析报告',
@@ -1517,6 +1568,10 @@
         document.getElementById('minDuration').value = '';
         document.getElementById('catalogScope').value = 'all';
         renderAll();
+      });
+
+      document.getElementById('themeBtn').addEventListener('click', () => {
+        applyTheme(currentTheme === 'light' ? 'dark' : 'light');
       });
 
       document.getElementById('langBtn').addEventListener('click', () => {

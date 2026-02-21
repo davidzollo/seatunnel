@@ -30,6 +30,8 @@ import com.hazelcast.nio.serialization.StreamSerializer;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class RecordSerializer implements StreamSerializer<Record> {
     private static final byte TYPE_CHECKPOINT_BARRIER = 0;
@@ -40,8 +42,16 @@ public class RecordSerializer implements StreamSerializer<Record> {
      */
     private static final byte TYPE_SEATUNNEL_ROW_V1 = 1;
 
-    /** SeaTunnelRow with optional stain trace payload extension. */
-    private static final byte TYPE_SEATUNNEL_ROW_V2 = 2;
+    /**
+     * SeaTunnelRow with complete options Map serialized.
+     *
+     * <p>Supports all key/value pairs stored in {@code SeaTunnelRow.options}, including StainTrace
+     * payload and CDC metadata (e.g. EventTime, PARTITION, DATABASE, TABLE).
+     *
+     * <p>Invalid or oversized StainTrace payloads are stripped before serialization to avoid
+     * transmitting garbage data.
+     */
+    private static final byte TYPE_SEATUNNEL_ROW_V3 = 3;
 
     private static final int MAX_TRACE_PAYLOAD_LENGTH = 8 * 1024;
 
@@ -58,30 +68,16 @@ public class RecordSerializer implements StreamSerializer<Record> {
             out.writeObject(checkpointBarrier.getClosedTasks());
         } else if (data instanceof SeaTunnelRow) {
             SeaTunnelRow row = (SeaTunnelRow) data;
-            Object payloadObj =
-                    row.getOptionsOrNull() == null
-                            ? null
-                            : row.getOptionsOrNull()
-                                    .get(StainTraceConstants.TRACE_PAYLOAD_OPTION_KEY);
-            byte[] payload = payloadObj instanceof byte[] ? (byte[]) payloadObj : null;
-            if (payload != null
-                    && (payload.length <= 0 || payload.length > MAX_TRACE_PAYLOAD_LENGTH)) {
-                payload = null;
-            }
-            if (payload == null) {
-                out.writeByte(TYPE_SEATUNNEL_ROW_V1);
-            } else {
-                out.writeByte(TYPE_SEATUNNEL_ROW_V2);
-            }
+            Map<String, Object> opts = buildSerializableOptions(row);
+            out.writeByte(opts == null ? TYPE_SEATUNNEL_ROW_V1 : TYPE_SEATUNNEL_ROW_V3);
             out.writeString(row.getTableId());
             out.writeByte(row.getRowKind().toByteValue());
             out.writeByte(row.getArity());
             for (Object field : row.getFields()) {
                 out.writeObject(field);
             }
-            if (payload != null) {
-                out.writeInt(payload.length);
-                out.write(payload);
+            if (opts != null) {
+                out.writeObject(opts);
             }
         } else {
             throw new UnsupportedEncodingException(
@@ -101,7 +97,7 @@ public class RecordSerializer implements StreamSerializer<Record> {
                             CheckpointType.fromName(in.readString()),
                             in.readObject(),
                             in.readObject());
-        } else if (dataType == TYPE_SEATUNNEL_ROW_V1 || dataType == TYPE_SEATUNNEL_ROW_V2) {
+        } else if (dataType == TYPE_SEATUNNEL_ROW_V1 || dataType == TYPE_SEATUNNEL_ROW_V3) {
             String tableId = in.readString();
             byte rowKind = in.readByte();
             byte arity = in.readByte();
@@ -111,16 +107,10 @@ public class RecordSerializer implements StreamSerializer<Record> {
             for (int i = 0; i < arity; i++) {
                 row.setField(i, in.readObject());
             }
-            if (dataType == TYPE_SEATUNNEL_ROW_V2) {
-                int payloadLength = in.readInt();
-                if (payloadLength < 0) {
-                    throw new IOException("Negative stain trace payload length: " + payloadLength);
-                } else if (payloadLength > MAX_TRACE_PAYLOAD_LENGTH) {
-                    in.skipBytes(payloadLength);
-                } else if (payloadLength > 0) {
-                    byte[] payload = new byte[payloadLength];
-                    in.readFully(payload);
-                    row.getOptions().put(StainTraceConstants.TRACE_PAYLOAD_OPTION_KEY, payload);
+            if (dataType == TYPE_SEATUNNEL_ROW_V3) {
+                Map<String, Object> opts = in.readObject();
+                if (opts != null && !opts.isEmpty()) {
+                    row.setOptions(opts);
                 }
             }
             data = row;
@@ -129,6 +119,30 @@ public class RecordSerializer implements StreamSerializer<Record> {
                     "Unsupported deserialize data type: " + dataType);
         }
         return new Record(data);
+    }
+
+    /**
+     * Builds the options map to be serialized with a row.
+     *
+     * <p>Returns {@code null} when the row has no options worth transmitting, so the caller can
+     * fall back to the compact {@link #TYPE_SEATUNNEL_ROW_V1} format. Otherwise returns a shallow
+     * copy of the row's options map with any invalid StainTrace payload removed (empty or exceeds
+     * {@link #MAX_TRACE_PAYLOAD_LENGTH}).
+     */
+    private Map<String, Object> buildSerializableOptions(SeaTunnelRow row) {
+        Map<String, Object> source = row.getOptionsOrNull();
+        if (source == null || source.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> opts = new HashMap<>(source);
+        Object payloadObj = opts.get(StainTraceConstants.TRACE_PAYLOAD_OPTION_KEY);
+        if (payloadObj instanceof byte[]) {
+            byte[] payload = (byte[]) payloadObj;
+            if (payload.length <= 0 || payload.length > MAX_TRACE_PAYLOAD_LENGTH) {
+                opts.remove(StainTraceConstants.TRACE_PAYLOAD_OPTION_KEY);
+            }
+        }
+        return opts.isEmpty() ? null : opts;
     }
 
     @Override

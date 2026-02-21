@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.engine.server.serializable;
 
+import org.apache.seatunnel.api.table.type.CommonOptions;
 import org.apache.seatunnel.api.table.type.Record;
 import org.apache.seatunnel.api.table.type.RowKind;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
@@ -53,7 +54,10 @@ public class RecordSerializerTest {
 
         serializer.write(out, new Record<>(row));
 
-        BufferObjectDataInput in = service.createObjectDataInput(out.toByteArray());
+        byte[] bytes = out.toByteArray();
+        Assertions.assertEquals(3, bytes[0], "Should use V3 when options are present");
+
+        BufferObjectDataInput in = service.createObjectDataInput(bytes);
         Record<?> deserialized = serializer.read(in);
         SeaTunnelRow readRow = (SeaTunnelRow) deserialized.getData();
         Assertions.assertEquals("t", readRow.getTableId());
@@ -67,7 +71,65 @@ public class RecordSerializerTest {
     }
 
     @Test
-    void testSerializeDeserializeRowWithoutTracePayloadUsesLegacyType() throws IOException {
+    void testSerializeDeserializeRowWithNonTraceOptions() throws IOException {
+        RecordSerializer serializer = new RecordSerializer();
+        InternalSerializationService service = new DefaultSerializationServiceBuilder().build();
+        BufferObjectDataOutput out = service.createObjectDataOutput();
+
+        SeaTunnelRow row = new SeaTunnelRow(new Object[] {1, "a"});
+        row.setTableId("t");
+        row.setRowKind(RowKind.INSERT);
+        row.getOptions().put(CommonOptions.EVENT_TIME.getName(), 12345L);
+
+        serializer.write(out, new Record<>(row));
+
+        byte[] bytes = out.toByteArray();
+        Assertions.assertEquals(3, bytes[0], "Should use V3 when options are present");
+
+        BufferObjectDataInput in = service.createObjectDataInput(bytes);
+        Record<?> deserialized = serializer.read(in);
+        SeaTunnelRow readRow = (SeaTunnelRow) deserialized.getData();
+        Assertions.assertNotNull(readRow.getOptionsOrNull());
+        Assertions.assertEquals(
+                12345L, readRow.getOptionsOrNull().get(CommonOptions.EVENT_TIME.getName()));
+    }
+
+    @Test
+    void testSerializeDeserializeRowWithMixedOptions() throws IOException {
+        RecordSerializer serializer = new RecordSerializer();
+        InternalSerializationService service = new DefaultSerializationServiceBuilder().build();
+        BufferObjectDataOutput out = service.createObjectDataOutput();
+
+        SeaTunnelRow row = new SeaTunnelRow(new Object[] {1, "a"});
+        row.setTableId("t");
+        row.setRowKind(RowKind.INSERT);
+        byte[] payload = StainTracePayload.init(1L, 2L);
+        payload =
+                StainTracePayload.append(payload, StainTraceStage.SOURCE_EMIT, 3L, 4L, 32)
+                        .getPayload();
+        row.getOptions().put(StainTraceConstants.TRACE_PAYLOAD_OPTION_KEY, payload);
+        row.getOptions().put(CommonOptions.EVENT_TIME.getName(), 99L);
+        row.getOptions().put(CommonOptions.DATABASE.getName(), "mydb");
+
+        serializer.write(out, new Record<>(row));
+
+        BufferObjectDataInput in = service.createObjectDataInput(out.toByteArray());
+        Record<?> deserialized = serializer.read(in);
+        SeaTunnelRow readRow = (SeaTunnelRow) deserialized.getData();
+        Assertions.assertNotNull(readRow.getOptionsOrNull());
+        Assertions.assertArrayEquals(
+                payload,
+                (byte[])
+                        readRow.getOptionsOrNull()
+                                .get(StainTraceConstants.TRACE_PAYLOAD_OPTION_KEY));
+        Assertions.assertEquals(
+                99L, readRow.getOptionsOrNull().get(CommonOptions.EVENT_TIME.getName()));
+        Assertions.assertEquals(
+                "mydb", readRow.getOptionsOrNull().get(CommonOptions.DATABASE.getName()));
+    }
+
+    @Test
+    void testSerializeDeserializeRowWithoutOptionsUsesLegacyType() throws IOException {
         RecordSerializer serializer = new RecordSerializer();
         InternalSerializationService service = new DefaultSerializationServiceBuilder().build();
         BufferObjectDataOutput out = service.createObjectDataOutput();
@@ -133,21 +195,33 @@ public class RecordSerializerTest {
     }
 
     @Test
-    void testReadNegativePayloadLengthFailsFast() throws IOException {
+    void testSerializeDeserializeRowWithOversizeTracePayloadButOtherOptionsPreserved()
+            throws IOException {
         RecordSerializer serializer = new RecordSerializer();
         InternalSerializationService service = new DefaultSerializationServiceBuilder().build();
         BufferObjectDataOutput out = service.createObjectDataOutput();
 
-        out.writeByte(2);
-        out.writeString("t");
-        out.writeByte(RowKind.INSERT.toByteValue());
-        out.writeByte((byte) 2);
-        out.writeObject(1);
-        out.writeObject("a");
-        out.writeInt(-1);
+        SeaTunnelRow row = new SeaTunnelRow(new Object[] {1, "a"});
+        row.setTableId("t");
+        row.setRowKind(RowKind.INSERT);
+        // oversize trace payload should be stripped, but EventTime should survive
+        row.getOptions().put(StainTraceConstants.TRACE_PAYLOAD_OPTION_KEY, new byte[9 * 1024]);
+        row.getOptions().put(CommonOptions.EVENT_TIME.getName(), 777L);
 
-        BufferObjectDataInput in = service.createObjectDataInput(out.toByteArray());
-        Assertions.assertThrows(IOException.class, () -> serializer.read(in));
+        serializer.write(out, new Record<>(row));
+
+        byte[] bytes = out.toByteArray();
+        Assertions.assertEquals(3, bytes[0], "Should use V3 because EventTime option survives");
+
+        BufferObjectDataInput in = service.createObjectDataInput(bytes);
+        Record<?> deserialized = serializer.read(in);
+        SeaTunnelRow readRow = (SeaTunnelRow) deserialized.getData();
+        Assertions.assertNotNull(readRow.getOptionsOrNull());
+        Assertions.assertNull(
+                readRow.getOptionsOrNull().get(StainTraceConstants.TRACE_PAYLOAD_OPTION_KEY),
+                "Oversized trace payload should be stripped");
+        Assertions.assertEquals(
+                777L, readRow.getOptionsOrNull().get(CommonOptions.EVENT_TIME.getName()));
     }
 
     @Test
