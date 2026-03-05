@@ -30,7 +30,11 @@ public enum EventType {
     LIFECYCLE_READER_CLOSE,
     LIFECYCLE_WRITER_CLOSE,
     READER_MESSAGE_DELAYED,
+<<<<<<< HEAD
     JOB_STATUS,
     SCHEMA_CHANGE_FLUSH,
     STAIN_TRACE,
+=======
+    JOB_STATUS
+>>>>>>> upstream/dev
 }
