@@ -49,6 +49,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class JobEventHttpReportHandler implements EventHandler {
@@ -65,6 +66,7 @@ public class JobEventHttpReportHandler implements EventHandler {
     private final ScheduledExecutorService scheduledExecutorService;
     private final Object localBufferLock = new Object();
     private final Deque<Event> localBuffer = new ArrayDeque<>();
+    private final AtomicBoolean closing = new AtomicBoolean(false);
 
     public JobEventHttpReportHandler(String httpEndpoint, Ringbuffer ringbuffer) {
         this(httpEndpoint, REPORT_INTERVAL, ringbuffer);
@@ -110,6 +112,9 @@ public class JobEventHttpReportHandler implements EventHandler {
 
     @Override
     public void handle(Event event) {
+        if (closing.get()) {
+            return;
+        }
         addToLocalBuffer(event);
         try {
             ringbuffer.addAsync(event, OverflowPolicy.OVERWRITE);
@@ -161,7 +166,10 @@ public class JobEventHttpReportHandler implements EventHandler {
         String events = JSON_MAPPER.writeValueAsString(snapshot);
         if (postEvents(events)) {
             synchronized (localBufferLock) {
-                localBuffer.clear();
+                int toDrain = snapshot.size();
+                while (toDrain-- > 0 && !localBuffer.isEmpty()) {
+                    localBuffer.pollFirst();
+                }
             }
         }
     }
@@ -185,19 +193,39 @@ public class JobEventHttpReportHandler implements EventHandler {
     @Override
     public void close() {
         log.info("Close http report handler");
+        closing.set(true);
         scheduledExecutorService.shutdown();
+        boolean schedulerTerminated = false;
         try {
-            // Flush all remaining events before closing
-            reportFromRingbuffer();
-        } catch (HazelcastInstanceNotActiveException e) {
+            schedulerTerminated = scheduledExecutorService.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (!schedulerTerminated) {
+            scheduledExecutorService.shutdownNow();
+            try {
+                schedulerTerminated =
+                        scheduledExecutorService.awaitTermination(2, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        try {
+            if (schedulerTerminated) {
+                // Flush all remaining events before closing.
+                reportFromRingbuffer();
+            } else {
+                log.warn("Timed out waiting for http report scheduler to stop");
+            }
+        } catch (HazelcastInstanceNotActiveException ignore) {
             // Hazelcast is shutting down, ringbuffer is not available. Flush from local buffer.
         } catch (IOException e) {
-            log.error("Failed to flush events on close", e);
+            log.error("Failed to flush events from ringbuffer on close", e);
         }
         try {
             reportFromLocalBuffer();
         } catch (IOException e) {
-            log.error("Failed to flush events on close", e);
+            log.error("Failed to flush events from local buffer on close", e);
         }
     }
 

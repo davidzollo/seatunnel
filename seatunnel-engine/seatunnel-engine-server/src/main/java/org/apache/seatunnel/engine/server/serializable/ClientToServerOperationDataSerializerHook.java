@@ -70,12 +70,9 @@ public final class ClientToServerOperationDataSerializerHook implements DataSeri
 
     public static final int UPLOAD_CONNECTOR_JAR_OPERATION = 11;
     public static final int GET_JOB_CHECKPOINT_OPERATION = 12;
-<<<<<<< HEAD
-    public static final int GET_JOB_TASK_MAPPING_OPERATION = 13;
-=======
     public static final int GET_CHECKPOINT_OVERVIEW_OPERATION = 13;
     public static final int GET_CHECKPOINT_HISTORY_OPERATION = 14;
->>>>>>> upstream/dev
+    public static final int GET_JOB_TASK_MAPPING_OPERATION = 15;
 
     public static final int FACTORY_ID =
             FactoryIdHelper.getFactoryId(
@@ -122,15 +119,12 @@ public final class ClientToServerOperationDataSerializerHook implements DataSeri
                     return new UploadConnectorJarOperation();
                 case GET_JOB_CHECKPOINT_OPERATION:
                     return new GetJobCheckpointOperation();
-<<<<<<< HEAD
-                case GET_JOB_TASK_MAPPING_OPERATION:
-                    return new GetJobTaskMappingOperation();
-=======
                 case GET_CHECKPOINT_OVERVIEW_OPERATION:
                     return new GetCheckpointOverviewOperation();
                 case GET_CHECKPOINT_HISTORY_OPERATION:
                     return new GetCheckpointHistoryOperation();
->>>>>>> upstream/dev
+                case GET_JOB_TASK_MAPPING_OPERATION:
+                    return new GetJobTaskMappingOperation();
                 default:
                     throw new IllegalArgumentException("Unknown type id " + typeId);
             }

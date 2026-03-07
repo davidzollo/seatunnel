@@ -92,13 +92,16 @@ public class IntermediateBlockingQueue extends AbstractIntermediateQueue<Blockin
                 return;
             }
             if (stage != null && record.getData() instanceof SeaTunnelRow) {
-                StainTraceUtils.appendIfPresent(
-                        (SeaTunnelRow) record.getData(),
-                        stage,
-                        getRunningTask().getTaskID(),
-                        System.currentTimeMillis(),
-                        getStainTraceMaxEntriesPerTrace(),
-                        getStainTraceEntriesTruncatedTotal());
+                SeaTunnelRow row = (SeaTunnelRow) record.getData();
+                if (StainTraceUtils.hasPayload(row)) {
+                    StainTraceUtils.appendIfPresent(
+                            row,
+                            stage,
+                            getRunningTask().getTaskID(),
+                            System.currentTimeMillis(),
+                            getStainTraceMaxEntriesPerTrace(),
+                            getStainTraceEntriesTruncatedTotal());
+                }
             }
             consumer.accept(record);
         }

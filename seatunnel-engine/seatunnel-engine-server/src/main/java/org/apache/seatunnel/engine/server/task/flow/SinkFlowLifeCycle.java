@@ -330,8 +330,9 @@ public class SinkFlowLifeCycle<T, CommitInfoT extends Serializable, AggregatedCo
                                                 taskLocation.getTaskID(),
                                                 tableId));
                                 stainTraceEventsReportedTotal.inc();
-                            } catch (Exception ignore) {
+                            } catch (Exception e) {
                                 stainTraceInvalidPayloadTotal.inc();
+                                log.debug("Failed to report stain trace event", e);
                             }
                         }
                     }

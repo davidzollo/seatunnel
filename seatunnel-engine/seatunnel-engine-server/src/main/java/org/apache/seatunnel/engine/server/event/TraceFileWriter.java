@@ -33,10 +33,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 
 @Slf4j
 public class TraceFileWriter implements Closeable {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH-mm-ss");
+    private static final Pattern JOB_ID_PATTERN = Pattern.compile("[a-zA-Z0-9_-]+");
 
     private final String jobId;
     private final String date;
@@ -47,13 +49,20 @@ public class TraceFileWriter implements Closeable {
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public TraceFileWriter(String baseDir, String jobId, String date) throws IOException {
+        if (jobId == null || !JOB_ID_PATTERN.matcher(jobId).matches()) {
+            throw new IllegalArgumentException("Invalid jobId for trace file path: " + jobId);
+        }
         this.jobId = jobId;
         this.date = date;
         this.eventCount = new AtomicLong(0);
         this.fileSize = new AtomicLong(0);
 
         // Create directory: {baseDir}/traces/{jobId}/{date}/
-        Path traceDir = Paths.get(baseDir, "traces", jobId, date);
+        Path basePath = Paths.get(baseDir).toAbsolutePath().normalize();
+        Path traceDir = basePath.resolve(Paths.get("traces", jobId, date)).normalize();
+        if (!traceDir.startsWith(basePath)) {
+            throw new IllegalArgumentException("Resolved trace path escapes baseDir: " + traceDir);
+        }
         Files.createDirectories(traceDir);
 
         // Generate file name: traces-{HH-mm-ss}-{uuid}.jsonl

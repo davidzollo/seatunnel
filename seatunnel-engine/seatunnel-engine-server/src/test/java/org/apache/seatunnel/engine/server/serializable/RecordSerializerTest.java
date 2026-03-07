@@ -55,7 +55,7 @@ public class RecordSerializerTest {
         serializer.write(out, new Record<>(row));
 
         byte[] bytes = out.toByteArray();
-        Assertions.assertEquals(3, bytes[0], "Should use V3 when options are present");
+        Assertions.assertEquals(1, bytes[0], "Should use V1 row type");
 
         BufferObjectDataInput in = service.createObjectDataInput(bytes);
         Record<?> deserialized = serializer.read(in);
@@ -84,7 +84,7 @@ public class RecordSerializerTest {
         serializer.write(out, new Record<>(row));
 
         byte[] bytes = out.toByteArray();
-        Assertions.assertEquals(3, bytes[0], "Should use V3 when options are present");
+        Assertions.assertEquals(1, bytes[0], "Should use V1 row type");
 
         BufferObjectDataInput in = service.createObjectDataInput(bytes);
         Record<?> deserialized = serializer.read(in);
@@ -211,7 +211,7 @@ public class RecordSerializerTest {
         serializer.write(out, new Record<>(row));
 
         byte[] bytes = out.toByteArray();
-        Assertions.assertEquals(3, bytes[0], "Should use V3 because EventTime option survives");
+        Assertions.assertEquals(1, bytes[0], "Should use V1 row type");
 
         BufferObjectDataInput in = service.createObjectDataInput(bytes);
         Record<?> deserialized = serializer.read(in);

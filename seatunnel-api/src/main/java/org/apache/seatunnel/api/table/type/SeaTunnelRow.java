@@ -100,7 +100,10 @@ public final class SeaTunnelRow implements Serializable {
         SeaTunnelRow newRow = new SeaTunnelRow(newFields);
         newRow.setRowKind(this.getRowKind());
         newRow.setTableId(this.getTableId());
-        newRow.setOptions(this.getOptions());
+        Map<String, Object> sourceOptions = this.getOptionsOrNull();
+        if (sourceOptions != null) {
+            newRow.setOptions(new HashMap<>(sourceOptions));
+        }
         return newRow;
     }
 
@@ -112,7 +115,10 @@ public final class SeaTunnelRow implements Serializable {
         SeaTunnelRow newRow = new SeaTunnelRow(newFields);
         newRow.setRowKind(this.getRowKind());
         newRow.setTableId(this.getTableId());
-        newRow.setOptions(this.getOptions());
+        Map<String, Object> sourceOptions = this.getOptionsOrNull();
+        if (sourceOptions != null) {
+            newRow.setOptions(new HashMap<>(sourceOptions));
+        }
         return newRow;
     }
 
@@ -384,16 +390,13 @@ public final class SeaTunnelRow implements Serializable {
         SeaTunnelRow that = (SeaTunnelRow) o;
         return Objects.equals(tableId, that.tableId)
                 && rowKind == that.rowKind
-                && Arrays.deepEquals(fields, that.fields)
-                && Arrays.equals(
-                        getTracePayloadOrNull(options), getTracePayloadOrNull(that.options));
+                && Arrays.deepEquals(fields, that.fields);
     }
 
     @Override
     public int hashCode() {
         int result = Objects.hash(tableId, rowKind);
         result = 31 * result + Arrays.deepHashCode(fields);
-        result = 31 * result + Arrays.hashCode(getTracePayloadOrNull(options));
         return result;
     }
 
@@ -410,13 +413,5 @@ public final class SeaTunnelRow implements Serializable {
         }
         sb.append('}');
         return sb.toString();
-    }
-
-    private static byte[] getTracePayloadOrNull(Map<String, Object> options) {
-        if (options == null || options.isEmpty()) {
-            return null;
-        }
-        Object payload = options.get(TRACE_PAYLOAD_OPTION_KEY);
-        return payload instanceof byte[] ? (byte[]) payload : null;
     }
 }
