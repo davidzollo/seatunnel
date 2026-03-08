@@ -379,6 +379,14 @@ public final class SeaTunnelRow implements Serializable {
         }
     }
 
+    private byte[] getTracePayload() {
+        if (options == null) {
+            return null;
+        }
+        Object payload = options.get(TRACE_PAYLOAD_OPTION_KEY);
+        return payload instanceof byte[] ? (byte[]) payload : null;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -390,13 +398,15 @@ public final class SeaTunnelRow implements Serializable {
         SeaTunnelRow that = (SeaTunnelRow) o;
         return Objects.equals(tableId, that.tableId)
                 && rowKind == that.rowKind
-                && Arrays.deepEquals(fields, that.fields);
+                && Arrays.deepEquals(fields, that.fields)
+                && Arrays.equals(getTracePayload(), that.getTracePayload());
     }
 
     @Override
     public int hashCode() {
         int result = Objects.hash(tableId, rowKind);
         result = 31 * result + Arrays.deepHashCode(fields);
+        result = 31 * result + Arrays.hashCode(getTracePayload());
         return result;
     }
 
