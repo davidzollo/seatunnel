@@ -251,6 +251,26 @@ public class CanalToPulsarIT extends TestSuiteBase implements TestResource {
         }
     }
 
+    private void waitForCanalDataInTopic() throws PulsarClientException {
+        try (PulsarAdmin pulsarAdmin =
+                PulsarAdmin.builder()
+                        .serviceHttpUrl(
+                                String.format(
+                                        "http://%s:%s",
+                                        PULSAR_CONTAINER.getHost(),
+                                        PULSAR_CONTAINER.getMappedPort(PULSAR_BROKER_HTTP_PORT)))
+                        .build()) {
+            try {
+                String topicFullName = "persistent://public/default/" + TOPIC;
+                long storageSize = pulsarAdmin.topics().getStats(topicFullName).getStorageSize();
+                Assertions.assertTrue(
+                        storageSize > 0, "Canal has not yet forwarded data to topic " + TOPIC);
+            } catch (PulsarAdminException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
     @BeforeAll
     @Override
     public void startUp() throws ClassNotFoundException, InterruptedException {
@@ -275,8 +295,13 @@ public class CanalToPulsarIT extends TestSuiteBase implements TestResource {
                 .untilAsserted(this::waitForTopicCreated);
         // before ddl, the pulsar_canal connector should be started
         inventoryDatabase.createAndInitialize();
-        // wait pulsar get data from canal server
-        Thread.sleep(10 * 1000);
+        // wait for Canal server to forward data to Pulsar topic
+        given().ignoreExceptions()
+                .await()
+                .atLeast(100, TimeUnit.MILLISECONDS)
+                .pollInterval(2, TimeUnit.SECONDS)
+                .atMost(3, TimeUnit.MINUTES)
+                .untilAsserted(this::waitForCanalDataInTopic);
         LOG.info("The fourth stage: Starting PostgresSQL container...");
         createPostgreSQLContainer();
         Startables.deepStart(Stream.of(POSTGRESQL_CONTAINER)).join();
