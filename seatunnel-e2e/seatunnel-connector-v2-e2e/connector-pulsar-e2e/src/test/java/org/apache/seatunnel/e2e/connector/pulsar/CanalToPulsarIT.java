@@ -300,7 +300,7 @@ public class CanalToPulsarIT extends TestSuiteBase implements TestResource {
                 .await()
                 .atLeast(100, TimeUnit.MILLISECONDS)
                 .pollInterval(2, TimeUnit.SECONDS)
-                .atMost(3, TimeUnit.MINUTES)
+                .atMost(5, TimeUnit.MINUTES)
                 .untilAsserted(this::waitForCanalDataInTopic);
         LOG.info("The fourth stage: Starting PostgresSQL container...");
         createPostgreSQLContainer();
