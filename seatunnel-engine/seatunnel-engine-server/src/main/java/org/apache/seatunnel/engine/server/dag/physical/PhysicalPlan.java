@@ -88,6 +88,8 @@ public class PhysicalPlan {
 
     private volatile boolean isRunning = false;
 
+    private volatile JobStatus currJobStatus;
+
     public PhysicalPlan(
             @NonNull List<SubPlan> pipelineList,
             @NonNull ExecutorService executorService,
@@ -128,6 +130,7 @@ public class PhysicalPlan {
 
         this.runningJobStateIMap = runningJobStateIMap;
         this.runningJobStateTimestampsIMap = runningJobStateTimestampsIMap;
+        this.currJobStatus = (JobStatus) runningJobStateIMap.get(jobId);
     }
 
     public void setJobMaster(JobMaster jobMaster) {
@@ -193,6 +196,10 @@ public class PhysicalPlan {
 
     public void cancelJob() {
         JobStatus jobStatus = getJobStatus();
+        if (jobStatus == null) {
+            log.error("{} job state is null, cannot cancel", jobFullName);
+            return;
+        }
         if (jobStatus.isEndState()) {
             log.warn(
                     String.format(
@@ -200,7 +207,7 @@ public class PhysicalPlan {
             return;
         }
 
-        if (((JobStatus) runningJobStateIMap.get(jobId)).ordinal() <= JobStatus.PENDING.ordinal()) {
+        if (jobStatus.ordinal() <= JobStatus.PENDING.ordinal()) {
             // Tasks with the status 'INITIALIZING', 'CREATED', 'PENDING' need to be set directly to
             // the 'CANCELLED' state because it has not yet started running
             updateJobState(JobStatus.CANCELED);
@@ -229,6 +236,14 @@ public class PhysicalPlan {
         // we must update runningJobStateTimestampsIMap first and then can update
         // runningJobStateIMap
         Long[] stateTimestamps = runningJobStateTimestampsIMap.get(jobId);
+        if (stateTimestamps == null) {
+            log.warn(
+                    "{} state timestamps entry missing from distributed map, "
+                            + "skip timestamp update for target state {}",
+                    jobFullName,
+                    targetState);
+            return;
+        }
         stateTimestamps[targetState.ordinal()] = System.currentTimeMillis();
         runningJobStateTimestampsIMap.set(jobId, stateTimestamps);
     }
@@ -244,6 +259,27 @@ public class PhysicalPlan {
     public synchronized void updateJobState(@NonNull JobStatus targetState) {
         try {
             JobStatus current = (JobStatus) runningJobStateIMap.get(jobId);
+            boolean stateEntryMissing = false;
+            if (current == null) {
+                stateEntryMissing = true;
+                current = currJobStatus;
+                log.warn(
+                        "{} job state entry missing from distributed map (possibly due to node "
+                                + "removal during scaling down), using local state {} as fallback, "
+                                + "target state: {}",
+                        jobFullName,
+                        current,
+                        targetState);
+            }
+            if (current == null) {
+                log.error(
+                        "{} both distributed and local job state are null, "
+                                + "cannot transition to {}",
+                        jobFullName,
+                        targetState);
+                return;
+            }
+
             log.debug(
                     "Try to update the {} state from {} to {}", jobFullName, current, targetState);
 
@@ -261,17 +297,20 @@ public class PhysicalPlan {
 
             // Now do the actual state transition, we must update runningJobStateTimestampsIMap
             // first and then can update runningJobStateIMap
-            RetryUtils.retryWithException(
-                    () -> {
-                        updateStateTimestamps(targetState);
-                        runningJobStateIMap.set(jobId, targetState);
-                        return null;
-                    },
-                    new RetryUtils.RetryMaterial(
-                            Constant.OPERATION_RETRY_TIME,
-                            true,
-                            ExceptionUtil::isOperationNeedRetryException,
-                            Constant.OPERATION_RETRY_SLEEP));
+            if (!stateEntryMissing) {
+                RetryUtils.retryWithException(
+                        () -> {
+                            updateStateTimestamps(targetState);
+                            runningJobStateIMap.set(jobId, targetState);
+                            return null;
+                        },
+                        new RetryUtils.RetryMaterial(
+                                Constant.OPERATION_RETRY_TIME,
+                                true,
+                                ExceptionUtil::isOperationNeedRetryException,
+                                Constant.OPERATION_RETRY_SLEEP));
+            }
+            this.currJobStatus = targetState;
             log.info(
                     String.format(
                             "%s turned from state %s to %s.", jobFullName, current, targetState));
@@ -289,7 +328,16 @@ public class PhysicalPlan {
     }
 
     public JobStatus getJobStatus() {
-        return (JobStatus) runningJobStateIMap.get(jobId);
+        JobStatus status = (JobStatus) runningJobStateIMap.get(jobId);
+        if (status == null) {
+            log.warn(
+                    "{} job state entry missing from distributed map, "
+                            + "using local cached state {} as fallback",
+                    jobFullName,
+                    currJobStatus);
+            return currJobStatus;
+        }
+        return status;
     }
 
     public String getJobFullName() {

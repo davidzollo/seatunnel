@@ -340,6 +340,28 @@ public class SubPlan {
     public synchronized void updatePipelineState(@NonNull PipelineStatus targetState) {
         try {
             PipelineStatus current = (PipelineStatus) runningJobStateIMap.get(pipelineLocation);
+            // When a node is removed during scaling down, the IMap entry may be lost.
+            // Fall back to the local cached state to allow state progression.
+            boolean stateEntryMissing = false;
+            if (current == null) {
+                stateEntryMissing = true;
+                current = currPipelineStatus;
+                log.warn(
+                        "{} state entry missing from distributed map (possibly due to node "
+                                + "removal during scaling down), using local state {} as fallback, "
+                                + "target state: {}",
+                        pipelineFullName,
+                        current,
+                        targetState);
+            }
+            if (current == null) {
+                log.error(
+                        "{} both distributed and local state are null, "
+                                + "cannot transition to {}",
+                        pipelineFullName,
+                        targetState);
+                return;
+            }
             log.debug(
                     String.format(
                             "Try to update the %s state from %s to %s",
@@ -364,17 +386,19 @@ public class SubPlan {
             // we must update runningJobStateTimestampsIMap first and then can update
             // runningJobStateIMap
             PipelineStatus finalTargetState = targetState;
-            RetryUtils.retryWithException(
-                    () -> {
-                        updateStateTimestamps(finalTargetState);
-                        runningJobStateIMap.set(pipelineLocation, finalTargetState);
-                        return null;
-                    },
-                    new RetryUtils.RetryMaterial(
-                            Constant.OPERATION_RETRY_TIME,
-                            true,
-                            exception -> ExceptionUtil.isOperationNeedRetryException(exception),
-                            Constant.OPERATION_RETRY_SLEEP));
+            if (!stateEntryMissing) {
+                RetryUtils.retryWithException(
+                        () -> {
+                            updateStateTimestamps(finalTargetState);
+                            runningJobStateIMap.set(pipelineLocation, finalTargetState);
+                            return null;
+                        },
+                        new RetryUtils.RetryMaterial(
+                                Constant.OPERATION_RETRY_TIME,
+                                true,
+                                exception -> ExceptionUtil.isOperationNeedRetryException(exception),
+                                Constant.OPERATION_RETRY_SLEEP));
+            }
             this.currPipelineStatus = targetState;
             log.info(
                     String.format(
@@ -418,6 +442,12 @@ public class SubPlan {
         // we must update runningJobStateTimestampsIMap first and then can update
         // runningJobStateIMap
         Long[] stateTimestamps = runningJobStateTimestampsIMap.get(pipelineLocation);
+        if (stateTimestamps == null) {
+            log.warn(
+                    "{} state timestamps entry missing from distributed map, skip timestamp update",
+                    pipelineFullName);
+            return;
+        }
         stateTimestamps[targetState.ordinal()] = System.currentTimeMillis();
         runningJobStateTimestampsIMap.set(pipelineLocation, stateTimestamps);
     }
