@@ -50,9 +50,17 @@ public class MultiTableWriterRunnable implements Runnable {
     }
 
     /**
-     * Infinite loop draining the queue; row.getArity() == 0 as control signal for schema-evolution
-     * events; synchronized(this) block ensures snapshotState cannot run concurrently with an active
-     * write
+     * Continuously polls rows from the owned queue and dispatches each row to the
+     * corresponding per-table {@link SinkWriter}.
+     *
+     * Rows with zero arity are treated as control/signal rows and skipped.
+     * In normal flow, schema-evolution signal rows are filtered in
+     * {@link MultiTableSinkWriter#write(SeaTunnelRow)} through options.
+     * This is a defensive guard for zero-arity rows reaching this runnable.
+     *
+     * {@code synchronized(this)} is used to avoid concurrent execution with
+     * snapshot and schema-change paths in {@link MultiTableSinkWriter} that also
+     * lock on the same runnable instance.
      */
     @Override
     public void run() {
