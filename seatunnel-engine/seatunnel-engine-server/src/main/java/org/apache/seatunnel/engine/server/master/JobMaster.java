@@ -55,6 +55,7 @@ import org.apache.seatunnel.engine.server.dag.physical.SubPlan;
 import org.apache.seatunnel.engine.server.execution.TaskExecutionState;
 import org.apache.seatunnel.engine.server.execution.TaskGroupLocation;
 import org.apache.seatunnel.engine.server.execution.TaskLocation;
+import org.apache.seatunnel.engine.server.master.cleanup.PipelineCleanupRecord;
 import org.apache.seatunnel.engine.server.metrics.JobMetricsUtil;
 import org.apache.seatunnel.engine.server.metrics.SeaTunnelMetricsContext;
 import org.apache.seatunnel.engine.server.resourcemanager.ResourceManager;
@@ -759,11 +760,78 @@ public class JobMaster {
         this.cleanTaskGroupContext(pipelineLocation);
     }
 
+    public void enqueuePipelineCleanupIfNeeded(
+            PipelineLocation pipelineLocation, PipelineStatus pipelineStatus) {
+        if (pipelineLocation == null || pipelineStatus == null) {
+            return;
+        }
+        boolean savepointEnd =
+                PipelineStatus.FINISHED.equals(pipelineStatus)
+                        && checkpointManager != null
+                        && checkpointManager.isPipelineSavePointEnd(pipelineLocation);
+        boolean shouldCleanup =
+                PipelineStatus.FAILED.equals(pipelineStatus)
+                        || PipelineStatus.CANCELED.equals(pipelineStatus)
+                        || (PipelineStatus.FINISHED.equals(pipelineStatus) && !savepointEnd);
+        if (!shouldCleanup) {
+            return;
+        }
+
+        Map<TaskGroupLocation, SlotProfile> slotProfileMap =
+                ownedSlotProfilesIMap.get(pipelineLocation);
+        Map<TaskGroupLocation, Address> taskGroups = new HashMap<>();
+        if (slotProfileMap != null) {
+            slotProfileMap.forEach(
+                    (taskGroupLocation, slotProfile) ->
+                            taskGroups.put(taskGroupLocation, slotProfile.getWorker()));
+        }
+
+        IMap<PipelineLocation, PipelineCleanupRecord> pendingCleanupIMap =
+                nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_PENDING_PIPELINE_CLEANUP);
+        long now = System.currentTimeMillis();
+        PipelineCleanupRecord newRecord =
+                new PipelineCleanupRecord(
+                        pipelineLocation,
+                        pipelineStatus,
+                        savepointEnd,
+                        taskGroups,
+                        Collections.emptySet(),
+                        false,
+                        now,
+                        0,
+                        0);
+
+        while (true) {
+            PipelineCleanupRecord existing = pendingCleanupIMap.get(pipelineLocation);
+            if (existing == null) {
+                PipelineCleanupRecord previous =
+                        pendingCleanupIMap.putIfAbsent(pipelineLocation, newRecord);
+                if (previous == null) {
+                    return;
+                }
+                existing = previous;
+            }
+            PipelineCleanupRecord merged = existing.mergeFrom(newRecord);
+            if (merged.equals(existing)) {
+                return;
+            }
+            if (pendingCleanupIMap.replace(pipelineLocation, existing, merged)) {
+                return;
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
     public void removeMetricsContext(
             PipelineLocation pipelineLocation, PipelineStatus pipelineStatus) {
         if ((pipelineStatus.equals(PipelineStatus.FINISHED)
                         && !checkpointManager.isPipelineSavePointEnd(pipelineLocation))
-                || pipelineStatus.equals(PipelineStatus.CANCELED)) {
+                || pipelineStatus.equals(PipelineStatus.CANCELED)
+                || pipelineStatus.equals(PipelineStatus.FAILED)) {
 
             boolean lockedIMap = false;
             try {

@@ -291,6 +291,8 @@ public class SubPlan {
         try {
             RetryUtils.retryWithException(
                     () -> {
+                        jobMaster.enqueuePipelineCleanupIfNeeded(
+                                getPipelineLocation(), pipelineStatus);
                         jobMaster.savePipelineMetricsToHistory(getPipelineLocation());
                         try {
                             jobMaster.removeMetricsContext(getPipelineLocation(), pipelineStatus);

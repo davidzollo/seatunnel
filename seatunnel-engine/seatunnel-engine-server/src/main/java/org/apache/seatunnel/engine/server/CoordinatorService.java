@@ -53,6 +53,7 @@ import org.apache.seatunnel.engine.server.execution.TaskGroupLocation;
 import org.apache.seatunnel.engine.server.execution.TaskLocation;
 import org.apache.seatunnel.engine.server.master.JobHistoryService;
 import org.apache.seatunnel.engine.server.master.JobMaster;
+import org.apache.seatunnel.engine.server.master.cleanup.PipelineCleanupRecord;
 import org.apache.seatunnel.engine.server.metrics.JobMetricsUtil;
 import org.apache.seatunnel.engine.server.metrics.SeaTunnelMetricsContext;
 import org.apache.seatunnel.engine.server.resourcemanager.NoEnoughResourceException;
@@ -60,6 +61,7 @@ import org.apache.seatunnel.engine.server.resourcemanager.ResourceManager;
 import org.apache.seatunnel.engine.server.resourcemanager.ResourceManagerFactory;
 import org.apache.seatunnel.engine.server.resourcemanager.resource.SlotProfile;
 import org.apache.seatunnel.engine.server.service.jar.ConnectorPackageService;
+import org.apache.seatunnel.engine.server.task.operation.CleanTaskGroupContextOperation;
 import org.apache.seatunnel.engine.server.task.operation.GetMetricsOperation;
 import org.apache.seatunnel.engine.server.telemetry.metrics.entity.JobCounter;
 import org.apache.seatunnel.engine.server.telemetry.metrics.entity.ThreadPoolStatus;
@@ -70,6 +72,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.hazelcast.cluster.Address;
 import com.hazelcast.config.Config;
 import com.hazelcast.core.HazelcastInstanceNotActiveException;
+import com.hazelcast.core.OperationTimeoutException;
 import com.hazelcast.internal.serialization.Data;
 import com.hazelcast.internal.services.MembershipServiceEvent;
 import com.hazelcast.logging.ILogger;
@@ -80,6 +83,7 @@ import lombok.NonNull;
 import scala.Tuple2;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -100,6 +104,8 @@ import java.util.stream.Collectors;
 import static org.apache.seatunnel.engine.server.metrics.JobMetricsUtil.toJobMetricsMap;
 
 public class CoordinatorService {
+    private static final int PIPELINE_CLEANUP_INTERVAL_SECONDS = 60;
+
     private final NodeEngineImpl nodeEngine;
     private final ILogger logger;
 
@@ -171,6 +177,8 @@ public class CoordinatorService {
 
     private IMap<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> metricsImap;
 
+    private IMap<PipelineLocation, PipelineCleanupRecord> pendingPipelineCleanupIMap;
+
     /** If this node is a master node */
     private volatile boolean isActive = false;
 
@@ -179,6 +187,8 @@ public class CoordinatorService {
     private final SeaTunnelServer seaTunnelServer;
 
     private final ScheduledExecutorService masterActiveListener;
+
+    private final ScheduledExecutorService pipelineCleanupScheduler;
 
     private final EngineConfig engineConfig;
 
@@ -218,6 +228,16 @@ public class CoordinatorService {
         masterActiveListener = Executors.newSingleThreadScheduledExecutor();
         masterActiveListener.scheduleAtFixedRate(
                 this::checkNewActiveMaster, 0, 100, TimeUnit.MILLISECONDS);
+        pipelineCleanupScheduler =
+                Executors.newSingleThreadScheduledExecutor(
+                        new ThreadFactoryBuilder()
+                                .setNameFormat("seatunnel-pipeline-cleanup-%d")
+                                .build());
+        pipelineCleanupScheduler.scheduleAtFixedRate(
+                this::cleanupPendingPipelines,
+                PIPELINE_CLEANUP_INTERVAL_SECONDS,
+                PIPELINE_CLEANUP_INTERVAL_SECONDS,
+                TimeUnit.SECONDS);
         scheduleStrategy = engineConfig.getScheduleStrategy();
         isWaitStrategy = scheduleStrategy.equals(ScheduleStrategy.WAIT);
         logger.info("Start pending job schedule thread");
@@ -410,6 +430,8 @@ public class CoordinatorService {
         ownedSlotProfilesIMap =
                 nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_OWNED_SLOT_PROFILES);
         metricsImap = nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_RUNNING_JOB_METRICS);
+        pendingPipelineCleanupIMap =
+                nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_PENDING_PIPELINE_CLEANUP);
         jobHistoryService =
                 new JobHistoryService(
                         nodeEngine,
@@ -442,6 +464,217 @@ public class CoordinatorService {
                 new PassiveCompletableFuture(
                         CompletableFuture.runAsync(
                                 this::restoreAllRunningJobFromMasterNodeSwitch, executorService));
+    }
+
+    private void cleanupPendingPipelines() {
+        if (!isActive) {
+            return;
+        }
+        IMap<PipelineLocation, PipelineCleanupRecord> pendingCleanupIMap =
+                this.pendingPipelineCleanupIMap;
+        if (pendingCleanupIMap == null || pendingCleanupIMap.isEmpty()) {
+            return;
+        }
+
+        try {
+            for (Map.Entry<PipelineLocation, PipelineCleanupRecord> entry :
+                    pendingCleanupIMap.entrySet()) {
+                processPendingPipelineCleanup(entry.getKey(), entry.getValue());
+            }
+        } catch (HazelcastInstanceNotActiveException e) {
+            logger.warning(
+                    String.format(
+                            "Skip pending pipeline cleanup: hazelcast not active: %s",
+                            ExceptionUtils.getMessage(e)));
+        } catch (Throwable t) {
+            logger.warning(
+                    String.format(
+                            "Unexpected exception in pending pipeline cleanup: %s",
+                            ExceptionUtils.getMessage(t)),
+                    t);
+        }
+    }
+
+    private void processPendingPipelineCleanup(
+            PipelineLocation pipelineLocation, PipelineCleanupRecord record) {
+        if (pipelineLocation == null || record == null) {
+            return;
+        }
+        if (!shouldCleanup(record)) {
+            removePendingCleanupRecord(pipelineLocation, record);
+            return;
+        }
+
+        PipelineStatus currentStatus = getPipelineStatusFromIMap(pipelineLocation);
+        if (currentStatus != null && !currentStatus.isEndState()) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        PipelineCleanupRecord updated = copy(record);
+        updated.setLastAttemptTimeMillis(now);
+        updated.setAttemptCount(record.getAttemptCount() + 1);
+
+        if (!updated.isMetricsImapCleaned() && cleanupPipelineMetrics(pipelineLocation)) {
+            updated.setMetricsImapCleaned(true);
+        }
+
+        Map<TaskGroupLocation, Address> taskGroups = updated.getTaskGroups();
+        if (taskGroups != null && !taskGroups.isEmpty()) {
+            for (Map.Entry<TaskGroupLocation, Address> taskGroup : taskGroups.entrySet()) {
+                TaskGroupLocation taskGroupLocation = taskGroup.getKey();
+                if (updated.getCleanedTaskGroups() != null
+                        && updated.getCleanedTaskGroups().contains(taskGroupLocation)) {
+                    continue;
+                }
+                Address workerAddress = taskGroup.getValue();
+                if (workerAddress == null
+                        || nodeEngine.getClusterService().getMember(workerAddress) == null) {
+                    continue;
+                }
+                try {
+                    NodeEngineUtil.sendOperationToMemberNode(
+                                    nodeEngine,
+                                    new CleanTaskGroupContextOperation(taskGroupLocation),
+                                    workerAddress)
+                            .get();
+                    updated.getCleanedTaskGroups().add(taskGroupLocation);
+                } catch (HazelcastInstanceNotActiveException e) {
+                    logger.warning(
+                            String.format(
+                                    "%s clean TaskGroupContext failed: %s",
+                                    taskGroupLocation, ExceptionUtils.getMessage(e)));
+                } catch (Exception e) {
+                    logger.warning(
+                            String.format(
+                                    "%s clean TaskGroupContext failed: %s",
+                                    taskGroupLocation, ExceptionUtils.getMessage(e)),
+                            e);
+                }
+            }
+        }
+
+        boolean replaced = pendingPipelineCleanupIMap.replace(pipelineLocation, record, updated);
+        if (!replaced) {
+            return;
+        }
+        if (updated.isCleaned()) {
+            pendingPipelineCleanupIMap.remove(pipelineLocation, updated);
+        }
+    }
+
+    private void removePendingCleanupRecord(
+            PipelineLocation pipelineLocation, PipelineCleanupRecord record) {
+        try {
+            pendingPipelineCleanupIMap.remove(pipelineLocation, record);
+        } catch (Exception e) {
+            logger.warning(
+                    String.format(
+                            "Remove pending pipeline cleanup record failed: %s",
+                            ExceptionUtils.getMessage(e)),
+                    e);
+        }
+    }
+
+    private boolean shouldCleanup(PipelineCleanupRecord record) {
+        if (record == null || record.getFinalStatus() == null) {
+            return false;
+        }
+        if (record.isSavepointEnd()) {
+            return false;
+        }
+        return PipelineStatus.FAILED.equals(record.getFinalStatus())
+                || PipelineStatus.CANCELED.equals(record.getFinalStatus())
+                || PipelineStatus.FINISHED.equals(record.getFinalStatus());
+    }
+
+    private PipelineStatus getPipelineStatusFromIMap(PipelineLocation pipelineLocation) {
+        Object state =
+                runningJobStateIMap != null ? runningJobStateIMap.get(pipelineLocation) : null;
+        return state instanceof PipelineStatus ? (PipelineStatus) state : null;
+    }
+
+    private PipelineCleanupRecord copy(PipelineCleanupRecord record) {
+        Map<TaskGroupLocation, Address> taskGroups =
+                record.getTaskGroups() == null
+                        ? Collections.emptyMap()
+                        : new HashMap<>(record.getTaskGroups());
+        Set<TaskGroupLocation> cleanedTaskGroups =
+                record.getCleanedTaskGroups() == null
+                        ? new HashSet<>()
+                        : new HashSet<>(record.getCleanedTaskGroups());
+        return new PipelineCleanupRecord(
+                record.getPipelineLocation(),
+                record.getFinalStatus(),
+                record.isSavepointEnd(),
+                taskGroups,
+                cleanedTaskGroups,
+                record.isMetricsImapCleaned(),
+                record.getCreateTimeMillis(),
+                record.getLastAttemptTimeMillis(),
+                record.getAttemptCount());
+    }
+
+    private boolean cleanupPipelineMetrics(PipelineLocation pipelineLocation) {
+        if (metricsImap == null) {
+            return false;
+        }
+        boolean lockedIMap = false;
+        try {
+            lockedIMap =
+                    metricsImap.tryLock(Constant.IMAP_RUNNING_JOB_METRICS_KEY, 5, TimeUnit.SECONDS);
+            if (!lockedIMap) {
+                return false;
+            }
+
+            HashMap<TaskLocation, SeaTunnelMetricsContext> centralMap =
+                    metricsImap.get(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
+            if (centralMap == null || centralMap.isEmpty()) {
+                return true;
+            }
+
+            List<TaskLocation> toRemove =
+                    centralMap.keySet().stream()
+                            .filter(
+                                    taskLocation ->
+                                            pipelineLocation.equals(
+                                                    taskLocation
+                                                            .getTaskGroupLocation()
+                                                            .getPipelineLocation()))
+                            .collect(Collectors.toList());
+            if (!toRemove.isEmpty()) {
+                toRemove.forEach(centralMap::remove);
+                metricsImap.put(Constant.IMAP_RUNNING_JOB_METRICS_KEY, centralMap);
+            }
+            return true;
+        } catch (Exception e) {
+            logger.warning(
+                    String.format(
+                            "Failed to remove metrics context for pipeline %s: %s",
+                            pipelineLocation, ExceptionUtils.getMessage(e)),
+                    e);
+            return false;
+        } finally {
+            if (lockedIMap) {
+                boolean unlocked = false;
+                while (!unlocked) {
+                    try {
+                        metricsImap.unlock(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
+                        unlocked = true;
+                    } catch (OperationTimeoutException e) {
+                        logger.warning(
+                                String.format(
+                                        "Unlock metrics imap failed: %s",
+                                        ExceptionUtils.getMessage(e)),
+                                e);
+                    }
+                }
+            }
+        }
+    }
+
+    void runPendingPipelineCleanupOnce() {
+        cleanupPendingPipelines();
     }
 
     private void restoreAllRunningJobFromMasterNodeSwitch() {
@@ -889,6 +1122,9 @@ public class CoordinatorService {
     public void shutdown() {
         if (masterActiveListener != null) {
             masterActiveListener.shutdownNow();
+        }
+        if (pipelineCleanupScheduler != null) {
+            pipelineCleanupScheduler.shutdownNow();
         }
         clearCoordinatorService();
     }
