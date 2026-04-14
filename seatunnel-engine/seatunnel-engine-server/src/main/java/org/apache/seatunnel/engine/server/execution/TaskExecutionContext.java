@@ -18,6 +18,7 @@
 package org.apache.seatunnel.engine.server.execution;
 
 import org.apache.seatunnel.engine.common.Constant;
+import org.apache.seatunnel.engine.common.utils.JobMetricsPartitionUtils;
 import org.apache.seatunnel.engine.server.TaskExecutionService;
 import org.apache.seatunnel.engine.server.metrics.SeaTunnelMetricsContext;
 import org.apache.seatunnel.engine.server.utils.NodeEngineUtil;
@@ -60,8 +61,15 @@ public class TaskExecutionContext {
     public SeaTunnelMetricsContext getOrCreateMetricsContext(TaskLocation taskLocation) {
         IMap<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> map =
                 nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_RUNNING_JOB_METRICS);
-        HashMap<TaskLocation, SeaTunnelMetricsContext> centralMap =
-                map.get(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
+        int partitionCount =
+                taskExecutionService
+                        .getSeaTunnelConfig()
+                        .getEngineConfig()
+                        .getJobMetricsPartitionCount();
+        long partition =
+                JobMetricsPartitionUtils.getMetricsImapPartition(taskLocation, partitionCount);
+        // Only fetch the metrics bucket for the current task to avoid remote full-map reads.
+        HashMap<TaskLocation, SeaTunnelMetricsContext> centralMap = map.get(partition);
         return centralMap == null || centralMap.get(taskLocation) == null
                 ? new SeaTunnelMetricsContext()
                 : centralMap.get(taskLocation);

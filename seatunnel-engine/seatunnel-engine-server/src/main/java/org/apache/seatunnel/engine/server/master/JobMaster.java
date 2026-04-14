@@ -66,7 +66,6 @@ import org.apache.seatunnel.engine.server.utils.NodeEngineUtil;
 
 import com.hazelcast.cluster.Address;
 import com.hazelcast.core.HazelcastInstanceNotActiveException;
-import com.hazelcast.core.OperationTimeoutException;
 import com.hazelcast.flakeidgen.FlakeIdGenerator;
 import com.hazelcast.internal.serialization.Data;
 import com.hazelcast.jet.datamodel.Tuple2;
@@ -90,7 +89,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.hazelcast.jet.impl.util.ExceptionUtil.withTryCatch;
@@ -833,46 +831,30 @@ public class JobMaster {
                 || pipelineStatus.equals(PipelineStatus.CANCELED)
                 || pipelineStatus.equals(PipelineStatus.FAILED)) {
 
-            boolean lockedIMap = false;
             try {
-                lockedIMap =
-                        metricsImap.tryLock(
-                                Constant.IMAP_RUNNING_JOB_METRICS_KEY, 5, TimeUnit.SECONDS);
-                if (!lockedIMap) {
-                    LOGGER.warning("lock imap failed in update metrics");
-                    return;
-                }
-
-                HashMap<TaskLocation, SeaTunnelMetricsContext> centralMap =
-                        metricsImap.get(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
-                if (centralMap != null) {
-                    List<TaskLocation> collect =
-                            centralMap.keySet().stream()
-                                    .filter(
-                                            taskLocation -> {
-                                                return taskLocation
-                                                        .getTaskGroupLocation()
-                                                        .getPipelineLocation()
-                                                        .equals(pipelineLocation);
-                                            })
-                                    .collect(Collectors.toList());
-                    collect.forEach(centralMap::remove);
-                    metricsImap.put(Constant.IMAP_RUNNING_JOB_METRICS_KEY, centralMap);
+                int partitionCount = engineConfig.getJobMetricsPartitionCount();
+                // Clean each partition in a single compute so we avoid full-map fetches and keep
+                // removal atomic within the bucket.
+                for (long partition = 0; partition < partitionCount; partition++) {
+                    metricsImap.compute(
+                            partition,
+                            (key, centralMap) -> {
+                                if (centralMap == null || centralMap.isEmpty()) {
+                                    return centralMap;
+                                }
+                                centralMap
+                                        .entrySet()
+                                        .removeIf(
+                                                entry ->
+                                                        pipelineLocation.equals(
+                                                                entry.getKey()
+                                                                        .getTaskGroupLocation()
+                                                                        .getPipelineLocation()));
+                                return centralMap.isEmpty() ? null : centralMap;
+                            });
                 }
             } catch (Exception e) {
                 LOGGER.warning("failed to remove metrics context", e);
-            } finally {
-                if (lockedIMap) {
-                    boolean unLockedIMap = false;
-                    while (!unLockedIMap) {
-                        try {
-                            metricsImap.unlock(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
-                            unLockedIMap = true;
-                        } catch (OperationTimeoutException e) {
-                            LOGGER.warning("unlock imap failed in update metrics", e);
-                        }
-                    }
-                }
             }
         }
     }

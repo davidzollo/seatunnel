@@ -51,6 +51,13 @@ public class ServerConfigOptions {
                     .defaultValue(10)
                     .withDescription("The interval (in seconds) of job metrics backups");
 
+    public static final Option<Integer> JOB_METRICS_PARTITION_COUNT =
+            Options.key("job-metrics-partition-count")
+                    .intType()
+                    .defaultValue(10)
+                    .withDescription(
+                            "The partition count for running job metrics buckets stored in IMap.");
+
     public static final Option<ThreadShareMode> TASK_EXECUTION_THREAD_SHARE_MODE =
             Options.key("task_execution_thread_share_mode")
                     .type(new TypeReference<ThreadShareMode>() {})

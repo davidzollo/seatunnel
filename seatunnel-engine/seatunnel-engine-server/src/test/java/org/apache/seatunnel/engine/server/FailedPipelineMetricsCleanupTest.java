@@ -34,7 +34,6 @@ import com.hazelcast.map.IMap;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
@@ -44,10 +43,9 @@ class FailedPipelineMetricsCleanupTest extends AbstractSeaTunnelServerTest {
     @Test
     void testEnqueuePipelineCleanupIfNeededAcceptsFailedStatus() {
         long jobId = instance.getFlakeIdGenerator(Constant.SEATUNNEL_ID_GENERATOR_NAME).newId();
-        PipelineLocation pipelineLocation = new PipelineLocation(jobId + 1000, 1);
-        JobMaster jobMaster = null;
+        JobMaster jobMaster = newJobInstanceWithRunningState(jobId);
+        PipelineLocation pipelineLocation = getRunningPipelineLocation(jobMaster);
         try {
-            jobMaster = newJobInstanceWithRunningState(jobId);
             jobMaster.enqueuePipelineCleanupIfNeeded(pipelineLocation, PipelineStatus.FAILED);
 
             IMap<PipelineLocation, PipelineCleanupRecord> pendingCleanupIMap =
@@ -59,7 +57,6 @@ class FailedPipelineMetricsCleanupTest extends AbstractSeaTunnelServerTest {
             Assertions.assertEquals(PipelineStatus.FAILED, record.getFinalStatus());
             Assertions.assertFalse(record.isSavepointEnd());
         } finally {
-            removePendingCleanupRecord(pipelineLocation);
             cancelJob(jobMaster);
         }
     }
@@ -67,11 +64,12 @@ class FailedPipelineMetricsCleanupTest extends AbstractSeaTunnelServerTest {
     @Test
     void testRemoveMetricsContextAcceptsFailedStatus() {
         long jobId = instance.getFlakeIdGenerator(Constant.SEATUNNEL_ID_GENERATOR_NAME).newId();
-        PipelineLocation pipelineLocation = new PipelineLocation(jobId + 2000, 1);
-        PipelineLocation otherPipelineLocation = new PipelineLocation(jobId + 2001, 1);
-        JobMaster jobMaster = null;
+        JobMaster jobMaster = newJobInstanceWithRunningState(jobId);
+        PipelineLocation pipelineLocation = getRunningPipelineLocation(jobMaster);
+        PipelineLocation otherPipelineLocation =
+                new PipelineLocation(
+                        pipelineLocation.getJobId(), pipelineLocation.getPipelineId() + 1);
         try {
-            jobMaster = newJobInstanceWithRunningState(jobId);
             putMetrics(pipelineLocation, otherPipelineLocation);
 
             jobMaster.removeMetricsContext(pipelineLocation, PipelineStatus.FAILED);
@@ -79,7 +77,6 @@ class FailedPipelineMetricsCleanupTest extends AbstractSeaTunnelServerTest {
             Assertions.assertFalse(hasMetricsForPipeline(pipelineLocation));
             Assertions.assertTrue(hasMetricsForPipeline(otherPipelineLocation));
         } finally {
-            clearMetrics();
             cancelJob(jobMaster);
         }
     }
@@ -118,9 +115,6 @@ class FailedPipelineMetricsCleanupTest extends AbstractSeaTunnelServerTest {
         Assertions.assertFalse(hasMetricsForPipeline(pipelineLocation));
         Assertions.assertTrue(hasMetricsForPipeline(otherPipelineLocation));
         Assertions.assertFalse(pendingCleanupIMap.containsKey(pipelineLocation));
-
-        runningJobStateIMap.remove(pipelineLocation);
-        clearMetrics();
     }
 
     private JobMaster newJobInstanceWithRunningState(long jobId) {
@@ -128,7 +122,12 @@ class FailedPipelineMetricsCleanupTest extends AbstractSeaTunnelServerTest {
         JobMaster jobMaster = server.getCoordinatorService().getJobMaster(jobId);
         await().atMost(120, TimeUnit.SECONDS)
                 .untilAsserted(
-                        () -> Assertions.assertEquals(JobStatus.RUNNING, jobMaster.getJobStatus()));
+                        () -> {
+                            Assertions.assertEquals(JobStatus.RUNNING, jobMaster.getJobStatus());
+                            Assertions.assertNotNull(jobMaster.getPhysicalPlan());
+                            Assertions.assertFalse(
+                                    jobMaster.getPhysicalPlan().getPipelineList().isEmpty());
+                        });
         return jobMaster;
     }
 
@@ -138,50 +137,45 @@ class FailedPipelineMetricsCleanupTest extends AbstractSeaTunnelServerTest {
         }
         try {
             jobMaster.cancelJob();
+            await().atMost(30, TimeUnit.SECONDS).until(() -> jobMaster.getJobStatus().isEndState());
         } catch (Exception ignored) {
-            // Ignore cleanup failures in test teardown.
+            // Ignore test cleanup failure to keep assertions focused on metrics cleanup logic.
         }
+    }
+
+    private PipelineLocation getRunningPipelineLocation(JobMaster jobMaster) {
+        return jobMaster.getPhysicalPlan().getPipelineList().get(0).getPipelineLocation();
     }
 
     private void putMetrics(PipelineLocation... pipelineLocations) {
         IMap<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> metricsIMap =
                 nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_RUNNING_JOB_METRICS);
-        HashMap<TaskLocation, SeaTunnelMetricsContext> centralMap = new HashMap<>();
+        HashMap<TaskLocation, SeaTunnelMetricsContext> localMap = new HashMap<>();
         for (PipelineLocation pipelineLocation : pipelineLocations) {
             TaskGroupLocation taskGroupLocation =
                     new TaskGroupLocation(
                             pipelineLocation.getJobId(), pipelineLocation.getPipelineId(), 1L);
             TaskLocation taskLocation = new TaskLocation(taskGroupLocation, 0, 0);
-            centralMap.put(taskLocation, new SeaTunnelMetricsContext());
+            localMap.put(taskLocation, new SeaTunnelMetricsContext());
         }
-        metricsIMap.put(Constant.IMAP_RUNNING_JOB_METRICS_KEY, centralMap);
-    }
-
-    private void clearMetrics() {
-        IMap<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> metricsIMap =
-                nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_RUNNING_JOB_METRICS);
-        metricsIMap.remove(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
-    }
-
-    private void removePendingCleanupRecord(PipelineLocation pipelineLocation) {
-        IMap<PipelineLocation, PipelineCleanupRecord> pendingCleanupIMap =
-                nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_PENDING_PIPELINE_CLEANUP);
-        pendingCleanupIMap.remove(pipelineLocation);
+        TaskExecutionService.partitionMetricsByImapKey(localMap, getPartitionCount())
+                .forEach(metricsIMap::put);
     }
 
     private boolean hasMetricsForPipeline(PipelineLocation pipelineLocation) {
         IMap<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> metricsIMap =
                 nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_RUNNING_JOB_METRICS);
-        Map<TaskLocation, SeaTunnelMetricsContext> centralMap =
-                metricsIMap.get(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
-        return centralMap != null
-                && centralMap.keySet().stream()
-                        .anyMatch(
-                                taskLocation ->
-                                        pipelineLocation.equals(
-                                                taskLocation
-                                                        .getTaskGroupLocation()
-                                                        .getPipelineLocation()));
+        return metricsIMap.values().stream()
+                .filter(map -> map != null && !map.isEmpty())
+                .flatMap(map -> map.keySet().stream())
+                .anyMatch(
+                        taskLocation ->
+                                pipelineLocation.equals(
+                                        taskLocation.getTaskGroupLocation().getPipelineLocation()));
+    }
+
+    private int getPartitionCount() {
+        return server.getSeaTunnelConfig().getEngineConfig().getJobMetricsPartitionCount();
     }
 
     private void awaitCoordinatorActive(CoordinatorService coordinatorService) {

@@ -72,7 +72,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.hazelcast.cluster.Address;
 import com.hazelcast.config.Config;
 import com.hazelcast.core.HazelcastInstanceNotActiveException;
-import com.hazelcast.core.OperationTimeoutException;
 import com.hazelcast.internal.serialization.Data;
 import com.hazelcast.internal.services.MembershipServiceEvent;
 import com.hazelcast.logging.ILogger;
@@ -619,32 +618,27 @@ public class CoordinatorService {
         if (metricsImap == null) {
             return false;
         }
-        boolean lockedIMap = false;
         try {
-            lockedIMap =
-                    metricsImap.tryLock(Constant.IMAP_RUNNING_JOB_METRICS_KEY, 5, TimeUnit.SECONDS);
-            if (!lockedIMap) {
-                return false;
-            }
-
-            HashMap<TaskLocation, SeaTunnelMetricsContext> centralMap =
-                    metricsImap.get(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
-            if (centralMap == null || centralMap.isEmpty()) {
-                return true;
-            }
-
-            List<TaskLocation> toRemove =
-                    centralMap.keySet().stream()
-                            .filter(
-                                    taskLocation ->
-                                            pipelineLocation.equals(
-                                                    taskLocation
-                                                            .getTaskGroupLocation()
-                                                            .getPipelineLocation()))
-                            .collect(Collectors.toList());
-            if (!toRemove.isEmpty()) {
-                toRemove.forEach(centralMap::remove);
-                metricsImap.put(Constant.IMAP_RUNNING_JOB_METRICS_KEY, centralMap);
+            int partitionCount = engineConfig.getJobMetricsPartitionCount();
+            // Retry cleanup partition by partition so each bucket is filtered and removed in one
+            // atomic compute.
+            for (long partition = 0; partition < partitionCount; partition++) {
+                metricsImap.compute(
+                        partition,
+                        (key, centralMap) -> {
+                            if (centralMap == null || centralMap.isEmpty()) {
+                                return centralMap;
+                            }
+                            centralMap
+                                    .entrySet()
+                                    .removeIf(
+                                            entry ->
+                                                    pipelineLocation.equals(
+                                                            entry.getKey()
+                                                                    .getTaskGroupLocation()
+                                                                    .getPipelineLocation()));
+                            return centralMap.isEmpty() ? null : centralMap;
+                        });
             }
             return true;
         } catch (Exception e) {
@@ -654,22 +648,6 @@ public class CoordinatorService {
                             pipelineLocation, ExceptionUtils.getMessage(e)),
                     e);
             return false;
-        } finally {
-            if (lockedIMap) {
-                boolean unlocked = false;
-                while (!unlocked) {
-                    try {
-                        metricsImap.unlock(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
-                        unlocked = true;
-                    } catch (OperationTimeoutException e) {
-                        logger.warning(
-                                String.format(
-                                        "Unlock metrics imap failed: %s",
-                                        ExceptionUtils.getMessage(e)),
-                                e);
-                    }
-                }
-            }
         }
     }
 

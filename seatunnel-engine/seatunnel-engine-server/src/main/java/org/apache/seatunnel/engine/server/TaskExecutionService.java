@@ -31,6 +31,7 @@ import org.apache.seatunnel.engine.common.config.ConfigProvider;
 import org.apache.seatunnel.engine.common.config.SeaTunnelConfig;
 import org.apache.seatunnel.engine.common.config.server.ThreadShareMode;
 import org.apache.seatunnel.engine.common.exception.JobNotFoundException;
+import org.apache.seatunnel.engine.common.utils.JobMetricsPartitionUtils;
 import org.apache.seatunnel.engine.common.utils.PassiveCompletableFuture;
 import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.engine.core.classloader.ClassLoaderService;
@@ -60,7 +61,6 @@ import org.apache.seatunnel.engine.server.utils.NodeEngineUtil;
 import org.apache.commons.collections4.CollectionUtils;
 
 import com.google.common.collect.Lists;
-import com.hazelcast.core.OperationTimeoutException;
 import com.hazelcast.instance.impl.NodeState;
 import com.hazelcast.internal.metrics.DynamicMetricsProvider;
 import com.hazelcast.internal.metrics.MetricDescriptor;
@@ -220,6 +220,10 @@ public class TaskExecutionService implements DynamicMetricsProvider {
 
     public void start() {
         runBusWorkSupplier.runNewBusWork(false);
+    }
+
+    public SeaTunnelConfig getSeaTunnelConfig() {
+        return seaTunnelConfig;
     }
 
     public void shutdown() {
@@ -642,39 +646,48 @@ public class TaskExecutionService implements DynamicMetricsProvider {
                                     });
                 });
         if (!localMap.isEmpty()) {
-            boolean lockedIMap = false;
             try {
-                lockedIMap =
-                        metricsImap.tryLock(
-                                Constant.IMAP_RUNNING_JOB_METRICS_KEY, 5, TimeUnit.SECONDS);
-                if (!lockedIMap) {
-                    logger.warning("try lock failed in update metrics");
-                    return;
-                }
-                HashMap<TaskLocation, SeaTunnelMetricsContext> centralMap =
-                        metricsImap.computeIfAbsent(
-                                Constant.IMAP_RUNNING_JOB_METRICS_KEY, k -> new HashMap<>());
-                centralMap.putAll(localMap);
-                metricsImap.put(Constant.IMAP_RUNNING_JOB_METRICS_KEY, centralMap);
+                int partitionCount =
+                        seaTunnelConfig.getEngineConfig().getJobMetricsPartitionCount();
+                Map<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> partitionedMetrics =
+                        partitionMetricsByImapKey(localMap, partitionCount);
+                // Update each partition independently so one oversized central map cannot build up.
+                partitionedMetrics.forEach(
+                        (partition, metricsByPartition) ->
+                                metricsImap.compute(
+                                        partition,
+                                        (key, centralMap) -> {
+                                            if (centralMap == null) {
+                                                centralMap = new HashMap<>();
+                                            }
+                                            centralMap.putAll(metricsByPartition);
+                                            return centralMap;
+                                        }));
             } catch (Exception e) {
                 logger.warning(
                         "The Imap acquisition failed due to the hazelcast node being offline or restarted, and will be retried next time",
                         e);
-            } finally {
-                if (lockedIMap) {
-                    boolean unLockedIMap = false;
-                    while (!unLockedIMap) {
-                        try {
-                            metricsImap.unlock(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
-                            unLockedIMap = true;
-                        } catch (OperationTimeoutException e) {
-                            logger.warning("unlock imap failed in update metrics", e);
-                        }
-                    }
-                }
             }
         }
         this.printTaskExecutionRuntimeInfo();
+    }
+
+    static Map<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> partitionMetricsByImapKey(
+            Map<TaskLocation, SeaTunnelMetricsContext> metricsMap, int partitionCount) {
+        Map<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> partitionedMetrics =
+                new HashMap<>();
+        metricsMap.forEach(
+                (taskLocation, metricsContext) -> {
+                    // Group metrics by their computed IMap key so later reads only touch one
+                    // bucket.
+                    long partition =
+                            JobMetricsPartitionUtils.getMetricsImapPartition(
+                                    taskLocation, partitionCount);
+                    partitionedMetrics
+                            .computeIfAbsent(partition, key -> new HashMap<>())
+                            .put(taskLocation, metricsContext);
+                });
+        return partitionedMetrics;
     }
 
     public void printTaskExecutionRuntimeInfo() {
