@@ -118,7 +118,7 @@ class FailedPipelineMetricsCleanupTest extends AbstractSeaTunnelServerTest {
     }
 
     private JobMaster newJobInstanceWithRunningState(long jobId) {
-        startJob(jobId, "stream_fakesource_to_file.conf", false);
+        startJob(jobId, "stream_fake_to_console.conf", false);
         JobMaster jobMaster = server.getCoordinatorService().getJobMaster(jobId);
         await().atMost(120, TimeUnit.SECONDS)
                 .untilAsserted(
