@@ -529,6 +529,9 @@ public class CoordinatorService {
                 Address workerAddress = taskGroup.getValue();
                 if (workerAddress == null
                         || nodeEngine.getClusterService().getMember(workerAddress) == null) {
+                    // Once the worker has already left the cluster, its task group context is no
+                    // longer reachable and should not block record cleanup forever.
+                    updated.getCleanedTaskGroups().add(taskGroupLocation);
                     continue;
                 }
                 try {

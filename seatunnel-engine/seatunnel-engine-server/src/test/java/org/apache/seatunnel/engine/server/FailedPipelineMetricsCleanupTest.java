@@ -30,10 +30,12 @@ import org.apache.seatunnel.engine.server.metrics.SeaTunnelMetricsContext;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import com.hazelcast.cluster.Address;
 import com.hazelcast.map.IMap;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
@@ -104,6 +106,47 @@ class FailedPipelineMetricsCleanupTest extends AbstractSeaTunnelServerTest {
                         PipelineStatus.FAILED,
                         false,
                         Collections.emptyMap(),
+                        Collections.emptySet(),
+                        false,
+                        System.currentTimeMillis(),
+                        0L,
+                        0));
+
+        coordinatorService.runPendingPipelineCleanupOnce();
+
+        Assertions.assertFalse(hasMetricsForPipeline(pipelineLocation));
+        Assertions.assertTrue(hasMetricsForPipeline(otherPipelineLocation));
+        Assertions.assertFalse(pendingCleanupIMap.containsKey(pipelineLocation));
+    }
+
+    @Test
+    void testCoordinatorCleanupRemovesRecordWhenTaskGroupWorkerOffline() throws Exception {
+        CoordinatorService coordinatorService = server.getCoordinatorService();
+        awaitCoordinatorActive(coordinatorService);
+
+        long jobId = instance.getFlakeIdGenerator(Constant.SEATUNNEL_ID_GENERATOR_NAME).newId();
+        PipelineLocation pipelineLocation = new PipelineLocation(jobId, 1);
+        PipelineLocation otherPipelineLocation = new PipelineLocation(jobId + 1, 1);
+        putMetrics(pipelineLocation, otherPipelineLocation);
+
+        IMap<Object, Object> runningJobStateIMap =
+                nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_RUNNING_JOB_STATE);
+        runningJobStateIMap.put(pipelineLocation, PipelineStatus.FAILED);
+
+        Map<TaskGroupLocation, Address> taskGroups = new HashMap<>();
+        taskGroups.put(
+                new TaskGroupLocation(jobId, pipelineLocation.getPipelineId(), 1L),
+                new Address("localhost", 65535));
+
+        IMap<PipelineLocation, PipelineCleanupRecord> pendingCleanupIMap =
+                nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_PENDING_PIPELINE_CLEANUP);
+        pendingCleanupIMap.put(
+                pipelineLocation,
+                new PipelineCleanupRecord(
+                        pipelineLocation,
+                        PipelineStatus.FAILED,
+                        false,
+                        taskGroups,
                         Collections.emptySet(),
                         false,
                         System.currentTimeMillis(),
