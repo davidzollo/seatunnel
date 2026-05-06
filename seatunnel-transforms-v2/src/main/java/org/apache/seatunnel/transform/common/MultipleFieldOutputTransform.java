@@ -28,6 +28,7 @@ import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -86,11 +87,16 @@ public abstract class MultipleFieldOutputTransform extends AbstractCatalogSuppor
         }
         builder.constraintKey(copiedConstraintKeys);
         List<String> deletedColumns = getDeletedColumns();
-        List<Column> columns =
-                inputCatalogTable.getTableSchema().getColumns().stream()
-                        .filter(c -> !deletedColumns.contains(c.getName()))
-                        .map(Column::copy)
-                        .collect(Collectors.toList());
+        List<Column> inputColumns = inputCatalogTable.getTableSchema().getColumns();
+        List<Column> columns = new ArrayList<>(inputColumns.size());
+        List<Integer> retainedFieldIndexes = new ArrayList<>(inputColumns.size());
+        for (int i = 0; i < inputColumns.size(); i++) {
+            Column column = inputColumns.get(i);
+            if (!deletedColumns.contains(column.getName())) {
+                columns.add(column.copy());
+                retainedFieldIndexes.add(i);
+            }
+        }
 
         int addFieldCount = 0;
         this.fieldsIndex = new int[outputColumns.length];
@@ -116,9 +122,9 @@ public abstract class MultipleFieldOutputTransform extends AbstractCatalogSuppor
         }
 
         TableSchema outputTableSchema = builder.columns(columns).build();
-        if (addFieldCount > 0) {
-            int inputFieldLength =
-                    inputCatalogTable.getTableSchema().toPhysicalRowDataType().getTotalFields();
+        if (addFieldCount > 0 || !deletedColumns.isEmpty()) {
+            int[] copiedFieldIndexes =
+                    retainedFieldIndexes.stream().mapToInt(Integer::intValue).toArray();
             int outputFieldLength = columns.size();
 
             rowContainerGenerator =
@@ -127,12 +133,9 @@ public abstract class MultipleFieldOutputTransform extends AbstractCatalogSuppor
                         public SeaTunnelRow apply(SeaTunnelRow inputRow) {
                             // todo reuse array container
                             Object[] outputFieldValues = new Object[outputFieldLength];
-                            System.arraycopy(
-                                    inputRow.getFields(),
-                                    0,
-                                    outputFieldValues,
-                                    0,
-                                    inputFieldLength);
+                            for (int i = 0; i < copiedFieldIndexes.length; i++) {
+                                outputFieldValues[i] = inputRow.getField(copiedFieldIndexes[i]);
+                            }
 
                             SeaTunnelRow outputRow = new SeaTunnelRow(outputFieldValues);
                             outputRow.setTableId(inputRow.getTableId());
