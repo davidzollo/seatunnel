@@ -65,6 +65,9 @@ public class MongodbSourceConfig implements SourceConfig {
 
     private final int splitSizeMB;
 
+    /** Enables metadata-driven snapshot splitting for MongoDB collections. */
+    private final boolean enableConcurrentRead;
+
     private final String whereConditionClause;
 
     MongodbSourceConfig(
@@ -83,6 +86,7 @@ public class MongodbSourceConfig implements SourceConfig {
             int heartbeatIntervalMillis,
             int splitMetaGroupSize,
             int splitSizeMB,
+            boolean enableConcurrentRead,
             String whereConditionClause) {
         this.hosts = checkNotNull(hosts);
         this.username = username;
@@ -101,6 +105,7 @@ public class MongodbSourceConfig implements SourceConfig {
         this.heartbeatIntervalMillis = heartbeatIntervalMillis;
         this.splitMetaGroupSize = splitMetaGroupSize;
         this.splitSizeMB = splitSizeMB;
+        this.enableConcurrentRead = enableConcurrentRead;
         this.whereConditionClause = whereConditionClause;
     }
 

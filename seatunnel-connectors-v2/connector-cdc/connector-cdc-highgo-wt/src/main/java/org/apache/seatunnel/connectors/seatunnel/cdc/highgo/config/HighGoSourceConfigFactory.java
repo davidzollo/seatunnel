@@ -96,31 +96,34 @@ public class HighGoSourceConfigFactory extends JdbcSourceConfigFactory {
             props.putAll(dbzProperties);
         }
 
-        return new HighGoSourceConfig(
-                startupConfig,
-                stopConfig,
-                databaseList,
-                tableList,
-                splitSize,
-                distributionFactorUpper,
-                distributionFactorLower,
-                sampleShardingThreshold,
-                inverseSamplingRate,
-                enableHashSplitterForStringColumn,
-                props,
-                DRIVER_CLASS_NAME,
-                hostname,
-                port,
-                username,
-                password,
-                originUrl,
-                fetchSize,
-                serverTimeZone,
-                connectTimeoutMillis,
-                connectMaxRetries,
-                connectionPoolSize,
-                SUPPORTED_EXACTLY_ONCE,
-                whereCondition,
-                readColumnsMap);
+        HighGoSourceConfig config =
+                new HighGoSourceConfig(
+                        startupConfig,
+                        stopConfig,
+                        databaseList,
+                        tableList,
+                        splitSize,
+                        distributionFactorUpper,
+                        distributionFactorLower,
+                        sampleShardingThreshold,
+                        inverseSamplingRate,
+                        enableHashSplitterForStringColumn,
+                        props,
+                        DRIVER_CLASS_NAME,
+                        hostname,
+                        port,
+                        username,
+                        password,
+                        originUrl,
+                        fetchSize,
+                        serverTimeZone,
+                        connectTimeoutMillis,
+                        connectMaxRetries,
+                        connectionPoolSize,
+                        SUPPORTED_EXACTLY_ONCE,
+                        whereCondition,
+                        readColumnsMap);
+        config.setEnableConcurrentRead(enableConcurrentRead);
+        return config;
     }
 }

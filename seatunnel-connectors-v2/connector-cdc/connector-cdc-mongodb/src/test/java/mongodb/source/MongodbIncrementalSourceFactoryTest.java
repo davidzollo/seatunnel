@@ -17,15 +17,22 @@
 
 package mongodb.source;
 
+import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.configuration.SingleChoiceOption;
 import org.apache.seatunnel.connectors.cdc.base.option.SourceOptions;
 import org.apache.seatunnel.connectors.cdc.base.option.StartupMode;
+import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.MongodbIncrementalSource;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.MongodbIncrementalSourceFactory;
+import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceConfig;
+import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceOptions;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MongodbIncrementalSourceFactoryTest {
     @Test
@@ -45,5 +52,21 @@ public class MongodbIncrementalSourceFactoryTest {
                                     Arrays.asList(StartupMode.INITIAL, StartupMode.TIMESTAMP),
                                     ((SingleChoiceOption<StartupMode>) option).getOptionValues());
                         });
+    }
+
+    /** Verify the concurrent read flag is forwarded into MongoDB source config. */
+    @Test
+    public void testCreateSourceConfigFactoryWithConcurrentReadDisabled() {
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put(MongodbSourceOptions.HOSTS.key(), "localhost:27017");
+        configMap.put(SourceOptions.ENABLE_CONCURRENT_READ.key(), false);
+
+        ReadonlyConfig readonlyConfig = ReadonlyConfig.fromMap(configMap);
+        MongodbIncrementalSource<?> source =
+                new MongodbIncrementalSource<>(readonlyConfig, Collections.emptyList());
+        MongodbSourceConfig sourceConfig =
+                source.createSourceConfigFactory(readonlyConfig).create(0);
+
+        Assertions.assertFalse(sourceConfig.isEnableConcurrentRead());
     }
 }

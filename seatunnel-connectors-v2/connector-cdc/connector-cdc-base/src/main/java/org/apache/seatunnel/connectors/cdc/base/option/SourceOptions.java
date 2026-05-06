@@ -115,12 +115,22 @@ public class SourceOptions {
                     .withDescription(
                             "Enable send schema change events, by default is false. If set to true, the schema changes will be sent to downstream.");
 
+    public static final Option<Boolean> ENABLE_CONCURRENT_READ =
+            Options.key("enable_concurrent_read")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Whether to enable concurrent read with split. "
+                                    + "When set to false, the source reads the table as a single split "
+                                    + "without any split analysis, which is useful for tables without indexes.");
+
     public static OptionRule.Builder getBaseRule() {
         return OptionRule.builder()
                 .optional(FORMAT)
                 .optional(SNAPSHOT_SPLIT_SIZE, SNAPSHOT_FETCH_SIZE)
                 // todo: we don't support config parallelism for incremantal stage
                 //                .optional(INCREMENTAL_PARALLELISM)
-                .optional(DEBEZIUM_PROPERTIES);
+                .optional(DEBEZIUM_PROPERTIES)
+                .optional(ENABLE_CONCURRENT_READ);
     }
 }

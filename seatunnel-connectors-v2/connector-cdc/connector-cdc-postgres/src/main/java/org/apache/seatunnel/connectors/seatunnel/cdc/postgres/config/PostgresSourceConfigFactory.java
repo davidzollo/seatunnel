@@ -116,31 +116,34 @@ public class PostgresSourceConfigFactory extends JdbcSourceConfigFactory {
             props.putAll(dbzProperties);
         }
 
-        return new PostgresSourceConfig(
-                startupConfig,
-                stopConfig,
-                databaseList,
-                tableList,
-                splitSize,
-                distributionFactorUpper,
-                distributionFactorLower,
-                sampleShardingThreshold,
-                inverseSamplingRate,
-                enableHashSplitterForStringColumn,
-                props,
-                DRIVER_CLASS_NAME,
-                hostname,
-                port,
-                username,
-                password,
-                originUrl,
-                fetchSize,
-                serverTimeZone,
-                connectTimeoutMillis,
-                connectMaxRetries,
-                connectionPoolSize,
-                exactlyOnce,
-                whereCondition,
-                readColumnsMap);
+        PostgresSourceConfig config =
+                new PostgresSourceConfig(
+                        startupConfig,
+                        stopConfig,
+                        databaseList,
+                        tableList,
+                        splitSize,
+                        distributionFactorUpper,
+                        distributionFactorLower,
+                        sampleShardingThreshold,
+                        inverseSamplingRate,
+                        enableHashSplitterForStringColumn,
+                        props,
+                        DRIVER_CLASS_NAME,
+                        hostname,
+                        port,
+                        username,
+                        password,
+                        originUrl,
+                        fetchSize,
+                        serverTimeZone,
+                        connectTimeoutMillis,
+                        connectMaxRetries,
+                        connectionPoolSize,
+                        exactlyOnce,
+                        whereCondition,
+                        readColumnsMap);
+        config.setEnableConcurrentRead(enableConcurrentRead);
+        return config;
     }
 }

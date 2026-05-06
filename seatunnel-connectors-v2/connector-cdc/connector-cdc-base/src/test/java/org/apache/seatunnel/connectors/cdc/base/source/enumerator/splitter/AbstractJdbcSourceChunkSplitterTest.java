@@ -19,21 +19,32 @@ package org.apache.seatunnel.connectors.cdc.base.source.enumerator.splitter;
 
 import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
+import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfig;
+import org.apache.seatunnel.connectors.cdc.base.option.SourceOptions;
+import org.apache.seatunnel.connectors.cdc.base.source.split.SnapshotSplit;
 
 import org.junit.jupiter.api.Test;
 
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.relational.Column;
+import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 
 public class AbstractJdbcSourceChunkSplitterTest {
 
@@ -173,6 +184,53 @@ public class AbstractJdbcSourceChunkSplitterTest {
         }
     }
 
+    /**
+     * When enable_concurrent_read=false, generateSplits must return exactly one full-table split
+     * with null split bounds, avoiding any JDBC connection to the database.
+     */
+    @Test
+    public void testSingleSplitWhenConcurrentReadDisabled() {
+        TestJdbcSourceConfig config = new TestJdbcSourceConfig();
+        config.setEnableConcurrentRead(false);
+
+        ConfiguredUtJdbcSourceChunkSplitter splitter =
+                new ConfiguredUtJdbcSourceChunkSplitter(config, null);
+        TableId tableId = new TableId("testdb", "testschema", "testtable");
+
+        Collection<SnapshotSplit> splits = splitter.generateSplits(tableId);
+
+        assertEquals(1, splits.size());
+        SnapshotSplit split = splits.iterator().next();
+        assertNull(split.getSplitKeyType());
+        assertNull(split.getSplitStart());
+        assertNull(split.getSplitEnd());
+        assertEquals(tableId, split.getTableId());
+    }
+
+    /** Disabling concurrent read must not bypass the original exactly-once PK/UK requirement. */
+    @Test
+    public void testConcurrentReadDisabledStillRejectsExactlyOnceWithoutKey() {
+        TestJdbcSourceConfig config = new TestJdbcSourceConfig(true);
+        config.setEnableConcurrentRead(false);
+
+        ConfiguredUtJdbcSourceChunkSplitter splitter =
+                new ConfiguredUtJdbcSourceChunkSplitter(config, null);
+        TableId tableId = new TableId("testdb", "testschema", "testtable");
+
+        RuntimeException exception =
+                assertThrows(RuntimeException.class, () -> splitter.generateSplits(tableId));
+        assertTrue(exception.getCause() instanceof UnsupportedOperationException);
+        assertTrue(exception.getCause().getMessage().contains("Exactly once is enabled"));
+    }
+
+    /**
+     * The enable_concurrent_read option must default to true so existing CDC jobs are unaffected.
+     */
+    @Test
+    public void testEnableConcurrentReadOptionDefaultIsTrue() {
+        assertTrue(SourceOptions.ENABLE_CONCURRENT_READ.defaultValue());
+    }
+
     public static class UtJdbcSourceChunkSplitter extends AbstractJdbcSourceChunkSplitter {
 
         public UtJdbcSourceChunkSplitter() {
@@ -229,6 +287,143 @@ public class AbstractJdbcSourceChunkSplitterTest {
 
         @Override
         public SeaTunnelDataType<?> fromDbzColumn(Column splitColumn) {
+            return null;
+        }
+    }
+
+    /**
+     * A concrete JdbcSourceChunkSplitter that accepts a real JdbcSourceConfig, used to test the
+     * enableConcurrentRead short-circuit path in generateSplits.
+     */
+    public static class ConfiguredUtJdbcSourceChunkSplitter
+            extends AbstractJdbcSourceChunkSplitter {
+
+        private final Column splitColumn;
+
+        public ConfiguredUtJdbcSourceChunkSplitter(JdbcSourceConfig config, Column splitColumn) {
+            super(config, mockDialect());
+            this.splitColumn = splitColumn;
+        }
+
+        private static org.apache.seatunnel.connectors.cdc.base.dialect.JdbcDataSourceDialect
+                mockDialect() {
+            org.apache.seatunnel.connectors.cdc.base.dialect.JdbcDataSourceDialect dialect =
+                    mock(
+                            org.apache.seatunnel.connectors.cdc.base.dialect.JdbcDataSourceDialect
+                                    .class);
+            doReturn(mock(JdbcConnection.class)).when(dialect).openJdbcConnection(any());
+            return dialect;
+        }
+
+        @Override
+        protected Column getSplitColumn(
+                JdbcConnection jdbc,
+                org.apache.seatunnel.connectors.cdc.base.dialect.JdbcDataSourceDialect dialect,
+                TableId tableId)
+                throws SQLException {
+            return splitColumn;
+        }
+
+        @Override
+        public Object[] queryMinMax(JdbcConnection jdbc, TableId tableId, String columnName)
+                throws SQLException {
+            return new Object[0];
+        }
+
+        @Override
+        public Object queryMin(
+                JdbcConnection jdbc, TableId tableId, String columnName, Object excludedLowerBound)
+                throws SQLException {
+            return null;
+        }
+
+        @Override
+        public Object[] sampleDataFromColumn(
+                JdbcConnection jdbc, TableId tableId, String columnName, int samplingRate)
+                throws Exception {
+            return new Object[0];
+        }
+
+        @Override
+        public Object queryNextChunkMax(
+                JdbcConnection jdbc,
+                TableId tableId,
+                String columnName,
+                int chunkSize,
+                Object includedLowerBound)
+                throws SQLException {
+            return null;
+        }
+
+        @Override
+        public Long queryApproximateRowCnt(JdbcConnection jdbc, TableId tableId)
+                throws SQLException {
+            return null;
+        }
+
+        @Override
+        public String buildSplitScanQuery(
+                Table table,
+                SeaTunnelRowType splitKeyType,
+                boolean isFirstSplit,
+                boolean isLastSplit,
+                Object[] splitEnd,
+                boolean isNull) {
+            return null;
+        }
+
+        @Override
+        public SeaTunnelDataType<?> fromDbzColumn(Column splitColumn) {
+            return null;
+        }
+    }
+
+    /**
+     * A minimal concrete JdbcSourceConfig for unit testing. All fields are null or zero-value
+     * except enableConcurrentRead which can be set via the setter.
+     */
+    public static class TestJdbcSourceConfig extends JdbcSourceConfig {
+
+        public TestJdbcSourceConfig() {
+            this(false);
+        }
+
+        public TestJdbcSourceConfig(boolean exactlyOnce) {
+            super(
+                    null,
+                    null,
+                    null,
+                    null,
+                    8096,
+                    1.0,
+                    0.05,
+                    1000,
+                    1000,
+                    false,
+                    new Properties(),
+                    null,
+                    null,
+                    0,
+                    null,
+                    null,
+                    null,
+                    1024,
+                    null,
+                    30000L,
+                    3,
+                    20,
+                    exactlyOnce,
+                    null,
+                    null);
+        }
+
+        @Override
+        public RelationalDatabaseConnectorConfig getDbzConnectorConfig() {
+            return null;
+        }
+
+        @Override
+        public Map<String, List<String>> getReadColumnsMap() {
             return null;
         }
     }

@@ -138,32 +138,35 @@ public class OracleSourceConfigFactory extends JdbcSourceConfigFactory {
             props.putAll(dbzProperties);
         }
 
-        return new OracleSourceConfig(
-                startupConfig,
-                stopConfig,
-                databaseList,
-                tableList,
-                splitSize,
-                distributionFactorUpper,
-                distributionFactorLower,
-                sampleShardingThreshold,
-                inverseSamplingRate,
-                enableHashSplitterForStringColumn,
-                props,
-                DRIVER_CLASS_NAME,
-                hostname,
-                port,
-                username,
-                password,
-                originUrl,
-                fetchSize,
-                serverTimeZone,
-                connectTimeoutMillis,
-                connectMaxRetries,
-                connectionPoolSize,
-                exactlyOnce,
-                whereCondition,
-                readColumnsMap);
+        OracleSourceConfig config =
+                new OracleSourceConfig(
+                        startupConfig,
+                        stopConfig,
+                        databaseList,
+                        tableList,
+                        splitSize,
+                        distributionFactorUpper,
+                        distributionFactorLower,
+                        sampleShardingThreshold,
+                        inverseSamplingRate,
+                        enableHashSplitterForStringColumn,
+                        props,
+                        DRIVER_CLASS_NAME,
+                        hostname,
+                        port,
+                        username,
+                        password,
+                        originUrl,
+                        fetchSize,
+                        serverTimeZone,
+                        connectTimeoutMillis,
+                        connectMaxRetries,
+                        connectionPoolSize,
+                        exactlyOnce,
+                        whereCondition,
+                        readColumnsMap);
+        config.setEnableConcurrentRead(enableConcurrentRead);
+        return config;
     }
 
     private void validateConfig() throws IllegalArgumentException {

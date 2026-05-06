@@ -23,11 +23,13 @@ import org.apache.seatunnel.api.table.catalog.TableSchema;
 import org.apache.seatunnel.api.table.type.BasicType;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcConnectionConfig;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcSourceConfig;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcSourceOptions;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -276,6 +278,58 @@ public class DynamicChunkSplitterTest {
             List<DynamicChunkSplitter.ChunkRange> a, List<DynamicChunkSplitter.ChunkRange> b) {
         checkRule(b);
         assertEquals(a, b);
+    }
+
+    /**
+     * When enable_concurrent_read=false, generateSplits must return exactly one full-table split
+     * with no split key, avoiding any MIN/MAX analysis on the database.
+     */
+    @Test
+    public void testSingleSplitWhenConcurrentReadDisabled() throws Exception {
+        JdbcSourceConfig config =
+                JdbcSourceConfig.builder()
+                        .jdbcConnectionConfig(
+                                JdbcConnectionConfig.builder()
+                                        .url("jdbc:postgresql://localhost:5432/test")
+                                        .driverName("org.postgresql.Driver")
+                                        .build())
+                        .enableConcurrentRead(false)
+                        .build();
+
+        DynamicChunkSplitter splitter = new DynamicChunkSplitter(config);
+        JdbcSourceTable table =
+                JdbcSourceTable.builder().tablePath(TablePath.of("db", "schema", "table")).build();
+
+        Collection<JdbcSourceSplit> splits = splitter.generateSplits(table);
+
+        assertEquals(1, splits.size());
+        JdbcSourceSplit split = splits.iterator().next();
+        assertNull(split.getSplitKeyName());
+        assertNull(split.getSplitStart());
+        assertNull(split.getSplitEnd());
+    }
+
+    /** The enable_concurrent_read option must default to true so existing jobs are unaffected. */
+    @Test
+    public void testEnableConcurrentReadOptionDefaultIsTrue() {
+        assertTrue(JdbcSourceOptions.ENABLE_CONCURRENT_READ.defaultValue());
+    }
+
+    /**
+     * Builder-created configs must inherit the option default to preserve backward compatibility.
+     */
+    @Test
+    public void testBuilderDefaultEnableConcurrentReadIsTrue() {
+        JdbcSourceConfig config =
+                JdbcSourceConfig.builder()
+                        .jdbcConnectionConfig(
+                                JdbcConnectionConfig.builder()
+                                        .url("jdbc:postgresql://localhost:5432/test")
+                                        .driverName("org.postgresql.Driver")
+                                        .build())
+                        .build();
+
+        assertTrue(config.isEnableConcurrentRead());
     }
 
     private void checkRule(List<DynamicChunkSplitter.ChunkRange> a) {

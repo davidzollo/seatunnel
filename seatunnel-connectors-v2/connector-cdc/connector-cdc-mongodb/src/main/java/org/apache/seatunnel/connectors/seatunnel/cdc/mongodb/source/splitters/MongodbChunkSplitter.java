@@ -24,6 +24,11 @@ import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourc
 import io.debezium.relational.TableId;
 
 import java.util.Collection;
+import java.util.Collections;
+
+import static org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceOptions.ID_FIELD;
+import static org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.utils.ChunkUtils.maxUpperBoundOfId;
+import static org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.utils.ChunkUtils.minLowerBoundOfId;
 
 public class MongodbChunkSplitter implements ChunkSplitter {
 
@@ -35,11 +40,28 @@ public class MongodbChunkSplitter implements ChunkSplitter {
 
     @Override
     public Collection<SnapshotSplit> generateSplits(TableId collectionId) {
+        if (!sourceConfig.isEnableConcurrentRead()) {
+            return Collections.singletonList(createSingleSplit(collectionId));
+        }
         SplitContext splitContext = SplitContext.of(sourceConfig, collectionId);
         SplitStrategy splitStrategy =
                 splitContext.isShardedCollection()
                         ? ShardedSplitStrategy.INSTANCE
                         : SplitVectorSplitStrategy.INSTANCE;
         return splitStrategy.split(splitContext);
+    }
+
+    /** Skip collection metadata probing when concurrent snapshot splitting is disabled. */
+    private SnapshotSplit createSingleSplit(TableId collectionId) {
+        return new SnapshotSplit(
+                SingleSplitStrategy.INSTANCE.splitId(collectionId, 0),
+                collectionId,
+                SingleSplitStrategy.INSTANCE.shardKeysToRowType(Collections.singleton(ID_FIELD)),
+                minLowerBoundOfId(),
+                maxUpperBoundOfId(),
+                0,
+                1,
+                false,
+                sourceConfig.getWhereConditionClause());
     }
 }

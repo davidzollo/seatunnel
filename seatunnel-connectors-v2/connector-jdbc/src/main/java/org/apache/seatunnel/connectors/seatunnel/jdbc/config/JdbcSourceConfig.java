@@ -44,6 +44,7 @@ public class JdbcSourceConfig implements Serializable {
     private int splitInverseSamplingRate;
     private boolean enableHashSplitterForStringColumn;
     private boolean decimalTypeNarrowing;
+    @Builder.Default private boolean enableConcurrentRead = true;
 
     public static JdbcSourceConfig of(ReadonlyConfig config) {
         JdbcSourceConfig.Builder builder = JdbcSourceConfig.builder();
@@ -71,6 +72,7 @@ public class JdbcSourceConfig implements Serializable {
                 config.get(JdbcSourceOptions.SPLIT_ENABLE_HASH_SPLIT_FOR_STRING_COLUMN));
 
         builder.decimalTypeNarrowing(config.get(JdbcOptions.DECIMAL_TYPE_NARROWING));
+        builder.enableConcurrentRead(config.get(JdbcSourceOptions.ENABLE_CONCURRENT_READ));
 
         config.getOptional(JdbcSourceOptions.WHERE_CONDITION)
                 .ifPresent(

@@ -21,6 +21,7 @@ import org.apache.seatunnel.connectors.cdc.base.source.IncrementalSource;
 
 import io.debezium.config.Configuration;
 import lombok.Getter;
+import lombok.Setter;
 
 import java.util.Properties;
 
@@ -41,6 +42,8 @@ public abstract class BaseSourceConfig implements SourceConfig {
     @Getter protected final int inverseSamplingRate;
     @Getter protected final boolean exactlyOnce;
     @Getter protected final boolean enableHashSplitterForStringColumn;
+
+    @Getter @Setter private boolean enableConcurrentRead = true;
 
     // --------------------------------------------------------------------------------------------
     // Debezium Configurations

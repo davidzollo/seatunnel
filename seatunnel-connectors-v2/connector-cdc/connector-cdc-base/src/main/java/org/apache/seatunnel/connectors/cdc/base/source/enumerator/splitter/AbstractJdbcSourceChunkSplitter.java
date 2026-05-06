@@ -73,9 +73,10 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
 
     @Override
     public Collection<SnapshotSplit> generateSplits(TableId tableId) {
+        log.info("Start splitting table {} into chunks...", tableId);
+        long start = System.currentTimeMillis();
+
         try (JdbcConnection jdbc = dialect.openJdbcConnection(sourceConfig)) {
-            log.info("Start splitting table {} into chunks...", tableId);
-            long start = System.currentTimeMillis();
 
             Column splitColumn = getSplitColumn(jdbc, dialect, tableId);
             List<SnapshotSplit> splits = new ArrayList<>();
@@ -85,6 +86,27 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                             String.format(
                                     "Exactly once is enabled, but not found primary key or unique key for table %s",
                                     tableId));
+                }
+                if (!sourceConfig.isEnableConcurrentRead()) {
+                    log.info(
+                            "Concurrent read is disabled for table {}, using single split after key validation.",
+                            tableId);
+                    SnapshotSplit singleSplit =
+                            createSnapshotSplit(
+                                    null,
+                                    tableId,
+                                    0,
+                                    null,
+                                    null,
+                                    null,
+                                    0,
+                                    1,
+                                    false,
+                                    sourceConfig.getWhereConditionClause(),
+                                    sourceConfig.getReadColumnsMapByTable());
+                    long end = System.currentTimeMillis();
+                    log.info("Split table {} into 1 chunk, time cost: {}ms.", tableId, end - start);
+                    return Collections.singletonList(singleSplit);
                 }
                 SnapshotSplit singleSplit =
                         createSnapshotSplit(
@@ -105,6 +127,27 @@ public abstract class AbstractJdbcSourceChunkSplitter implements JdbcSourceChunk
                         tableId,
                         singleSplit);
             } else {
+                if (!sourceConfig.isEnableConcurrentRead()) {
+                    log.info(
+                            "Concurrent read is disabled for table {}, using single split after key validation.",
+                            tableId);
+                    SnapshotSplit singleSplit =
+                            createSnapshotSplit(
+                                    null,
+                                    tableId,
+                                    0,
+                                    null,
+                                    null,
+                                    null,
+                                    0,
+                                    1,
+                                    false,
+                                    sourceConfig.getWhereConditionClause(),
+                                    sourceConfig.getReadColumnsMapByTable());
+                    long end = System.currentTimeMillis();
+                    log.info("Split table {} into 1 chunk, time cost: {}ms.", tableId, end - start);
+                    return Collections.singletonList(singleSplit);
+                }
                 SeaTunnelDataType splitKeyType = fromDbzColumn(splitColumn);
                 if (STRING.equals(splitKeyType.getSqlType())) {
                     if (sourceConfig.isEnableHashSplitterForStringColumn()) {

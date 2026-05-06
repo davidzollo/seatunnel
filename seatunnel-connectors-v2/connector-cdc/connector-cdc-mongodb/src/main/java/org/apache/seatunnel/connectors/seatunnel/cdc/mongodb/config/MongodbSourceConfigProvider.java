@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config;
 import org.apache.seatunnel.connectors.cdc.base.config.SourceConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.StartupConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.StopConfig;
+import org.apache.seatunnel.connectors.cdc.base.option.SourceOptions;
 import org.apache.seatunnel.connectors.cdc.base.option.StartupMode;
 import org.apache.seatunnel.connectors.cdc.base.option.StopMode;
 import org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.exception.MongodbConnectorException;
@@ -59,6 +60,9 @@ public class MongodbSourceConfigProvider {
         private int heartbeatIntervalMillis = HEARTBEAT_INTERVAL_MILLIS.defaultValue();
         private int splitMetaGroupSize = 2;
         private int splitSizeMB = INCREMENTAL_SNAPSHOT_CHUNK_SIZE_MB.defaultValue();
+        /** Controls whether MongoDB snapshot enumeration may analyze collections into chunks. */
+        private boolean enableConcurrentRead = SourceOptions.ENABLE_CONCURRENT_READ.defaultValue();
+
         private String whereConditionClause;
 
         public Builder hosts(String hosts) {
@@ -142,6 +146,12 @@ public class MongodbSourceConfigProvider {
             return this;
         }
 
+        /** Controls whether MongoDB snapshot enumeration may analyze collections into chunks. */
+        public Builder enableConcurrentRead(boolean enableConcurrentRead) {
+            this.enableConcurrentRead = enableConcurrentRead;
+            return this;
+        }
+
         public Builder whereConditionClause(String whereConditionClause) {
             this.whereConditionClause = whereConditionClause;
             return this;
@@ -176,6 +186,7 @@ public class MongodbSourceConfigProvider {
                     heartbeatIntervalMillis,
                     splitMetaGroupSize,
                     splitSizeMB,
+                    enableConcurrentRead,
                     whereConditionClause);
         }
     }

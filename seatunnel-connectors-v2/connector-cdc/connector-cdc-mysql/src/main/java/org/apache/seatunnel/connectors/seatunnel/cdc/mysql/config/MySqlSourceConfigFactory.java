@@ -118,31 +118,34 @@ public class MySqlSourceConfigFactory extends JdbcSourceConfigFactory {
 
         Configuration dbzConfiguration = Configuration.from(props);
         String driverClassName = dbzConfiguration.getString(MySqlConnectorConfig.JDBC_DRIVER);
-        return new MySqlSourceConfig(
-                startupConfig,
-                stopConfig,
-                databaseList,
-                tableList,
-                splitSize,
-                distributionFactorUpper,
-                distributionFactorLower,
-                sampleShardingThreshold,
-                inverseSamplingRate,
-                enableHashSplitterForStringColumn,
-                props,
-                driverClassName,
-                hostname,
-                port,
-                username,
-                password,
-                originUrl,
-                fetchSize,
-                serverTimeZone,
-                connectTimeoutMillis,
-                connectMaxRetries,
-                connectionPoolSize,
-                exactlyOnce,
-                whereCondition,
-                readColumnsMap);
+        MySqlSourceConfig config =
+                new MySqlSourceConfig(
+                        startupConfig,
+                        stopConfig,
+                        databaseList,
+                        tableList,
+                        splitSize,
+                        distributionFactorUpper,
+                        distributionFactorLower,
+                        sampleShardingThreshold,
+                        inverseSamplingRate,
+                        enableHashSplitterForStringColumn,
+                        props,
+                        driverClassName,
+                        hostname,
+                        port,
+                        username,
+                        password,
+                        originUrl,
+                        fetchSize,
+                        serverTimeZone,
+                        connectTimeoutMillis,
+                        connectMaxRetries,
+                        connectionPoolSize,
+                        exactlyOnce,
+                        whereCondition,
+                        readColumnsMap);
+        config.setEnableConcurrentRead(enableConcurrentRead);
+        return config;
     }
 }

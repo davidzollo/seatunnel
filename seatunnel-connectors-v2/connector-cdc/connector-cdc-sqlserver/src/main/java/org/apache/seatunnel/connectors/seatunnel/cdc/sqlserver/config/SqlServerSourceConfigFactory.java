@@ -111,32 +111,35 @@ public class SqlServerSourceConfigFactory extends JdbcSourceConfigFactory {
             dbzProperties.forEach(props::put);
         }
 
-        return new SqlServerSourceConfig(
-                startupConfig,
-                stopConfig,
-                databaseList,
-                tableList,
-                splitSize,
-                distributionFactorUpper,
-                distributionFactorLower,
-                sampleShardingThreshold,
-                inverseSamplingRate,
-                enableHashSplitterForStringColumn,
-                props,
-                DRIVER_CLASS_NAME,
-                hostname,
-                port,
-                username,
-                password,
-                originUrl,
-                fetchSize,
-                serverTimeZone,
-                connectTimeoutMillis,
-                connectMaxRetries,
-                connectionPoolSize,
-                exactlyOnce,
-                whereCondition,
-                readColumnsMap);
+        SqlServerSourceConfig config =
+                new SqlServerSourceConfig(
+                        startupConfig,
+                        stopConfig,
+                        databaseList,
+                        tableList,
+                        splitSize,
+                        distributionFactorUpper,
+                        distributionFactorLower,
+                        sampleShardingThreshold,
+                        inverseSamplingRate,
+                        enableHashSplitterForStringColumn,
+                        props,
+                        DRIVER_CLASS_NAME,
+                        hostname,
+                        port,
+                        username,
+                        password,
+                        originUrl,
+                        fetchSize,
+                        serverTimeZone,
+                        connectTimeoutMillis,
+                        connectMaxRetries,
+                        connectionPoolSize,
+                        exactlyOnce,
+                        whereCondition,
+                        readColumnsMap);
+        config.setEnableConcurrentRead(enableConcurrentRead);
+        return config;
     }
 
     /**

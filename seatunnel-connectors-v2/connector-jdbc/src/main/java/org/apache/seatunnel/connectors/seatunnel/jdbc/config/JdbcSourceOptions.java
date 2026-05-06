@@ -111,4 +111,13 @@ public interface JdbcSourceOptions {
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("Enable hash split for string column, default is false.");
+
+    Option<Boolean> ENABLE_CONCURRENT_READ =
+            Options.key("enable_concurrent_read")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Whether to enable concurrent read with split. "
+                                    + "When set to false, the source reads the table as a single split "
+                                    + "without any split analysis, which is useful for tables without indexes.");
 }

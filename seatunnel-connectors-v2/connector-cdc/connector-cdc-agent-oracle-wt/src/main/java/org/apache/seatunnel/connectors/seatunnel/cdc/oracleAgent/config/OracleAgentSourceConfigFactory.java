@@ -123,34 +123,37 @@ public class OracleAgentSourceConfigFactory extends JdbcSourceConfigFactory {
             props.putAll(dbzProperties);
         }
 
-        return new OracleAgentSourceConfig(
-                startupConfig,
-                stopConfig,
-                databaseList,
-                tableList,
-                splitSize,
-                distributionFactorUpper,
-                distributionFactorLower,
-                sampleShardingThreshold,
-                inverseSamplingRate,
-                enableHashSplitterForStringColumn,
-                props,
-                DRIVER_CLASS_NAME,
-                hostname,
-                port,
-                oracle9BridgeAgentHost,
-                oracle9BridgeAgentPort,
-                username,
-                password,
-                originUrl,
-                fetchSize,
-                serverTimeZone,
-                connectTimeoutMillis,
-                connectMaxRetries,
-                connectionPoolSize,
-                exactlyOnce,
-                whereCondition,
-                readColumnsMap);
+        OracleAgentSourceConfig config =
+                new OracleAgentSourceConfig(
+                        startupConfig,
+                        stopConfig,
+                        databaseList,
+                        tableList,
+                        splitSize,
+                        distributionFactorUpper,
+                        distributionFactorLower,
+                        sampleShardingThreshold,
+                        inverseSamplingRate,
+                        enableHashSplitterForStringColumn,
+                        props,
+                        DRIVER_CLASS_NAME,
+                        hostname,
+                        port,
+                        oracle9BridgeAgentHost,
+                        oracle9BridgeAgentPort,
+                        username,
+                        password,
+                        originUrl,
+                        fetchSize,
+                        serverTimeZone,
+                        connectTimeoutMillis,
+                        connectMaxRetries,
+                        connectionPoolSize,
+                        exactlyOnce,
+                        whereCondition,
+                        readColumnsMap);
+        config.setEnableConcurrentRead(enableConcurrentRead);
+        return config;
     }
 
     private void validateConfig() throws IllegalArgumentException {

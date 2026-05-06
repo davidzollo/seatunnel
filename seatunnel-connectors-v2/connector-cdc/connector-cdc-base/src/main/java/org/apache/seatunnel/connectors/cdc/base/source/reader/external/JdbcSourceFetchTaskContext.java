@@ -91,6 +91,12 @@ public abstract class JdbcSourceFetchTaskContext implements FetchTask.Context {
 
     @Override
     public boolean isRecordBetween(SourceRecord record, Object[] splitStart, Object[] splitEnd) {
+        // A single full-table split created when enable_concurrent_read=false has null bounds.
+        // All changelog records belong to it, so return true immediately without calling
+        // getSplitType(), which would throw for tables without a primary key.
+        if (splitStart == null && splitEnd == null) {
+            return true;
+        }
         SeaTunnelRowType splitKeyType =
                 getSplitType(getDatabaseSchema().tableFor(getTableId(record)));
         Object[] key = SourceRecordUtils.getSplitKey(splitKeyType, record, getSchemaNameAdjuster());

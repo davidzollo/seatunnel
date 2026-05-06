@@ -48,6 +48,7 @@ import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.QUERY;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.URL;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions.USER;
+import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcSourceOptions.ENABLE_CONCURRENT_READ;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcSourceOptions.SKIP_ANALYZE;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcSourceOptions.SPLIT_ENABLE_HASH_SPLIT_FOR_STRING_COLUMN;
 import static org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcSourceOptions.SPLIT_EVEN_DISTRIBUTION_FACTOR_LOWER_BOUND;
@@ -112,7 +113,8 @@ public class JdbcSourceFactory implements TableSourceFactory {
                         SPLIT_INVERSE_SAMPLING_RATE,
                         SPLIT_ENABLE_HASH_SPLIT_FOR_STRING_COLUMN,
                         DECIMAL_TYPE_NARROWING,
-                        INT_TYPE_NARROWING)
+                        INT_TYPE_NARROWING,
+                        ENABLE_CONCURRENT_READ)
                 .build();
     }
 
