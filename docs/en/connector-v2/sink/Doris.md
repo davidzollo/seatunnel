@@ -142,12 +142,16 @@ You can use the following placeholders
 | ARRAY           | ARRAY                                   |
 | MAP             | MAP                                     |
 | JSON            | STRING                                  |
+| VARIANT         | STRING                                  |
 | HLL             | Not supported yet                       |
 | BITMAP          | Not supported yet                       |
 | QUANTILE_STATE  | Not supported yet                       |
 | STRUCT          | Not supported yet                       |
 
 #### Supported import data formats
+
+When writing to Doris `VARIANT` columns from SeaTunnel `STRING` fields, the field value should be a
+valid JSON document.
 
 The supported formats include CSV and JSON
 

@@ -48,6 +48,8 @@ directly return the data
 | FLOAT                                | FLOAT                                                                                                                                               |
 | DOUBLE                               | DOUBLE                                                                                                                                              |
 | CHAR<br/>VARCHAR<br/>STRING<br/>TEXT | STRING                                                                                                                                              |
+| JSON                                 | STRING                                                                                                                                              |
+| VARIANT                              | STRING                                                                                                                                              |
 | DATE                                 | DATE                                                                                                                                                |
 | DATETIME<br/>DATETIME(p)             | TIMESTAMP                                                                                                                                           |
 | ARRAY                                | ARRAY                                                                                                                                               |
@@ -103,7 +105,6 @@ sink {
     Console {}
 }
 ```
-
 Use the 'doris.read.field' parameter to select the doris table columns to read
 
 ```
