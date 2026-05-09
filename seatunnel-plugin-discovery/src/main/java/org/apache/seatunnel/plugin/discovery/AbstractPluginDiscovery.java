@@ -68,7 +68,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
-@SuppressWarnings("unchecked")
 public abstract class AbstractPluginDiscovery<T> implements PluginDiscovery<T> {
 
     private static final String PLUGIN_MAPPING_FILE = "plugin-mapping.properties";
@@ -225,6 +224,21 @@ public abstract class AbstractPluginDiscovery<T> implements PluginDiscovery<T> {
     public Optional<T> createOptionalPluginInstance(
             PluginIdentifier pluginIdentifier, Collection<URL> pluginJars) {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        List<URL> additionalPluginJars = new ArrayList<>(pluginJars);
+        if (!additionalPluginJars.isEmpty()) {
+            try {
+                addURLToClassLoaderConsumer.accept(classLoader, additionalPluginJars);
+            } catch (Exception e) {
+                log.warn(
+                        "can't load additional plugin jars use current thread classloader,"
+                                + " use URLClassLoader instead now. message: {}",
+                        e.getMessage());
+                classLoader =
+                        new URLClassLoader(
+                                additionalPluginJars.toArray(new URL[0]),
+                                Thread.currentThread().getContextClassLoader());
+            }
+        }
         T pluginInstance = loadPluginInstance(pluginIdentifier, classLoader);
         if (pluginInstance != null) {
             log.info("Load plugin: {} from classpath", pluginIdentifier);
@@ -237,19 +251,14 @@ public abstract class AbstractPluginDiscovery<T> implements PluginDiscovery<T> {
                 // use current thread classloader to avoid different classloader load same class
                 // error.
                 addURLToClassLoaderConsumer.accept(classLoader, pluginJarPaths.get());
-                addURLToClassLoaderConsumer.accept(classLoader, (List<URL>) pluginJars);
+                addURLToClassLoaderConsumer.accept(classLoader, additionalPluginJars);
             } catch (Exception e) {
                 log.warn(
                         "can't load jar use current thread classloader, use URLClassLoader instead now."
                                 + " message: "
                                 + e.getMessage());
-                URL[] urls = new URL[pluginJars.size() + 1];
-                int i = 0;
-                for (URL pluginJar : pluginJars) {
-                    urls[i++] = pluginJar;
-                }
-                urls =
-                        Stream.concat(Arrays.stream(urls), pluginJarPaths.get().stream())
+                URL[] urls =
+                        Stream.concat(additionalPluginJars.stream(), pluginJarPaths.get().stream())
                                 .distinct()
                                 .toArray(URL[]::new);
                 classLoader =

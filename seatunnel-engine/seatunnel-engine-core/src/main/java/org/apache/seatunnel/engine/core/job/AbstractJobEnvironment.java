@@ -17,8 +17,11 @@
 
 package org.apache.seatunnel.engine.core.job;
 
+import org.apache.seatunnel.api.configuration.ReadonlyConfig;
+import org.apache.seatunnel.api.env.EnvCommonOptions;
 import org.apache.seatunnel.common.config.Common;
 import org.apache.seatunnel.engine.common.config.JobConfig;
+import org.apache.seatunnel.engine.common.exception.SeaTunnelEngineException;
 import org.apache.seatunnel.engine.common.utils.IdGenerator;
 import org.apache.seatunnel.engine.core.dag.actions.Action;
 import org.apache.seatunnel.engine.core.dag.logical.LogicalDag;
@@ -31,6 +34,7 @@ import com.hazelcast.logging.Logger;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -62,6 +66,8 @@ public abstract class AbstractJobEnvironment {
         this.isStartWithSavePoint = isStartWithSavePoint;
         this.idGenerator = new IdGenerator();
         this.commonPluginJars.addAll(searchPluginJars());
+        addCommonPluginJarsFromEnvOptions(ReadonlyConfig.fromMap(jobConfig.getEnvOptions()));
+        LOGGER.fine("add common jar in plugins :" + commonPluginJars);
     }
 
     protected Set<URL> searchPluginJars() {
@@ -82,6 +88,28 @@ public abstract class AbstractJobEnvironment {
                     String.format("Can't search plugin jars in %s.", Common.pluginRootDir()), e);
         }
         return Collections.emptySet();
+    }
+
+    protected void addCommonPluginJarsFromEnvOptions(ReadonlyConfig envOptions) {
+        envOptions.getOptional(EnvCommonOptions.JARS).map(Common::getThirdPartyJars)
+                .orElse(Collections.emptySet()).stream()
+                .map(Path::toUri)
+                .map(
+                        uri -> {
+                            try {
+                                return uri.toURL();
+                            } catch (MalformedURLException e) {
+                                throw new SeaTunnelEngineException(
+                                        "the uri of jar illegal:" + uri, e);
+                            }
+                        })
+                .forEach(this::addCommonPluginJar);
+    }
+
+    private void addCommonPluginJar(URL jarUrl) {
+        if (!commonPluginJars.contains(jarUrl)) {
+            commonPluginJars.add(jarUrl);
+        }
     }
 
     public static void addCommonPluginJarsToAction(
@@ -131,5 +159,5 @@ public abstract class AbstractJobEnvironment {
         return new LogicalDagGenerator(actions, jobConfig, idGenerator, isStartWithSavePoint);
     }
 
-    public abstract LogicalDag getLogicalDag();
+    protected abstract LogicalDag getLogicalDag();
 }

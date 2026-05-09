@@ -20,6 +20,7 @@ package org.apache.seatunnel.engine.server.rest;
 import org.apache.seatunnel.shade.com.typesafe.config.Config;
 
 import org.apache.seatunnel.api.common.JobContext;
+import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.engine.common.Constant;
 import org.apache.seatunnel.engine.common.config.JobConfig;
 import org.apache.seatunnel.engine.core.dag.actions.Action;
@@ -32,7 +33,6 @@ import org.apache.seatunnel.engine.server.SeaTunnelServer;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.hazelcast.instance.impl.Node;
 import com.hazelcast.spi.impl.NodeEngineImpl;
 
@@ -41,7 +41,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
 public class RestJobExecutionEnvironment extends AbstractJobEnvironment {
@@ -66,7 +65,7 @@ public class RestJobExecutionEnvironment extends AbstractJobEnvironment {
         this.nodeEngine = node.getNodeEngine();
         this.jobConfig.setJobContext(
                 new JobContext(
-                        Objects.nonNull(jobId)
+                        isStartWithSavePoint
                                 ? jobId
                                 : nodeEngine
                                         .getHazelcastInstance()
@@ -79,9 +78,8 @@ public class RestJobExecutionEnvironment extends AbstractJobEnvironment {
         return jobId;
     }
 
-    @VisibleForTesting
     @Override
-    public LogicalDag getLogicalDag() {
+    protected LogicalDag getLogicalDag() {
         ImmutablePair<List<Action>, Set<URL>> immutablePair =
                 getJobConfigParser().parse(seaTunnelServer.getClassLoaderService());
         actions.addAll(immutablePair.getLeft());
@@ -105,6 +103,8 @@ public class RestJobExecutionEnvironment extends AbstractJobEnvironment {
                             .getCheckpointService()
                             .getLatestCheckpointData(jobConfig.getJobContext().getJobId());
         }
+        addCommonPluginJarsFromEnvOptions(
+                ReadonlyConfig.fromConfig(seaTunnelJobConfig.getConfig("env")));
         return new MultipleTableJobConfigParser(
                 seaTunnelJobConfig,
                 idGenerator,

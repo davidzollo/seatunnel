@@ -44,4 +44,30 @@ public interface ZetaUDF {
      * @return result value
      */
     Object evaluate(List<Object> args);
+
+    /**
+     * Whether current udf requires row level context.
+     *
+     * @return true means engine should call evaluateWithContext instead of evaluate
+     */
+    default boolean requiresContext() {
+        return false;
+    }
+
+    /**
+     * Evaluate with row level context.
+     *
+     * @param args input arguments
+     * @param context row context
+     * @return result value
+     */
+    default Object evaluateWithContext(List<Object> args, ZetaUDFContext context) {
+        return evaluate(args);
+    }
+
+    /** Initialize udf resources. */
+    default void open() throws Exception {}
+
+    /** Release udf resources. */
+    default void close() {}
 }

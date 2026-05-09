@@ -17,7 +17,11 @@
 
 package org.apache.seatunnel.engine.client.job;
 
+import org.apache.seatunnel.shade.com.typesafe.config.Config;
+
 import org.apache.seatunnel.api.common.JobContext;
+import org.apache.seatunnel.api.configuration.ReadonlyConfig;
+import org.apache.seatunnel.core.starter.utils.ConfigBuilder;
 import org.apache.seatunnel.engine.client.SeaTunnelHazelcastClient;
 import org.apache.seatunnel.engine.common.config.JobConfig;
 import org.apache.seatunnel.engine.common.config.SeaTunnelConfig;
@@ -34,6 +38,7 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
 import com.google.common.annotations.VisibleForTesting;
 
 import java.net.URL;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -45,8 +50,6 @@ public class ClientJobExecutionEnvironment extends AbstractJobEnvironment {
 
     private final String jobFilePath;
 
-    private final List<String> variables;
-
     private final SeaTunnelHazelcastClient seaTunnelHazelcastClient;
 
     private final JobClient jobClient;
@@ -55,19 +58,20 @@ public class ClientJobExecutionEnvironment extends AbstractJobEnvironment {
 
     private final ConnectorPackageClient connectorPackageClient;
 
+    private List<String> variables;
+
     /** If the JobId is not empty, it is used to restore job from savePoint */
     public ClientJobExecutionEnvironment(
             JobConfig jobConfig,
             String jobFilePath,
-            List<String> variables,
             SeaTunnelHazelcastClient seaTunnelHazelcastClient,
             SeaTunnelConfig seaTunnelConfig,
             boolean isStartWithSavePoint,
             Long jobId) {
         super(jobConfig, isStartWithSavePoint);
         this.jobFilePath = jobFilePath;
-        this.variables = variables;
         this.seaTunnelHazelcastClient = seaTunnelHazelcastClient;
+        this.variables = Collections.emptyList();
         this.jobClient = new JobClient(seaTunnelHazelcastClient);
         this.seaTunnelConfig = seaTunnelConfig;
         Long finalJobId;
@@ -78,6 +82,32 @@ public class ClientJobExecutionEnvironment extends AbstractJobEnvironment {
         }
         this.jobConfig.setJobContext(new JobContext(finalJobId));
         this.connectorPackageClient = new ConnectorPackageClient(seaTunnelHazelcastClient);
+    }
+
+    public ClientJobExecutionEnvironment(
+            JobConfig jobConfig,
+            String jobFilePath,
+            List<String> variables,
+            SeaTunnelHazelcastClient seaTunnelHazelcastClient,
+            SeaTunnelConfig seaTunnelConfig,
+            boolean isStartWithSavePoint,
+            Long jobId) {
+        this(
+                jobConfig,
+                jobFilePath,
+                seaTunnelHazelcastClient,
+                seaTunnelConfig,
+                isStartWithSavePoint,
+                jobId);
+        this.variables = variables == null ? Collections.emptyList() : new ArrayList<>(variables);
+    }
+
+    public ClientJobExecutionEnvironment(
+            JobConfig jobConfig,
+            String jobFilePath,
+            SeaTunnelHazelcastClient seaTunnelHazelcastClient,
+            SeaTunnelConfig seaTunnelConfig) {
+        this(jobConfig, jobFilePath, seaTunnelHazelcastClient, seaTunnelConfig, false, null);
     }
 
     public ClientJobExecutionEnvironment(
@@ -107,9 +137,11 @@ public class ClientJobExecutionEnvironment extends AbstractJobEnvironment {
                     jobClient.getCheckpointData(
                             Long.parseLong(jobConfig.getJobContext().getJobId()));
         }
+        Config seaTunnelJobConfig = ConfigBuilder.of(Paths.get(jobFilePath), variables);
+        addCommonPluginJarsFromEnvOptions(
+                ReadonlyConfig.fromConfig(seaTunnelJobConfig.getConfig("env")));
         return new MultipleTableJobConfigParser(
-                jobFilePath,
-                variables,
+                seaTunnelJobConfig,
                 idGenerator,
                 jobConfig,
                 commonPluginJars,
@@ -188,14 +220,13 @@ public class ClientJobExecutionEnvironment extends AbstractJobEnvironment {
     }
 
     public ClientJobProxy execute() throws ExecutionException, InterruptedException {
-        LogicalDag logicalDag = getLogicalDag();
         JobImmutableInformation jobImmutableInformation =
                 new JobImmutableInformation(
                         Long.parseLong(jobConfig.getJobContext().getJobId()),
                         jobConfig.getName(),
                         isStartWithSavePoint,
                         seaTunnelHazelcastClient.getSerializationService(),
-                        logicalDag,
+                        getLogicalDag(),
                         new ArrayList<>(jarUrls),
                         new ArrayList<>(connectorJarIdentifiers));
 

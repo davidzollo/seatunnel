@@ -1,10 +1,10 @@
-# SQL用户定义函数
+# SQL UDF
 
-> SQL 转换插件的用户定义函数 (UDF)
+> SQL 转换插件的 UDF 能力
 
 ## 描述
 
-使用UDF SPI扩展SQL转换函数库。
+通过 UDF SPI 扩展 SQL 转换函数库。
 
 ## UDF API
 
@@ -34,12 +34,51 @@ public interface ZetaUDF {
      * @return result value
      */
     Object evaluate(List<Object> args);
+
+    /**
+     * Whether current udf requires row level context.
+     */
+    default boolean requiresContext() {
+        return false;
+    }
+
+    /**
+     * Evaluate with row level context.
+     */
+    default Object evaluateWithContext(List<Object> args, ZetaUDFContext context) {
+        return evaluate(args);
+    }
+
+    /**
+     * Initialize udf resources.
+     */
+    default void open() throws Exception {}
+
+    /**
+     * Release udf resources.
+     */
+    default void close() {}
 }
 ```
 
+`ZetaUDFContext` 提供了运行时行级上下文信息，包含以下字段：
+
+- `getRawTableId()`
+- `getDatabase()`
+- `getSchema()`
+- `getTable()`
+- `getRowKind()`
+- `getAllFields()`
+
+说明：
+
+- `database/schema/table` 的解析遵循 `TablePath.of(tableId)` 语义。
+- 当 `tableId` 格式不受支持时，访问 `database/schema/table` 会抛出 `IllegalArgumentException`。
+- 已有 UDF 保持向后兼容，仍可继续使用 `evaluate(List<Object> args)`。
+
 ## UDF 实现示例
 
-将这些依赖项添加到您的 Maven 项目，并使用 provided 作用域。
+在你的 Maven 项目中添加以下依赖并使用 `provided` 作用域：
 
 ```xml
 
@@ -66,7 +105,7 @@ public interface ZetaUDF {
 
 ```
 
-添加一个 Java 类来实现 ZetaUDF，类似于以下的方式：
+新增一个 Java 类并实现 `ZetaUDF`，示例如下：
 
 ```java
 
@@ -91,11 +130,55 @@ public class ExampleUDF implements ZetaUDF {
 }
 ```
 
-打包UDF项目并将jar文件复制到路径：${SEATUNNEL_HOME}/lib
+打包 UDF 项目后，将 jar 复制到 `${SEATUNNEL_HOME}/lib`。
+
+## 上下文感知与生命周期 UDF 示例
+
+```java
+@AutoService(ZetaUDF.class)
+public class ContextLifecycleUdf implements ZetaUDF {
+
+    private transient String prefix;
+
+    @Override
+    public String functionName() {
+        return "CTX_LIFE";
+    }
+
+    @Override
+    public SeaTunnelDataType<?> resultType(List<SeaTunnelDataType<?>> argsType) {
+        return BasicType.STRING_TYPE;
+    }
+
+    @Override
+    public boolean requiresContext() {
+        return true;
+    }
+
+    @Override
+    public void open() {
+        this.prefix = "OPENED";
+    }
+
+    @Override
+    public Object evaluateWithContext(List<Object> args, ZetaUDFContext context) {
+        String arg = args.get(0) == null ? null : String.valueOf(args.get(0));
+        if (arg == null) {
+            return null;
+        }
+        return prefix + ":" + context.getRowKind().shortString() + ":" + arg;
+    }
+
+    @Override
+    public void close() {
+        this.prefix = null;
+    }
+}
+```
 
 ## 示例
 
-源端数据读取的表格如下：
+Source 读取到的数据表如下：
 
 | id |   name   | age |
 |----|----------|-----|
@@ -104,7 +187,7 @@ public class ExampleUDF implements ZetaUDF {
 | 3  | Kin Dom  | 24  |
 | 4  | Joy Dom  | 22  |
 
-我们使用SQL查询中的UDF来转换源数据，类似于以下方式：
+使用 SQL UDF 转换：
 
 ```
 transform {
@@ -116,7 +199,7 @@ transform {
 }
 ```
 
-那么结果表 `fake1` 中的数据将会更新为
+结果表 `fake1` 将变为：
 
 | id |     name      | age |
 |----|---------------|-----|
@@ -125,9 +208,8 @@ transform {
 | 3  | UDF: Kin Dom  | 24  |
 | 4  | UDF: Joy Dom  | 22  |
 
-## 更新日志
+## Changelog
 
-### 新版本
+### new version
 
-- 添加SQL转换连接器的UDF
-
+- Add UDF of SQL Transform Connector
