@@ -23,12 +23,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LogServiceTest {
@@ -36,90 +46,99 @@ public class LogServiceTest {
     @TempDir Path tempDir;
 
     private LogoutService logOutService;
+    private Path logsDir;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         logOutService = new LogoutService(null);
+        logsDir = tempDir.resolve("logs");
+        Files.createDirectories(logsDir);
+        setLogDir(logsDir);
     }
 
     @Test
-    void testPackageJobLogs() throws IOException {
-        Path logsDir = tempDir.resolve("logs");
-        Files.createDirectories(logsDir);
+    void testPackageJobLogsIncludesFlatAndNestedJobLogFiles() throws IOException {
+        Files.write(
+                logsDir.resolve("job-123.log"), "flat job log".getBytes(StandardCharsets.UTF_8));
+        Files.write(
+                logsDir.resolve("job-123.log.2026-05-12-1"),
+                "rolled job log".getBytes(StandardCharsets.UTF_8));
+        Files.write(
+                logsDir.resolve("job-456.log"), "other job log".getBytes(StandardCharsets.UTF_8));
 
-        Path mainLogFile = logsDir.resolve("seatunnel.log");
-        Files.write(mainLogFile, "Test main log content".getBytes());
+        Path nestedDir = logsDir.resolve("pod-a");
+        Files.createDirectories(nestedDir);
+        Files.write(
+                nestedDir.resolve("job-123.log"),
+                "nested job log".getBytes(StandardCharsets.UTF_8));
 
-        Path rollingLogFile = logsDir.resolve("seatunnel.log.2023-12-01-1");
-        Files.write(rollingLogFile, "Test rolling log content".getBytes());
+        Map<String, String> zipEntries = readZipEntries(logOutService.packageJobLogs(123L));
 
-        byte[] zipBytes = logOutService.packageJobLogs(123L);
-
-        assertNotNull(zipBytes);
-        assertTrue(zipBytes.length > 0);
-        // delete the log files after test
-        if (Files.exists(mainLogFile)) {
-            Files.delete(mainLogFile);
-        }
-        if (Files.exists(rollingLogFile)) {
-            Files.delete(rollingLogFile);
-        }
-        if (Files.exists(logsDir)) {
-            Files.delete(logsDir);
-        }
+        assertEquals(3, zipEntries.size());
+        assertEquals("flat job log", zipEntries.get("job_123/job-123.log"));
+        assertEquals("rolled job log", zipEntries.get("job_123/job-123.log.2026-05-12-1"));
+        assertEquals("nested job log", zipEntries.get("job_123/pod-a/job-123.log"));
+        assertFalse(zipEntries.containsKey("job_123/job-456.log"));
     }
 
     @Test
-    void testPackageAllLogs() throws IOException {
-        Path logsDir = tempDir.resolve("logs");
-        Files.createDirectories(logsDir);
+    void testPackageZetaLogsIncludesCurrentDateLogs() throws IOException {
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        Files.write(logsDir.resolve("seatunnel.log"), "main log".getBytes(StandardCharsets.UTF_8));
+        Files.write(
+                logsDir.resolve("seatunnel.log." + today + "-1"),
+                "today rolled log".getBytes(StandardCharsets.UTF_8));
 
-        Path mainLogFile = logsDir.resolve("seatunnel.log");
-        Path rollingLogFile = logsDir.resolve("seatunnel.log.2023-12-01-1");
-        Files.write(mainLogFile, "Test main log content".getBytes());
-        Files.write(rollingLogFile, "Test rolling log content".getBytes());
+        Map<String, String> zipEntries = readZipEntries(logOutService.packageZetaLogs());
 
-        byte[] zipBytes = logOutService.packageZetaLogs();
-
-        assertNotNull(zipBytes);
-        assertTrue(zipBytes.length > 0);
-
-        // delete the log files after test
-        if (Files.exists(mainLogFile)) {
-            Files.delete(mainLogFile);
-        }
-        if (Files.exists(rollingLogFile)) {
-            Files.delete(rollingLogFile);
-        }
-        if (Files.exists(logsDir)) {
-            Files.delete(logsDir);
-        }
+        assertEquals("main log", zipEntries.get("seatunnel.log"));
+        assertEquals("today rolled log", zipEntries.get("seatunnel.log." + today + "-1"));
     }
 
     @Test
-    void testPackageZetaLogsWithDate() throws IOException {
-        Path logsDir = tempDir.resolve("logs");
-        Files.createDirectories(logsDir);
+    void testPackageZetaLogsWithDateFiltersOtherDates() throws IOException {
+        LocalDate targetDate = LocalDate.now().minusDays(1);
+        String targetDateText = targetDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        String otherDateText =
+                targetDate.minusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
-        Path mainLogFile = logsDir.resolve("seatunnel.log");
-        Path rollingLogFile = logsDir.resolve("seatunnel.log.2023-12-01-1");
-        Files.write(mainLogFile, "Test main log content".getBytes());
-        Files.write(rollingLogFile, "Test rolling log content".getBytes());
+        Files.write(
+                logsDir.resolve("seatunnel.log." + targetDateText + "-1"),
+                "target day log".getBytes(StandardCharsets.UTF_8));
+        Files.write(
+                logsDir.resolve("seatunnel.log." + otherDateText + "-1"),
+                "other day log".getBytes(StandardCharsets.UTF_8));
 
-        LocalDate testDate = LocalDate.now();
-        byte[] zipBytes = logOutService.packageZetaLogs(testDate);
+        Map<String, String> zipEntries = readZipEntries(logOutService.packageZetaLogs(targetDate));
 
-        assertNotNull(zipBytes);
-        assertTrue(zipBytes.length > 0);
-        // delete the log files after test
-        if (Files.exists(mainLogFile)) {
-            Files.delete(mainLogFile);
+        assertEquals(1, zipEntries.size());
+        assertEquals("target day log", zipEntries.get("seatunnel.log." + targetDateText + "-1"));
+        assertTrue(zipEntries.containsKey("seatunnel.log." + targetDateText + "-1"));
+    }
+
+    private void setLogDir(Path logDir) throws Exception {
+        Field logDirField = LogoutService.class.getDeclaredField("logDir");
+        logDirField.setAccessible(true);
+        logDirField.set(logOutService, logDir.toString());
+    }
+
+    private Map<String, String> readZipEntries(byte[] zipBytes) throws IOException {
+        Map<String, String> zipEntries = new LinkedHashMap<>();
+        try (ZipInputStream zipInputStream =
+                new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+            ZipEntry zipEntry;
+            while ((zipEntry = zipInputStream.getNextEntry()) != null) {
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                byte[] buffer = new byte[1024];
+                int length;
+                while ((length = zipInputStream.read(buffer)) > 0) {
+                    outputStream.write(buffer, 0, length);
+                }
+                zipEntries.put(
+                        zipEntry.getName(), outputStream.toString(StandardCharsets.UTF_8.name()));
+                zipInputStream.closeEntry();
+            }
         }
-        if (Files.exists(rollingLogFile)) {
-            Files.delete(rollingLogFile);
-        }
-        if (Files.exists(logsDir)) {
-            Files.delete(logsDir);
-        }
+        return zipEntries;
     }
 }
