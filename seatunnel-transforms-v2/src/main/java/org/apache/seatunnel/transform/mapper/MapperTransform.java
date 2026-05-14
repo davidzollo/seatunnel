@@ -251,6 +251,10 @@ public class MapperTransform extends MultipleFieldOutputTransform {
                                                 cw.setDataType(
                                                         transTypeWithBasicType(
                                                                 newDataType, newLength, newScale));
+                                                if (StringUtils.isBlank(
+                                                        conditionColumn.getSinkType())) {
+                                                    tgt.setSourceType(null);
+                                                }
                                             }
                                             tgt.setNullable(conditionColumn.isNullable());
                                             if (conditionColumn.getDefaultValue() != null) {
