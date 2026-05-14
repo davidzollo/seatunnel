@@ -90,14 +90,7 @@ public class LogoutService {
         try {
             File logDirFile = new File(logDir);
             if (logDirFile.exists() && logDirFile.isDirectory()) {
-                File[] logFiles =
-                        logDirFile.listFiles((dir, name) -> name.contains(jobId.toString()));
-                if (logFiles != null) {
-                    for (File logFile : logFiles) {
-                        addFileToZip(
-                                zipOut, logFile.toPath(), "job_" + jobId + "/" + logFile.getName());
-                    }
-                }
+                addJobLogFilesToZip(zipOut, logDirFile, logDirFile, jobId);
             }
         } catch (Exception e) {
             log.warn("Failed to add log files for jobId {}: {}", jobId, e.getMessage(), e);
@@ -131,6 +124,31 @@ public class LogoutService {
         }
     }
 
+    /**
+     * Recursively add job log files so K8s layouts such as HOSTNAME subdirectories can still be
+     * packaged under the original job zip prefix.
+     */
+    private void addJobLogFilesToZip(
+            ZipOutputStream zipOut, File logRootDir, File currentDir, Long jobId)
+            throws IOException {
+        File[] files = currentDir.listFiles();
+        if (files == null) {
+            return;
+        }
+
+        for (File file : files) {
+            if (file.isDirectory()) {
+                addJobLogFilesToZip(zipOut, logRootDir, file, jobId);
+            } else if (isJobLogFile(file, jobId)) {
+                Path relativePath = logRootDir.toPath().relativize(file.toPath());
+                addFileToZip(
+                        zipOut,
+                        file.toPath(),
+                        "job_" + jobId + "/" + normalizeZipEntryPath(relativePath));
+            }
+        }
+    }
+
     private boolean isFileFromDate(File file, LocalDate date) {
         try {
             return LogUtil.isLogFileForDate(file.getName(), date);
@@ -138,6 +156,16 @@ public class LogoutService {
             log.warn("Failed to check file date for: {}", file.getName(), e);
             return true;
         }
+    }
+
+    /** Preserve the historical jobId filename match while extending the search to child folders. */
+    private boolean isJobLogFile(File file, Long jobId) {
+        return file.getName().contains(jobId.toString());
+    }
+
+    /** Zip entries must use forward slashes even when the underlying filesystem does not. */
+    private String normalizeZipEntryPath(Path relativePath) {
+        return relativePath.toString().replace(File.separatorChar, '/');
     }
 
     private void addFileToZip(ZipOutputStream zipOut, Path filePath, String entryName)
