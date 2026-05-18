@@ -21,6 +21,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import com.clickhouse.client.ClickHouseNode;
+import com.clickhouse.client.ClickHouseProtocol;
+
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -99,5 +102,24 @@ public class ClickhouseProxyTest {
         Assertions.assertEquals(2, cols.size(), "Should extract 2 columns from complex function");
         Assertions.assertTrue(cols.contains("col1"));
         Assertions.assertTrue(cols.contains("col2"));
+    }
+
+    @Test
+    public void testNormalizeShardHostFallbackToDatasourceHost() throws Exception {
+        ClickHouseNode node =
+                ClickHouseNode.builder()
+                        .host("datasource01")
+                        .port(ClickHouseProtocol.HTTP, 8123)
+                        .database("default")
+                        .build();
+        ClickhouseProxy proxy = new ClickhouseProxy(node);
+        Method method =
+                ClickhouseProxy.class.getDeclaredMethod(
+                        "normalizeShardHost", String.class, String.class);
+        method.setAccessible(true);
+
+        String host = (String) method.invoke(proxy, "localhost", "127.0.0.1");
+
+        Assertions.assertEquals("datasource01", host);
     }
 }
