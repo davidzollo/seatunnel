@@ -37,37 +37,83 @@ import java.sql.SQLException;
 @Slf4j
 public class RedshiftCatalog extends AbstractJdbcCatalog {
 
+    /**
+     * Late-binding views are invisible to the pg_attribute path used by ordinary Redshift tables
+     * and schema-bound views, so keep the existing query first and fall back to svv_columns only
+     * when pg_catalog returns no columns.
+     */
     private static final String SELECT_COLUMNS_SQL_TEMPLATE =
-            "SELECT \n"
-                    + "    a.attname AS column_name, \n"
-                    + "    t.typname AS type_name, \n"
-                    + "    pg_catalog.format_type(a.atttypid, a.atttypmod) AS full_type_name, \n"
-                    + "    CASE \n"
-                    + "        WHEN a.atttypmod = -1 THEN NULL \n"
-                    + "        WHEN t.typname IN ('varchar', 'bpchar', 'bit', 'bit varying') THEN a.atttypmod - 4 \n"
-                    + "        WHEN t.typname IN ('numeric', 'decimal') THEN (a.atttypmod - 4) >> 16 \n"
-                    + "        ELSE NULL \n"
-                    + "    END AS column_length, \n"
-                    + "    CASE \n"
-                    + "        WHEN a.atttypmod = -1 THEN NULL \n"
-                    + "        WHEN t.typname IN ('numeric', 'decimal') THEN (a.atttypmod - 4) & 65535 \n"
-                    + "        ELSE NULL \n"
-                    + "    END AS column_scale, \n"
-                    + "    pg_catalog.col_description(a.attrelid, a.attnum) AS column_comment, \n"
-                    + "    pg_get_expr(ad.adbin, ad.adrelid) AS default_value, \n"
-                    + "    CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END AS is_nullable \n"
-                    + "FROM \n"
-                    + "    pg_class c \n"
-                    + "    JOIN pg_namespace n ON c.relnamespace = n.oid \n"
-                    + "    JOIN pg_attribute a ON a.attrelid = c.oid \n"
-                    + "    JOIN pg_type t ON a.atttypid = t.oid \n"
-                    + "    LEFT JOIN pg_attrdef ad ON a.attnum = ad.adnum AND a.attrelid = ad.adrelid \n"
-                    + "WHERE \n"
-                    + "    n.nspname = '%s' \n"
-                    + "    AND c.relname = '%s' \n"
-                    + "    AND a.attnum > 0 \n"
-                    + "ORDER BY \n"
-                    + "    a.attnum";
+            "WITH pg_columns AS (\n"
+                    + "    SELECT \n"
+                    + "        a.attname AS column_name, \n"
+                    + "        t.typname AS type_name, \n"
+                    + "        pg_catalog.format_type(a.atttypid, a.atttypmod) AS full_type_name, \n"
+                    + "        CASE \n"
+                    + "            WHEN a.atttypmod = -1 THEN NULL \n"
+                    + "            WHEN t.typname IN ('varchar', 'bpchar', 'bit', 'bit varying') THEN a.atttypmod - 4 \n"
+                    + "            WHEN t.typname IN ('numeric', 'decimal') THEN (a.atttypmod - 4) >> 16 \n"
+                    + "            ELSE NULL \n"
+                    + "        END AS column_length, \n"
+                    + "        CASE \n"
+                    + "            WHEN a.atttypmod = -1 THEN NULL \n"
+                    + "            WHEN t.typname IN ('numeric', 'decimal') THEN (a.atttypmod - 4) & 65535 \n"
+                    + "            ELSE NULL \n"
+                    + "        END AS column_scale, \n"
+                    + "        pg_catalog.col_description(a.attrelid, a.attnum) AS column_comment, \n"
+                    + "        pg_get_expr(ad.adbin, ad.adrelid) AS default_value, \n"
+                    + "        CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END AS is_nullable, \n"
+                    + "        a.attnum AS ordinal_position \n"
+                    + "    FROM \n"
+                    + "        pg_class c \n"
+                    + "        JOIN pg_namespace n ON c.relnamespace = n.oid \n"
+                    + "        JOIN pg_attribute a ON a.attrelid = c.oid \n"
+                    + "        JOIN pg_type t ON a.atttypid = t.oid \n"
+                    + "        LEFT JOIN pg_attrdef ad ON a.attnum = ad.adnum AND a.attrelid = ad.adrelid \n"
+                    + "    WHERE \n"
+                    + "        n.nspname = '%s' \n"
+                    + "        AND c.relname = '%s' \n"
+                    + "        AND a.attnum > 0 \n"
+                    + "), late_binding_columns AS (\n"
+                    + "    SELECT \n"
+                    + "        column_name AS column_name, \n"
+                    + "        data_type AS type_name, \n"
+                    + "        data_type AS full_type_name, \n"
+                    + "        COALESCE(CAST(numeric_precision AS BIGINT), CAST(character_maximum_length AS BIGINT)) AS column_length, \n"
+                    + "        numeric_scale AS column_scale, \n"
+                    + "        remarks AS column_comment, \n"
+                    + "        column_default AS default_value, \n"
+                    + "        is_nullable AS is_nullable, \n"
+                    + "        ordinal_position AS ordinal_position \n"
+                    + "    FROM svv_columns \n"
+                    + "    WHERE table_catalog = '%s' \n"
+                    + "      AND table_schema = '%s' \n"
+                    + "      AND table_name = '%s' \n"
+                    + ")\n"
+                    + "SELECT \n"
+                    + "    column_name, \n"
+                    + "    type_name, \n"
+                    + "    full_type_name, \n"
+                    + "    column_length, \n"
+                    + "    column_scale, \n"
+                    + "    column_comment, \n"
+                    + "    default_value, \n"
+                    + "    is_nullable, \n"
+                    + "    ordinal_position \n"
+                    + "FROM pg_columns \n"
+                    + "UNION ALL \n"
+                    + "SELECT \n"
+                    + "    column_name, \n"
+                    + "    type_name, \n"
+                    + "    full_type_name, \n"
+                    + "    column_length, \n"
+                    + "    column_scale, \n"
+                    + "    column_comment, \n"
+                    + "    default_value, \n"
+                    + "    is_nullable, \n"
+                    + "    ordinal_position \n"
+                    + "FROM late_binding_columns \n"
+                    + "WHERE NOT EXISTS (SELECT 1 FROM pg_columns) \n"
+                    + "ORDER BY ordinal_position";
 
     public RedshiftCatalog(
             String catalogName,
@@ -147,6 +193,9 @@ public class RedshiftCatalog extends AbstractJdbcCatalog {
     protected String getSelectColumnsSql(TablePath tablePath) {
         return String.format(
                 SELECT_COLUMNS_SQL_TEMPLATE,
+                tablePath.getSchemaName().toLowerCase(),
+                tablePath.getTableName().toLowerCase(),
+                tablePath.getDatabaseName().toLowerCase(),
                 tablePath.getSchemaName().toLowerCase(),
                 tablePath.getTableName().toLowerCase());
     }
