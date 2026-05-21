@@ -35,6 +35,11 @@ public class MySqlTypeUtils {
 
     public static org.apache.seatunnel.api.table.catalog.Column convertToSeaTunnelColumn(
             io.debezium.relational.Column column) {
+        return convertToSeaTunnelColumn(column, null);
+    }
+
+    public static org.apache.seatunnel.api.table.catalog.Column convertToSeaTunnelColumn(
+            io.debezium.relational.Column column, String comment) {
         BasicTypeDefine.BasicTypeDefineBuilder builder =
                 BasicTypeDefine.builder()
                         .name(column.name())
@@ -44,7 +49,8 @@ public class MySqlTypeUtils {
                         .length((long) column.length())
                         .precision((long) column.length())
                         .scale(column.scale().orElse(0))
-                        .defaultValue(column.defaultValue());
+                        .defaultValue(column.defaultValue())
+                        .comment(comment);
         switch (column.typeName().toUpperCase()) {
             case MySqlTypeConverter.MYSQL_CHAR:
             case MySqlTypeConverter.MYSQL_VARCHAR:

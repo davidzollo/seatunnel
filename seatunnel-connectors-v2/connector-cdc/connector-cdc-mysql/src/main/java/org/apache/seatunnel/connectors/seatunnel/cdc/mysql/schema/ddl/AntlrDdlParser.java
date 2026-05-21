@@ -149,6 +149,58 @@ public abstract class AntlrDdlParser<L extends Lexer, P extends Parser> implemen
                 : possiblyQuoted;
     }
 
+    /**
+     * MySQL COMMENT clauses use SQL string-literal escaping, so strip the surrounding quotes and
+     * decode the literal to the raw comment value before storing it in schema-change events.
+     */
+    public static String decodeQuotedText(String quotedText) {
+        if (!isQuoted(quotedText)) {
+            return quotedText;
+        }
+
+        char quote = quotedText.charAt(0);
+        String content = quotedText.substring(1, quotedText.length() - 1);
+        StringBuilder decoded = new StringBuilder(content.length());
+        for (int i = 0; i < content.length(); i++) {
+            char current = content.charAt(i);
+            if (current == quote && i + 1 < content.length() && content.charAt(i + 1) == quote) {
+                decoded.append(quote);
+                i++;
+                continue;
+            }
+            if (current == '\\') {
+                if (i + 1 >= content.length()) {
+                    decoded.append(current);
+                    continue;
+                }
+                decoded.append(unescapeBackslash(content.charAt(++i)));
+                continue;
+            }
+            decoded.append(current);
+        }
+        return decoded.toString();
+    }
+
+    private static char unescapeBackslash(char escaped) {
+        switch (escaped) {
+            case '0':
+                return '\0';
+            case 'b':
+                return '\b';
+            case 'n':
+                return '\n';
+            case 'r':
+                return '\r';
+            case 't':
+                return '\t';
+            case 'Z':
+                return '\u001A';
+            default:
+                // MySQL ignores the backslash for unknown escape sequences.
+                return escaped;
+        }
+    }
+
     public static boolean isQuoted(String possiblyQuoted) {
         if (possiblyQuoted.length() < 2) {
             // Too short to be quoted ...

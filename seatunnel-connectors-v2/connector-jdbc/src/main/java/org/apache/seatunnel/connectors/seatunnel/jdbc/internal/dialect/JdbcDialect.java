@@ -443,14 +443,7 @@ public interface JdbcDialect extends Serializable {
         if (event.getColumn().getDefaultValue() != null) {
             sqlBuilder.append(" ").append(sqlClauseWithDefaultValue(typeDefine, sourceDialectName));
         }
-        if (event.getColumn().getComment() != null) {
-            sqlBuilder
-                    .append(" ")
-                    .append("COMMENT ")
-                    .append("'")
-                    .append(event.getColumn().getComment())
-                    .append("'");
-        }
+        appendColumnCommentClause(sqlBuilder, event.getColumn().getComment());
         if (event.getAfterColumn() != null) {
             sqlBuilder.append(" ").append("AFTER ").append(quoteIdentifier(event.getAfterColumn()));
         }
@@ -488,14 +481,7 @@ public interface JdbcDialect extends Serializable {
         if (event.getColumn().getDefaultValue() != null) {
             sqlBuilder.append(" ").append(sqlClauseWithDefaultValue(typeDefine, sourceDialectName));
         }
-        if (event.getColumn().getComment() != null) {
-            sqlBuilder
-                    .append(" ")
-                    .append("COMMENT ")
-                    .append("'")
-                    .append(event.getColumn().getComment())
-                    .append("'");
-        }
+        appendColumnCommentClause(sqlBuilder, event.getColumn().getComment());
         if (event.getAfterColumn() != null) {
             sqlBuilder.append(" ").append("AFTER ").append(quoteIdentifier(event.getAfterColumn()));
         }
@@ -532,14 +518,7 @@ public interface JdbcDialect extends Serializable {
         if (event.getColumn().getDefaultValue() != null) {
             sqlBuilder.append(" ").append(sqlClauseWithDefaultValue(typeDefine, sourceDialectName));
         }
-        if (event.getColumn().getComment() != null) {
-            sqlBuilder
-                    .append(" ")
-                    .append("COMMENT ")
-                    .append("'")
-                    .append(event.getColumn().getComment())
-                    .append("'");
-        }
+        appendColumnCommentClause(sqlBuilder, event.getColumn().getComment());
         if (event.getAfterColumn() != null) {
             sqlBuilder.append(" ").append("AFTER ").append(quoteIdentifier(event.getAfterColumn()));
         }
@@ -562,6 +541,22 @@ public interface JdbcDialect extends Serializable {
             log.info("Executing drop column SQL: " + dropColumnSQL);
             statement.execute(dropColumnSQL);
         }
+    }
+
+    default void appendColumnCommentClause(StringBuilder sqlBuilder, String comment) {
+        if (comment == null) {
+            return;
+        }
+        sqlBuilder
+                .append(" ")
+                .append("COMMENT ")
+                .append("'")
+                .append(escapeColumnComment(comment))
+                .append("'");
+    }
+
+    default String escapeColumnComment(String comment) {
+        return comment.replace("'", "''").replace("\\", "\\\\");
     }
 
     default String sqlClauseWithDefaultValue(

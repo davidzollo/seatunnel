@@ -34,7 +34,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.sql.Types;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -49,6 +51,7 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
     private boolean uniqueColumn;
     private DefaultValueParserListener defaultValueListener;
     private AtomicReference<Boolean> optionalColumn = new AtomicReference<>();
+    private final Map<String, String> columnComments = new HashMap<>();
 
     public ColumnDefinitionParserListener(
             ColumnEditor columnEditor,
@@ -71,6 +74,10 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
 
     public Column getColumn() {
         return columnEditor.create();
+    }
+
+    public String getColumnComment(String columnName) {
+        return columnComments.get(columnName);
     }
 
     @Override
@@ -113,6 +120,14 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
         columnEditor.autoIncremented(true);
         columnEditor.generated(true);
         super.enterAutoIncrementColumnConstraint(ctx);
+    }
+
+    @Override
+    public void enterCommentColumnConstraint(MySqlParser.CommentColumnConstraintContext ctx) {
+        columnComments.put(
+                columnEditor.name(),
+                AntlrDdlParser.decodeQuotedText(ctx.STRING_LITERAL().getText()));
+        super.enterCommentColumnConstraint(ctx);
     }
 
     @Override

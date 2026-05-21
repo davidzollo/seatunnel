@@ -105,24 +105,25 @@ public class AlterTableParserListener extends MySqlParserBaseListener {
     @Override
     public void exitAlterByAddColumn(MySqlParser.AlterByAddColumnContext ctx) {
         Column column = columnDefinitionListener.getColumn();
+        String columnComment = columnDefinitionListener.getColumnComment(column.name());
         AlterTableAddColumnEvent addColumn;
         if (ctx.FIRST() != null) {
             addColumn =
                     AlterTableAddColumnEvent.addFirst(
                             TableIdentifier.of(parser.getCatalogName(), tablePath),
-                            MySqlTypeUtils.convertToSeaTunnelColumn(column));
+                            MySqlTypeUtils.convertToSeaTunnelColumn(column, columnComment));
         } else if (ctx.AFTER() != null) {
             String afterColumn = parser.parseName(ctx.uid(1));
             addColumn =
                     AlterTableAddColumnEvent.addAfter(
                             TableIdentifier.of(parser.getCatalogName(), tablePath),
-                            MySqlTypeUtils.convertToSeaTunnelColumn(column),
+                            MySqlTypeUtils.convertToSeaTunnelColumn(column, columnComment),
                             afterColumn);
         } else {
             addColumn =
                     AlterTableAddColumnEvent.add(
                             TableIdentifier.of(parser.getCatalogName(), tablePath),
-                            MySqlTypeUtils.convertToSeaTunnelColumn(column));
+                            MySqlTypeUtils.convertToSeaTunnelColumn(column, columnComment));
         }
         alterTableColumnsEvent.addEvent(addColumn);
 
@@ -147,10 +148,11 @@ public class AlterTableParserListener extends MySqlParserBaseListener {
     public void exitAlterByAddColumns(MySqlParser.AlterByAddColumnsContext ctx) {
         for (ColumnEditor columnEditor : columnEditors) {
             Column column = columnEditor.create();
+            String columnComment = columnDefinitionListener.getColumnComment(column.name());
             AlterTableAddColumnEvent addColumnEvent =
                     AlterTableAddColumnEvent.add(
                             TableIdentifier.of(parser.getCatalogName(), tablePath),
-                            MySqlTypeUtils.convertToSeaTunnelColumn(column));
+                            MySqlTypeUtils.convertToSeaTunnelColumn(column, columnComment));
             alterTableColumnsEvent.addEvent(addColumnEvent);
         }
 
