@@ -51,6 +51,7 @@ header:
     - 'seatunnel-engine/seatunnel-engine-common/src/main/java/org/apache/seatunnel/engine/common/utils/PassiveCompletableFuture.java'
     - 'seatunnel-connectors-v2/connector-cdc/connector-cdc-opengauss-wt/**'
     - 'seatunnel-connectors-v2/connector-cdc/connector-cdc-highgo-wt/**'
+    - 'seatunnel-connectors-v2/connector-cdc/connector-cdc-kingbase-wt/**'
     - 'seatunnel-connectors-v2/connector-cdc/connector-cdc-postgres/src/main/java/io/debezium/connector/postgresql/connection/PostgresReplicationConnection.java'
     - 'seatunnel-connectors-v2/connector-cdc/connector-cdc-sqlserver/src/main/java/io/debezium/connector/sqlserver/SqlServerConnection.java'
     - 'seatunnel-connectors-v2/connector-file/connector-file-base/src/main/java/org/apache/orc/OrcConf.java'

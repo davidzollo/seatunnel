@@ -882,6 +882,7 @@
                                     <mkdir dir="src/main/resources/connector-cdc-mysql" />
                                     <mkdir dir="src/main/resources/connector-cdc-opengauss" />
                                     <mkdir dir="src/main/resources/connector-cdc-highgo" />
+                                    <mkdir dir="src/main/resources/connector-cdc-kingbase" />
                                     <mkdir dir="src/main/resources/connector-cdc-oracle" />
                                     <mkdir dir="src/main/resources/connector-cdc-postgres" />
                                     <mkdir dir="src/main/resources/connector-cdc-sqlserver" />
