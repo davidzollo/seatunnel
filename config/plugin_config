@@ -28,6 +28,7 @@ connector-cdc-mongodb
 connector-cdc-sqlserver
 connector-cdc-postgres
 connector-cdc-oracle
+connector-cdc-kingbase-wt
 connector-cdc-tidb
 connector-jdbc-clickhouse
 connector-datahub

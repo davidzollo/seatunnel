@@ -1006,6 +1006,7 @@
                                     <mkdir dir="src/main/resources/connector-cdc-mysql" />
                                     <mkdir dir="src/main/resources/connector-cdc-opengauss-wt" />
                                     <mkdir dir="src/main/resources/connector-cdc-highgo-wt" />
+                                    <mkdir dir="src/main/resources/connector-cdc-kingbase-wt" />
                                     <mkdir dir="src/main/resources/connector-cdc-oracle-wt" />
                                     <mkdir dir="src/main/resources/connector-cdc-postgres" />
                                     <mkdir dir="src/main/resources/connector-cdc-sqlserver" />

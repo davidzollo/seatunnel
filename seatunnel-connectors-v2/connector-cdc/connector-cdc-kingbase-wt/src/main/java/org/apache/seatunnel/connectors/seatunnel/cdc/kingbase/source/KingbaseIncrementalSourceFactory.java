@@ -1,0 +1,111 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.seatunnel.connectors.seatunnel.cdc.kingbase.source;
+
+import org.apache.seatunnel.api.configuration.util.OptionRule;
+import org.apache.seatunnel.api.source.SeaTunnelSource;
+import org.apache.seatunnel.api.source.SourceSplit;
+import org.apache.seatunnel.api.table.catalog.CatalogOptions;
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
+import org.apache.seatunnel.api.table.catalog.CatalogTableUtil;
+import org.apache.seatunnel.api.table.catalog.TablePath;
+import org.apache.seatunnel.api.table.connector.TableSource;
+import org.apache.seatunnel.api.table.factory.Factory;
+import org.apache.seatunnel.api.table.factory.TableSourceFactory;
+import org.apache.seatunnel.api.table.factory.TableSourceFactoryContext;
+import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceTableConfig;
+import org.apache.seatunnel.connectors.cdc.base.option.JdbcSourceOptions;
+import org.apache.seatunnel.connectors.cdc.base.utils.CatalogTableUtils;
+import org.apache.seatunnel.connectors.seatunnel.cdc.kingbase.option.KingbaseOptions;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.JdbcCatalogOptions;
+
+import com.google.auto.service.AutoService;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceTableConfig.toReadColumnsMap;
+
+@AutoService(Factory.class)
+public class KingbaseIncrementalSourceFactory implements TableSourceFactory {
+    @Override
+    public String factoryIdentifier() {
+        return KingbaseIncrementalSource.IDENTIFIER;
+    }
+
+    @Override
+    public OptionRule optionRule() {
+        return JdbcSourceOptions.getBaseRule()
+                .required(
+                        JdbcSourceOptions.USERNAME,
+                        JdbcSourceOptions.PASSWORD,
+                        CatalogOptions.TABLE_NAMES,
+                        JdbcCatalogOptions.BASE_URL)
+                .optional(
+                        JdbcSourceOptions.DATABASE_NAMES,
+                        JdbcSourceOptions.SERVER_TIME_ZONE,
+                        JdbcSourceOptions.CONNECT_TIMEOUT_MS,
+                        JdbcSourceOptions.CONNECT_MAX_RETRIES,
+                        JdbcSourceOptions.CONNECTION_POOL_SIZE,
+                        KingbaseOptions.DECODING_PLUGIN_NAME,
+                        KingbaseOptions.SLOT_NAME,
+                        JdbcSourceOptions.CHUNK_KEY_EVEN_DISTRIBUTION_FACTOR_LOWER_BOUND,
+                        JdbcSourceOptions.CHUNK_KEY_EVEN_DISTRIBUTION_FACTOR_UPPER_BOUND,
+                        JdbcSourceOptions.SPLIT_ENABLE_HASH_SPLIT_FOR_STRING_COLUMN,
+                        JdbcSourceOptions.SAMPLE_SHARDING_THRESHOLD,
+                        JdbcSourceOptions.TABLE_NAMES_CONFIG,
+                        JdbcSourceOptions.WHERE_CONDITION)
+                .optional(KingbaseSourceOptions.STARTUP_MODE, KingbaseSourceOptions.STOP_MODE)
+                .build();
+    }
+
+    @Override
+    public Class<? extends SeaTunnelSource> getSourceClass() {
+        return KingbaseIncrementalSource.class;
+    }
+
+    @Override
+    public <T, SplitT extends SourceSplit, StateT extends Serializable>
+            TableSource<T, SplitT, StateT> createSource(TableSourceFactoryContext context) {
+        return () -> {
+            try {
+                Class.forName("com.kingbase8.Driver");
+            } catch (ClassNotFoundException e) {
+                throw new RuntimeException("Kingbase driver not found.", e);
+            }
+            Optional<List<JdbcSourceTableConfig>> tableConfigs =
+                    context.getOptions().getOptional(JdbcSourceOptions.TABLE_NAMES_CONFIG);
+            Map<String, List<String>> readColumnsMap =
+                    toReadColumnsMap(tableConfigs.orElseGet(ArrayList::new));
+            List<CatalogTable> catalogTables =
+                    CatalogTableUtil.getCatalogTables(
+                            context.getOptions(), context.getClassLoader(), readColumnsMap);
+
+            if (tableConfigs.isPresent()) {
+                catalogTables =
+                        CatalogTableUtils.mergeCatalogTableConfig(
+                                catalogTables, tableConfigs.get(), s -> TablePath.of(s, true));
+            }
+            return (SeaTunnelSource<T, SplitT, StateT>)
+                    new KingbaseIncrementalSource<>(context.getOptions(), catalogTables);
+        };
+    }
+}
