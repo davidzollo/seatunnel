@@ -173,6 +173,7 @@ public class AlterTableParserListener extends MySqlParserBaseListener {
 
         ColumnEditor columnEditor = existingColumn.edit();
         columnEditor.unsetDefaultValueExpression();
+        columnEditor.comment(null);
 
         columnDefinitionListener =
                 new ColumnDefinitionParserListener(columnEditor, parser, listeners);
@@ -224,6 +225,7 @@ public class AlterTableParserListener extends MySqlParserBaseListener {
 
         ColumnEditor columnEditor = newColumn.edit();
         columnEditor.unsetDefaultValueExpression();
+        columnEditor.comment(null);
         columnDefinitionListener =
                 new ColumnDefinitionParserListener(columnEditor, parser, listeners);
         listeners.add(columnDefinitionListener);

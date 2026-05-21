@@ -114,6 +114,12 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
     }
 
     @Override
+    public void enterCommentColumnConstraint(MySqlParser.CommentColumnConstraintContext ctx) {
+        columnEditor.comment(AntlrDdlParser.decodeQuotedText(ctx.STRING_LITERAL().getText()));
+        super.enterCommentColumnConstraint(ctx);
+    }
+
+    @Override
     public void enterSerialDefaultColumnConstraint(
             MySqlParser.SerialDefaultColumnConstraintContext ctx) {
         serialColumn();
