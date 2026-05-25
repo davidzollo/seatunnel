@@ -19,6 +19,7 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.mysql.schema.ddl;
 
 import org.apache.seatunnel.api.table.catalog.Column;
 import org.apache.seatunnel.api.table.schema.event.AlterTableAddColumnEvent;
+import org.apache.seatunnel.api.table.schema.event.AlterTableChangeColumnEvent;
 import org.apache.seatunnel.api.table.schema.event.AlterTableColumnsEvent;
 import org.apache.seatunnel.api.table.schema.event.AlterTableModifyColumnEvent;
 import org.apache.seatunnel.api.table.schema.event.SchemaChangeEvent;
@@ -29,6 +30,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import io.debezium.relational.Table;
+import io.debezium.relational.TableEditor;
+import io.debezium.relational.TableId;
+
+import java.sql.Types;
 import java.util.List;
 
 public class MySqlDdlParserTest {
@@ -90,8 +96,9 @@ public class MySqlDdlParserTest {
     @Test
     public void testParseModifyColumnWithoutCommentDropsExistingComment() {
         parser.parse(
-                "CREATE TABLE test_table (extra_info VARCHAR(32) COMMENT 'legacy comment');", null);
-        parser.parse("ALTER TABLE test_table MODIFY COLUMN extra_info VARCHAR(64);", null);
+                "ALTER TABLE test_table MODIFY COLUMN extra_info VARCHAR(64);",
+                createTableEditor(
+                        "test_table", createVarcharColumn("extra_info", 32, "legacy comment")));
 
         List<SchemaChangeEvent> schemaChangeEvents = parser.getSchemaChanges().getEvents();
         AlterTableColumnsEvent alterTableColumnsEvent =
@@ -100,5 +107,43 @@ public class MySqlDdlParserTest {
                 (AlterTableModifyColumnEvent) alterTableColumnsEvent.getEvents().get(0);
 
         Assertions.assertNull(modifyColumnEvent.getColumn().getComment());
+    }
+
+    @Test
+    public void testParseChangeColumnRenameWithComment() {
+        parser.parse(
+                "ALTER TABLE test_table CHANGE COLUMN old_c new_c VARCHAR(64) COMMENT 'new comment';",
+                createTableEditor("test_table", createVarcharColumn("old_c", 32, null)));
+
+        List<SchemaChangeEvent> schemaChangeEvents = parser.getSchemaChanges().getEvents();
+        AlterTableColumnsEvent alterTableColumnsEvent =
+                (AlterTableColumnsEvent) schemaChangeEvents.get(schemaChangeEvents.size() - 1);
+        AlterTableChangeColumnEvent changeColumnEvent =
+                (AlterTableChangeColumnEvent) alterTableColumnsEvent.getEvents().get(0);
+
+        Assertions.assertEquals("old_c", changeColumnEvent.getOldColumn());
+        Assertions.assertEquals("new_c", changeColumnEvent.getColumn().getName());
+        Assertions.assertEquals("new comment", changeColumnEvent.getColumn().getComment());
+        Assertions.assertEquals("VARCHAR(64)", changeColumnEvent.getColumn().getSourceType());
+    }
+
+    // Alter-column parsing depends on the current table metadata, so tests build a minimal editor.
+    private TableEditor createTableEditor(
+            String tableName, io.debezium.relational.Column... columns) {
+        return Table.editor()
+                .tableId(new TableId(CATALOG_NAME, DATABASE_NAME, tableName))
+                .addColumns(columns);
+    }
+
+    private io.debezium.relational.Column createVarcharColumn(
+            String columnName, int length, String comment) {
+        return io.debezium.relational.Column.editor()
+                .name(columnName)
+                .jdbcType(Types.VARCHAR)
+                .type("VARCHAR", "VARCHAR(" + length + ")")
+                .length(length)
+                .optional(true)
+                .comment(comment)
+                .create();
     }
 }

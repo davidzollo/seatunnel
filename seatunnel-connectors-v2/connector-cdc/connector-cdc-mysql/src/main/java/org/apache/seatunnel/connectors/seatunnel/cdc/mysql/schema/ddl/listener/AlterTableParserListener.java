@@ -223,7 +223,9 @@ public class AlterTableParserListener extends MySqlParserBaseListener {
             throw new IllegalArgumentException("Column " + oldColumnName + " does not exist");
         }
 
-        ColumnEditor columnEditor = newColumn.edit();
+        // Rename DDL still needs a valid editor even before the new name exists in table metadata.
+        ColumnEditor columnEditor = (newColumn != null ? newColumn : oldColumn).edit();
+        columnEditor.name(newColumnName);
         columnEditor.unsetDefaultValueExpression();
         columnEditor.comment(null);
         columnDefinitionListener =
