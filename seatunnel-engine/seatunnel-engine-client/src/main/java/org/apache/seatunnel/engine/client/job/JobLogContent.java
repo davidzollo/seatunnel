@@ -17,7 +17,6 @@
 
 package org.apache.seatunnel.engine.client.job;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -26,18 +25,43 @@ import java.util.List;
 /** Job log content object containing host and log information */
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 public class JobLogContent {
 
     /** List of log entries from different nodes */
     private List<NodeLogEntry> nodeLogs;
 
+    /** Overall job log query status */
+    private LogStatus logStatus = LogStatus.AVAILABLE;
+
+    /** Human-readable status message for non-available responses */
+    private String statusMessage;
+
+    public JobLogContent(List<NodeLogEntry> nodeLogs, LogStatus logStatus, String statusMessage) {
+        this.nodeLogs = nodeLogs;
+        this.logStatus = logStatus;
+        this.statusMessage = statusMessage;
+    }
+
+    public JobLogContent(List<NodeLogEntry> nodeLogs) {
+        this(nodeLogs, LogStatus.AVAILABLE, null);
+    }
+
+    /** Overall job log query status */
+    public enum LogStatus {
+        AVAILABLE,
+        FILE_NOT_FOUND
+    }
+
     /** Node log entry containing host and log content */
     @Data
     @NoArgsConstructor
-    @AllArgsConstructor
     public static class NodeLogEntry {
         private String host;
         private String log;
+
+        public NodeLogEntry(String host, String log) {
+            this.host = host;
+            this.log = log;
+        }
     }
 }

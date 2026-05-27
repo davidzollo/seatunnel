@@ -57,6 +57,9 @@ import java.util.zip.ZipInputStream;
 
 public class JobClient {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String JOB_LOG_STATUS_MARKER = ".job-log-status";
+    private static final String FILE_NOT_FOUND_STATUS =
+            JobLogContent.LogStatus.FILE_NOT_FOUND.name();
     private final SeaTunnelHazelcastClient hazelcastClient;
 
     public JobClient(@NonNull SeaTunnelHazelcastClient hazelcastClient) {
@@ -241,6 +244,7 @@ public class JobClient {
      */
     private JobLogContent parseJobLogContent(byte[] logBytes, Long jobId) throws IOException {
         List<JobLogContent.NodeLogEntry> nodeLogs = new ArrayList<>();
+        boolean fileNotFound = false;
 
         try (ByteArrayInputStream bais = new ByteArrayInputStream(logBytes);
                 ZipInputStream zis = new ZipInputStream(bais)) {
@@ -251,14 +255,27 @@ public class JobClient {
 
                 if (entryName.contains("node_") && entryName.contains("job_" + jobId)) {
                     String host = extractHostFromEntryName(entryName);
-                    String logContent = readZipEntryContent(zis);
-                    nodeLogs.add(new JobLogContent.NodeLogEntry(host, logContent));
+                    ParsedLogContent parsedLogContent = readZipEntryContent(entryName, zis);
+                    if (parsedLogContent.isFileNotFound()) {
+                        fileNotFound = true;
+                    } else if (parsedLogContent.getLog() != null) {
+                        nodeLogs.add(
+                                new JobLogContent.NodeLogEntry(host, parsedLogContent.getLog()));
+                    }
                 }
 
                 zis.closeEntry();
             }
         }
 
+        if (nodeLogs.isEmpty() && fileNotFound) {
+            // Preserve the source-side missing-file signal instead of collapsing it into
+            // an empty log payload, otherwise the UI cannot distinguish the two cases.
+            return new JobLogContent(
+                    nodeLogs,
+                    JobLogContent.LogStatus.FILE_NOT_FOUND,
+                    String.format("No log file found for job %s", jobId));
+        }
         return new JobLogContent(nodeLogs);
     }
 
@@ -287,7 +304,8 @@ public class JobClient {
      * @return content as string
      * @throws IOException if failed to read content
      */
-    private String readZipEntryContent(ZipInputStream zis) throws IOException {
+    private ParsedLogContent readZipEntryContent(String entryName, ZipInputStream zis)
+            throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         byte[] buffer = new byte[1024];
         int length;
@@ -296,14 +314,17 @@ public class JobClient {
         }
 
         byte[] content = baos.toByteArray();
+        if (entryName.endsWith(JOB_LOG_STATUS_MARKER)) {
+            return parseStatusMarker(content);
+        }
 
         // Check if the content is a zip file (starts with PK magic number)
         if (isZipFile(content)) {
             // If it's a zip file, recursively extract the first text file
-            return extractTextFromZip(content);
+            return extractLogContentFromZip(content);
         } else {
             // If it's not a zip file, return as string
-            return baos.toString(StandardCharsets.UTF_8.name());
+            return ParsedLogContent.log(baos.toString(StandardCharsets.UTF_8.name()));
         }
     }
 
@@ -325,7 +346,7 @@ public class JobClient {
      * @return extracted text content
      * @throws IOException if failed to extract content
      */
-    private String extractTextFromZip(byte[] zipContent) throws IOException {
+    private ParsedLogContent extractLogContentFromZip(byte[] zipContent) throws IOException {
         try (ByteArrayInputStream bais = new ByteArrayInputStream(zipContent);
                 ZipInputStream zis = new ZipInputStream(bais)) {
 
@@ -333,21 +354,58 @@ public class JobClient {
             while ((entry = zis.getNextEntry()) != null) {
                 // Skip directories
                 if (!entry.isDirectory()) {
-                    // Read the first file found (assuming it's a text file)
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     byte[] buffer = new byte[1024];
                     int length;
                     while ((length = zis.read(buffer)) > 0) {
                         baos.write(buffer, 0, length);
                     }
+                    byte[] entryContent = baos.toByteArray();
                     zis.closeEntry();
-                    return baos.toString(StandardCharsets.UTF_8.name());
+                    if (entry.getName().endsWith(JOB_LOG_STATUS_MARKER)) {
+                        return parseStatusMarker(entryContent);
+                    }
+                    return ParsedLogContent.log(new String(entryContent, StandardCharsets.UTF_8));
                 }
                 zis.closeEntry();
             }
         }
 
         // If no text file found, return empty string
-        return "";
+        return ParsedLogContent.log("");
+    }
+
+    private ParsedLogContent parseStatusMarker(byte[] content) {
+        String status = new String(content, StandardCharsets.UTF_8);
+        if (FILE_NOT_FOUND_STATUS.equals(status)) {
+            return ParsedLogContent.fileNotFound();
+        }
+        return ParsedLogContent.log(null);
+    }
+
+    private static final class ParsedLogContent {
+        private final String log;
+        private final boolean fileNotFound;
+
+        private ParsedLogContent(String log, boolean fileNotFound) {
+            this.log = log;
+            this.fileNotFound = fileNotFound;
+        }
+
+        private static ParsedLogContent log(String log) {
+            return new ParsedLogContent(log, false);
+        }
+
+        private static ParsedLogContent fileNotFound() {
+            return new ParsedLogContent(null, true);
+        }
+
+        private String getLog() {
+            return log;
+        }
+
+        private boolean isFileNotFound() {
+            return fileNotFound;
+        }
     }
 }

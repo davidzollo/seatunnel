@@ -26,6 +26,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.zip.ZipEntry;
@@ -33,6 +34,11 @@ import java.util.zip.ZipOutputStream;
 
 @Slf4j
 public class LogoutService {
+    /** Marker entry used to signal that the job log file does not exist. */
+    private static final String JOB_LOG_STATUS_MARKER = ".job-log-status";
+
+    /** Structured status written into the marker entry for missing log files. */
+    private static final String FILE_NOT_FOUND_STATUS = "FILE_NOT_FOUND";
 
     private final SeaTunnelServer seaTunnelServer;
     private String logDir;
@@ -89,8 +95,14 @@ public class LogoutService {
     private void addLogFilesToZip(ZipOutputStream zipOut, Long jobId) throws IOException {
         try {
             File logDirFile = new File(logDir);
-            if (logDirFile.exists() && logDirFile.isDirectory()) {
-                addJobLogFilesToZip(zipOut, logDirFile, logDirFile, jobId);
+            if (!logDirFile.exists() || !logDirFile.isDirectory()) {
+                // Emit an explicit marker so downstream callers can tell "missing file" apart
+                // from a real but empty log file.
+                addLogStatusMarkerToZip(zipOut, jobId, FILE_NOT_FOUND_STATUS);
+                return;
+            }
+            if (!addJobLogFilesToZip(zipOut, logDirFile, logDirFile, jobId)) {
+                addLogStatusMarkerToZip(zipOut, jobId, FILE_NOT_FOUND_STATUS);
             }
         } catch (Exception e) {
             log.warn("Failed to add log files for jobId {}: {}", jobId, e.getMessage(), e);
@@ -127,26 +139,31 @@ public class LogoutService {
     /**
      * Recursively add job log files so K8s layouts such as HOSTNAME subdirectories can still be
      * packaged under the original job zip prefix.
+     *
+     * @return true when at least one log file matching the current job is added to the archive
      */
-    private void addJobLogFilesToZip(
+    private boolean addJobLogFilesToZip(
             ZipOutputStream zipOut, File logRootDir, File currentDir, Long jobId)
             throws IOException {
         File[] files = currentDir.listFiles();
         if (files == null) {
-            return;
+            return false;
         }
 
+        boolean hasJobLogFile = false;
         for (File file : files) {
             if (file.isDirectory()) {
-                addJobLogFilesToZip(zipOut, logRootDir, file, jobId);
+                hasJobLogFile |= addJobLogFilesToZip(zipOut, logRootDir, file, jobId);
             } else if (isJobLogFile(file, jobId)) {
                 Path relativePath = logRootDir.toPath().relativize(file.toPath());
                 addFileToZip(
                         zipOut,
                         file.toPath(),
                         "job_" + jobId + "/" + normalizeZipEntryPath(relativePath));
+                hasJobLogFile = true;
             }
         }
+        return hasJobLogFile;
     }
 
     private boolean isFileFromDate(File file, LocalDate date) {
@@ -181,6 +198,18 @@ public class LogoutService {
             }
         }
 
+        zipOut.closeEntry();
+    }
+
+    /**
+     * Write a synthetic status entry so callers can distinguish missing job logs from empty
+     * payloads after unzipping the archive.
+     */
+    private void addLogStatusMarkerToZip(ZipOutputStream zipOut, Long jobId, String status)
+            throws IOException {
+        ZipEntry zipEntry = new ZipEntry("job_" + jobId + "/" + JOB_LOG_STATUS_MARKER);
+        zipOut.putNextEntry(zipEntry);
+        zipOut.write(status.getBytes(StandardCharsets.UTF_8));
         zipOut.closeEntry();
     }
 }

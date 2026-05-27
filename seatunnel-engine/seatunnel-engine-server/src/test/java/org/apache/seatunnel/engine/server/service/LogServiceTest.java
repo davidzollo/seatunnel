@@ -41,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** Covers flat, nested, and missing log packaging behavior in {@link LogoutService}. */
 public class LogServiceTest {
 
     @TempDir Path tempDir;
@@ -56,6 +57,10 @@ public class LogServiceTest {
         setLogDir(logsDir);
     }
 
+    /**
+     * Job log packaging should keep the historical flat file lookup and also include nested per-pod
+     * log files without leaking unrelated job logs.
+     */
     @Test
     void testPackageJobLogsIncludesFlatAndNestedJobLogFiles() throws IOException {
         Files.write(
@@ -79,8 +84,22 @@ public class LogServiceTest {
         assertEquals("rolled job log", zipEntries.get("job_123/job-123.log.2026-05-12-1"));
         assertEquals("nested job log", zipEntries.get("job_123/pod-a/job-123.log"));
         assertFalse(zipEntries.containsKey("job_123/job-456.log"));
+        assertFalse(zipEntries.containsKey("job_123/.job-log-status"));
     }
 
+    /**
+     * Missing job-specific log files should produce a marker entry so callers can distinguish "file
+     * not found" from an empty-but-successful unzip payload.
+     */
+    @Test
+    void testPackageJobLogsAddsFileNotFoundMarkerWhenLogFileMissing() throws IOException {
+        Map<String, String> zipEntries = readZipEntries(logOutService.packageJobLogs(123L));
+
+        assertEquals(1, zipEntries.size());
+        assertEquals("FILE_NOT_FOUND", zipEntries.get("job_123/.job-log-status"));
+    }
+
+    /** Default Zeta packaging should include today's active log and today's rolled log. */
     @Test
     void testPackageZetaLogsIncludesCurrentDateLogs() throws IOException {
         String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
@@ -90,11 +109,11 @@ public class LogServiceTest {
                 "today rolled log".getBytes(StandardCharsets.UTF_8));
 
         Map<String, String> zipEntries = readZipEntries(logOutService.packageZetaLogs());
-
         assertEquals("main log", zipEntries.get("seatunnel.log"));
         assertEquals("today rolled log", zipEntries.get("seatunnel.log." + today + "-1"));
     }
 
+    /** Date-scoped Zeta packaging should only keep files from the requested day. */
     @Test
     void testPackageZetaLogsWithDateFiltersOtherDates() throws IOException {
         LocalDate targetDate = LocalDate.now().minusDays(1);
@@ -116,12 +135,17 @@ public class LogServiceTest {
         assertTrue(zipEntries.containsKey("seatunnel.log." + targetDateText + "-1"));
     }
 
+    /** Point the service to the per-test temporary log directory. */
     private void setLogDir(Path logDir) throws Exception {
         Field logDirField = LogoutService.class.getDeclaredField("logDir");
         logDirField.setAccessible(true);
         logDirField.set(logOutService, logDir.toString());
     }
 
+    /**
+     * Read all zip entries into a stable map so tests can assert both file names and marker
+     * contents.
+     */
     private Map<String, String> readZipEntries(byte[] zipBytes) throws IOException {
         Map<String, String> zipEntries = new LinkedHashMap<>();
         try (ZipInputStream zipInputStream =
@@ -135,7 +159,8 @@ public class LogServiceTest {
                     outputStream.write(buffer, 0, length);
                 }
                 zipEntries.put(
-                        zipEntry.getName(), outputStream.toString(StandardCharsets.UTF_8.name()));
+                        zipEntry.getName(),
+                        new String(outputStream.toByteArray(), StandardCharsets.UTF_8));
                 zipInputStream.closeEntry();
             }
         }

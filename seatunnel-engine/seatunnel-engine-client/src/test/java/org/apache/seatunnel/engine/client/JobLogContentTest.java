@@ -22,9 +22,11 @@ import org.apache.seatunnel.engine.client.job.JobLogContent;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class JobLogContentTest {
 
@@ -50,5 +52,20 @@ public class JobLogContentTest {
 
         assertNotNull(jobLogContent);
         assertEquals(2, jobLogContent.getNodeLogs().size());
+        assertEquals(JobLogContent.LogStatus.AVAILABLE, jobLogContent.getLogStatus());
+        assertNull(jobLogContent.getStatusMessage());
+    }
+
+    @Test
+    public void testJobLogContentWithFileNotFoundStatus() {
+        JobLogContent jobLogContent =
+                new JobLogContent(
+                        Collections.emptyList(),
+                        JobLogContent.LogStatus.FILE_NOT_FOUND,
+                        "No log file found for job 123");
+
+        assertNotNull(jobLogContent);
+        assertEquals(JobLogContent.LogStatus.FILE_NOT_FOUND, jobLogContent.getLogStatus());
+        assertEquals("No log file found for job 123", jobLogContent.getStatusMessage());
     }
 }
