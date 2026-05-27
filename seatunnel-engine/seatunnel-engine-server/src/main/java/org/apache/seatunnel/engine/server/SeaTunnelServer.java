@@ -132,8 +132,17 @@ public class SeaTunnelServer
 
     @Override
     public void init(NodeEngine engine, Properties hzProperties) {
-        this.nodeEngine = (NodeEngineImpl) engine;
-        // TODO Determine whether to execute there method on the master node according to the deploy
+        try {
+            initInternal((NodeEngineImpl) engine);
+        } catch (Throwable throwable) {
+            handleInitializationFailure(throwable);
+        }
+    }
+
+    /** Visible for tests so startup failure handling can be verified without booting Hazelcast. */
+    void initInternal(NodeEngineImpl engine) throws Throwable {
+        this.nodeEngine = engine;
+        // TODO Determine whether to execute the method on the master node according to the deploy
         // type
 
         classLoaderService =
@@ -154,7 +163,7 @@ public class SeaTunnelServer
             startMaster();
         }
 
-        seaTunnelHealthMonitor = new SeaTunnelHealthMonitor(((NodeEngineImpl) engine).getNode());
+        seaTunnelHealthMonitor = new SeaTunnelHealthMonitor(engine.getNode());
 
         // task log manager service
         if (seaTunnelConfig.getEngineConfig().getTelemetryConfig() != null
@@ -173,60 +182,110 @@ public class SeaTunnelServer
         }
     }
 
-    private void startMaster() {
-        List<URL> jars;
-        try {
-            String storageType =
-                    seaTunnelConfig
-                            .getEngineConfig()
-                            .getCheckpointConfig()
-                            .getStorage()
-                            .getStoragePluginConfig()
-                            .get("storage.type");
-
-            if (storageType != null && !storageType.trim().isEmpty()) {
-                jars =
-                        FileUtils.searchJarFilesForStorage(
-                                Common.appStarterDir().resolve("zeta"), storageType);
-                if (!jars.isEmpty()) {
-                    LOGGER.info(
-                            "Loaded "
-                                    + jars.size()
-                                    + " JAR(s) for storage type '"
-                                    + storageType
-                                    + "' from starter/zeta");
-                }
-            } else {
-                // load all jars
-                jars = FileUtils.searchJarFiles(Common.appStarterDir().resolve("zeta"));
-                if (!jars.isEmpty()) {
-                    LOGGER.info(
-                            "Loaded all "
-                                    + jars.size()
-                                    + " JAR(s) from starter/zeta (no storage type specified)");
-                }
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    private void startMaster() throws Throwable {
+        List<URL> jars = discoverCheckpointStorageJars();
         ClassLoader appClassLoader = Thread.currentThread().getContextClassLoader();
         ClassLoader classLoader = new URLClassLoader(jars.toArray(new URL[0]));
         LOGGER.info("init seatunnel server with " + jars.size() + " jars");
 
-        Thread.currentThread().setContextClassLoader(classLoader);
+        runWithThreadContextClassLoader(
+                classLoader,
+                () -> {
+                    coordinatorService =
+                            new CoordinatorService(
+                                    nodeEngine,
+                                    this,
+                                    seaTunnelConfig.getEngineConfig(),
+                                    classLoader);
+                    checkpointService =
+                            new CheckpointService(
+                                    seaTunnelConfig.getEngineConfig().getCheckpointConfig());
+                    monitorService = Executors.newSingleThreadScheduledExecutor();
+                    monitorService.scheduleAtFixedRate(
+                            this::printExecutionInfo,
+                            0,
+                            seaTunnelConfig.getEngineConfig().getPrintExecutionInfoInterval(),
+                            TimeUnit.SECONDS);
+                });
+    }
 
-        coordinatorService =
-                new CoordinatorService(
-                        nodeEngine, this, seaTunnelConfig.getEngineConfig(), classLoader);
-        checkpointService =
-                new CheckpointService(seaTunnelConfig.getEngineConfig().getCheckpointConfig());
-        monitorService = Executors.newSingleThreadScheduledExecutor();
-        monitorService.scheduleAtFixedRate(
-                this::printExecutionInfo,
-                0,
-                seaTunnelConfig.getEngineConfig().getPrintExecutionInfoInterval(),
-                TimeUnit.SECONDS);
-        Thread.currentThread().setContextClassLoader(appClassLoader);
+    /** Lets storage JAR discovery failures flow through the outer fail-fast handler. */
+    List<URL> discoverCheckpointStorageJars() throws IOException {
+        String storageType =
+                seaTunnelConfig
+                        .getEngineConfig()
+                        .getCheckpointConfig()
+                        .getStorage()
+                        .getStoragePluginConfig()
+                        .get("storage.type");
+
+        List<URL> jars;
+        if (storageType != null && !storageType.trim().isEmpty()) {
+            jars =
+                    FileUtils.searchJarFilesForStorage(
+                            Common.appStarterDir().resolve("zeta"), storageType);
+            if (!jars.isEmpty()) {
+                LOGGER.info(
+                        "Loaded "
+                                + jars.size()
+                                + " JAR(s) for storage type '"
+                                + storageType
+                                + "' from starter/zeta");
+            }
+        } else {
+            // load all jars
+            jars = FileUtils.searchJarFiles(Common.appStarterDir().resolve("zeta"));
+            if (!jars.isEmpty()) {
+                LOGGER.info(
+                        "Loaded all "
+                                + jars.size()
+                                + " JAR(s) from starter/zeta (no storage type specified)");
+            }
+        }
+        return jars;
+    }
+
+    /** Restores the original thread context ClassLoader on both success and failure paths. */
+    void runWithThreadContextClassLoader(ClassLoader classLoader, ThrowingRunnable runnable)
+            throws Throwable {
+        ClassLoader appClassLoader = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(classLoader);
+        try {
+            runnable.run();
+        } finally {
+            Thread.currentThread().setContextClassLoader(appClassLoader);
+        }
+    }
+
+    /** Cleans up partially initialized services before forcing the JVM to exit. */
+    void handleInitializationFailure(Throwable throwable) {
+        try {
+            LOGGER.severe(
+                    "SeaTunnel server initialization failed, the server will stop to avoid "
+                            + "running in a zombie state. Cause: "
+                            + throwable.getMessage(),
+                    throwable);
+            shutdown(true);
+        } catch (Throwable shutdownThrowable) {
+            LOGGER.warning(
+                    "Failed to clean up partially initialized SeaTunnel server before exit",
+                    shutdownThrowable);
+        }
+        // ServiceManagerImpl swallows exceptions from init(), so we must force-exit to prevent
+        // the server from running in a zombie state where Hazelcast is up but the SeaTunnel
+        // application layer (e.g. checkpointService, seaTunnelHealthMonitor) was never
+        // initialized.
+        exitProcess(1);
+    }
+
+    /** Separated for tests so fail-fast behavior can be verified without exiting the JVM. */
+    void exitProcess(int statusCode) {
+        System.exit(statusCode);
+    }
+
+    @FunctionalInterface
+    interface ThrowingRunnable {
+        void run() throws Throwable;
     }
 
     private void startWorker() {
