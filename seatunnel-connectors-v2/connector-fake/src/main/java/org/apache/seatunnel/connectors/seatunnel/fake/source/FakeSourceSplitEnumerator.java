@@ -173,6 +173,11 @@ public class FakeSourceSplitEnumerator
                             pendingReader, new ArrayList<>(pendingAssignmentForReader));
                     enumeratorContext.signalNoMoreSplits(pendingReader);
                 }
+            } else {
+                // No pending splits for this reader. Still signal no more splits so the reader
+                // can terminate properly, especially after checkpoint recovery when assignedSplits
+                // filters out all splits but the reader has not actually received them.
+                enumeratorContext.signalNoMoreSplits(pendingReader);
             }
         }
     }
