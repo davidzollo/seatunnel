@@ -286,13 +286,15 @@ public class ClickhouseProxy implements AutoCloseable {
             response.records()
                     .forEach(
                             r -> {
+                                String hostname = r.getValue(3).asString();
+                                String hostAddress = r.getValue(4).asString();
                                 shardList.add(
                                         new Shard(
                                                 r.getValue(0).asInteger(),
                                                 r.getValue(1).asInteger(),
                                                 r.getValue(2).asInteger(),
-                                                r.getValue(3).asString(),
-                                                r.getValue(4).asString(),
+                                                normalizeShardHost(hostname, hostAddress),
+                                                hostAddress,
                                                 port,
                                                 database,
                                                 username,
@@ -306,6 +308,26 @@ public class ClickhouseProxy implements AutoCloseable {
                     "Cannot get cluster shard list from clickhouse",
                     e);
         }
+    }
+
+    private String normalizeShardHost(String hostname, String hostAddress) {
+        if (!isLoopbackHost(hostname)) {
+            return hostname;
+        }
+        if (!isLoopbackHost(hostAddress)) {
+            return hostAddress;
+        }
+        return node.getAddress().getHostName();
+    }
+
+    private boolean isLoopbackHost(String host) {
+        if (host == null || host.trim().isEmpty()) {
+            return true;
+        }
+        String normalized = host.trim();
+        return "localhost".equalsIgnoreCase(normalized)
+                || "::1".equals(normalized)
+                || normalized.startsWith("127.");
     }
 
     /**
