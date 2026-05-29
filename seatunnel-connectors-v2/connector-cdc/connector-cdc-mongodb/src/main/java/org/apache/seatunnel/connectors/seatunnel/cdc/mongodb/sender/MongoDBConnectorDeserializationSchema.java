@@ -63,7 +63,6 @@ import java.util.Objects;
 import static org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated.ILLEGAL_ARGUMENT;
 import static org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated.UNSUPPORTED_DATA_TYPE;
 import static org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated.UNSUPPORTED_OPERATION;
-import static org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceOptions.DEFAULT_JSON_WRITER_SETTINGS;
 import static org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceOptions.DOCUMENT_KEY;
 import static org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceOptions.ENCODE_VALUE_FIELD;
 import static org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceOptions.FULL_DOCUMENT;
@@ -73,6 +72,9 @@ import static org.apache.seatunnel.shade.com.google.common.base.Preconditions.ch
 @Slf4j
 public class MongoDBConnectorDeserializationSchema
         extends AbstractDebeziumDeserializationSchema<SeaTunnelRow> {
+    private static final JsonWriterSettings RELAXED_JSON_WRITER_SETTINGS =
+            JsonWriterSettings.builder().outputMode(JsonMode.RELAXED).build();
+
     private final List<CatalogTable> tables;
 
     private final Map<String, DeserializationRuntimeConverter> tableRowConverters;
@@ -528,12 +530,39 @@ public class MongoDBConnectorDeserializationSchema
         if (bsonValue.isObjectId()) {
             return bsonValue.asObjectId().getValue().toHexString();
         }
-        if (bsonValue.isDocument()) {
-            return bsonValue
-                    .asDocument()
-                    .toJson(JsonWriterSettings.builder().outputMode(JsonMode.RELAXED).build());
+        if (bsonValue.isBoolean()) {
+            return Boolean.toString(bsonValue.asBoolean().getValue());
         }
-        return new BsonDocument(ENCODE_VALUE_FIELD, bsonValue).toJson(DEFAULT_JSON_WRITER_SETTINGS);
+        if (bsonValue.isInt32() || bsonValue.isInt64()) {
+            return Long.toString(bsonValue.asNumber().longValue());
+        }
+        if (bsonValue.isDouble()) {
+            return Double.toString(bsonValue.asDouble().getValue());
+        }
+        if (bsonValue.isDecimal128()) {
+            Decimal128 decimal128 = bsonValue.asDecimal128().decimal128Value();
+            return decimal128.isFinite()
+                    ? decimal128.bigDecimalValue().toPlainString()
+                    : decimal128.toString();
+        }
+        if (bsonValue.isDateTime()) {
+            return Instant.ofEpochMilli(bsonValue.asDateTime().getValue()).toString();
+        }
+        if (bsonValue.isDocument()) {
+            return bsonValue.asDocument().toJson(RELAXED_JSON_WRITER_SETTINGS);
+        }
+        return toRelaxedJsonValue(bsonValue);
+    }
+
+    private static String toRelaxedJsonValue(@Nonnull BsonValue bsonValue) {
+        String json =
+                new BsonDocument(ENCODE_VALUE_FIELD, bsonValue)
+                        .toJson(RELAXED_JSON_WRITER_SETTINGS);
+        String prefix = "{\"" + ENCODE_VALUE_FIELD + "\": ";
+        if (json.startsWith(prefix) && json.endsWith("}")) {
+            return json.substring(prefix.length(), json.length() - 1);
+        }
+        return json;
     }
 
     private static byte[] convertToBinary(@Nonnull BsonValue bsonValue) {
@@ -546,7 +575,7 @@ public class MongoDBConnectorDeserializationSchema
     }
 
     private static long convertToLong(@Nonnull BsonValue bsonValue) {
-        if (bsonValue.isInt64()) {
+        if (bsonValue.isInt32() || bsonValue.isInt64()) {
             return bsonValue.asNumber().longValue();
         }
         throw new MongodbConnectorException(

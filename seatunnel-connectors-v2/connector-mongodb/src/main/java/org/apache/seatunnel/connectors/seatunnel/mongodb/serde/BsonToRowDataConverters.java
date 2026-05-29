@@ -48,7 +48,6 @@ import java.util.Map;
 import static org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated.ILLEGAL_ARGUMENT;
 import static org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated.UNSUPPORTED_DATA_TYPE;
 import static org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated.UNSUPPORTED_OPERATION;
-import static org.apache.seatunnel.connectors.seatunnel.mongodb.config.MongodbConfig.DEFAULT_JSON_WRITER_SETTINGS;
 import static org.apache.seatunnel.connectors.seatunnel.mongodb.config.MongodbConfig.ENCODE_VALUE_FIELD;
 
 public class BsonToRowDataConverters implements Serializable {
@@ -383,12 +382,41 @@ public class BsonToRowDataConverters implements Serializable {
         if (bsonValue.isObjectId()) {
             return bsonValue.asObjectId().getValue().toHexString();
         }
+        if (bsonValue.isBoolean()) {
+            return Boolean.toString(bsonValue.asBoolean().getValue());
+        }
+        if (bsonValue.isInt32() || bsonValue.isInt64()) {
+            return Long.toString(bsonValue.asNumber().longValue());
+        }
+        if (bsonValue.isDouble()) {
+            return Double.toString(bsonValue.asDouble().getValue());
+        }
+        if (bsonValue.isDecimal128()) {
+            Decimal128 decimal128 = bsonValue.asDecimal128().decimal128Value();
+            return decimal128.isFinite()
+                    ? decimal128.bigDecimalValue().toPlainString()
+                    : decimal128.toString();
+        }
+        if (bsonValue.isDateTime()) {
+            return Instant.ofEpochMilli(bsonValue.asDateTime().getValue()).toString();
+        }
         if (bsonValue.isDocument()) {
             return bsonValue
                     .asDocument()
                     .toJson(JsonWriterSettings.builder().outputMode(JsonMode.RELAXED).build());
         }
-        return new BsonDocument(ENCODE_VALUE_FIELD, bsonValue).toJson(DEFAULT_JSON_WRITER_SETTINGS);
+        return toRelaxedJsonValue(bsonValue);
+    }
+
+    private static String toRelaxedJsonValue(BsonValue bsonValue) {
+        String json =
+                new BsonDocument(ENCODE_VALUE_FIELD, bsonValue)
+                        .toJson(JsonWriterSettings.builder().outputMode(JsonMode.RELAXED).build());
+        String prefix = "{\"" + ENCODE_VALUE_FIELD + "\": ";
+        if (json.startsWith(prefix) && json.endsWith("}")) {
+            return json.substring(prefix.length(), json.length() - 1);
+        }
+        return json;
     }
 
     private static byte[] convertToBinary(BsonValue bsonValue) {
