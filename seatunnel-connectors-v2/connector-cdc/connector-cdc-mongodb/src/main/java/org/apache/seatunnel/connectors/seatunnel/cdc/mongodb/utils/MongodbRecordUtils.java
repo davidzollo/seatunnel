@@ -17,6 +17,12 @@
 
 package org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.utils;
 
+import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.DeserializationFeature;
+import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.JsonNode;
+import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.node.ArrayNode;
+import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.node.ObjectNode;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaAndValue;
@@ -26,6 +32,7 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.bson.BsonDocument;
 import org.bson.BsonTimestamp;
 import org.bson.BsonValue;
+import org.bson.json.JsonParseException;
 import org.bson.json.JsonWriterSettings;
 
 import com.mongodb.kafka.connect.source.json.formatter.DefaultJson;
@@ -35,9 +42,11 @@ import io.debezium.relational.TableId;
 
 import javax.annotation.Nonnull;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 import static com.mongodb.kafka.connect.source.schema.AvroSchema.fromJson;
@@ -54,6 +63,8 @@ import static org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.Mongo
 import static org.apache.seatunnel.connectors.seatunnel.cdc.mongodb.config.MongodbSourceOptions.SOURCE_FIELD;
 
 public class MongodbRecordUtils {
+    private static final ObjectMapper OBJECT_MAPPER =
+            new ObjectMapper().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
     /** Check the sourceRecord is snapshot record. */
     public static boolean isSnapshotRecord(SourceRecord sourceRecord) {
@@ -83,10 +94,71 @@ public class MongodbRecordUtils {
         if (valueSchema.field(fieldName) != null) {
             String docString = value.getString(fieldName);
             if (docString != null) {
-                return BsonDocument.parse(docString);
+                return parseBsonDocument(docString);
             }
         }
         return null;
+    }
+
+    private static BsonDocument parseBsonDocument(String docString) {
+        try {
+            return BsonDocument.parse(docString);
+        } catch (JsonParseException e) {
+            String normalizedDocString = normalizeScientificDate(docString);
+            if (docString.equals(normalizedDocString)) {
+                throw e;
+            }
+            try {
+                return BsonDocument.parse(normalizedDocString);
+            } catch (JsonParseException normalizedParseException) {
+                normalizedParseException.addSuppressed(e);
+                throw normalizedParseException;
+            }
+        }
+    }
+
+    private static String normalizeScientificDate(String docString) {
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(docString);
+            if (!normalizeScientificDate(root)) {
+                return docString;
+            }
+            return OBJECT_MAPPER.writeValueAsString(root);
+        } catch (IOException e) {
+            return docString;
+        }
+    }
+
+    private static boolean normalizeScientificDate(JsonNode node) {
+        if (node == null) {
+            return false;
+        }
+        if (node.isArray()) {
+            boolean changed = false;
+            for (JsonNode child : (ArrayNode) node) {
+                changed |= normalizeScientificDate(child);
+            }
+            return changed;
+        }
+        if (!node.isObject()) {
+            return false;
+        }
+
+        ObjectNode objectNode = (ObjectNode) node;
+        JsonNode dateNode = objectNode.get("$date");
+        if (objectNode.size() == 1 && dateNode != null && dateNode.isNumber()) {
+            ObjectNode numberLongNode = OBJECT_MAPPER.createObjectNode();
+            numberLongNode.put("$numberLong", dateNode.decimalValue().toBigInteger().toString());
+            objectNode.set("$date", numberLongNode);
+            return true;
+        }
+
+        boolean changed = false;
+        Iterator<Map.Entry<String, JsonNode>> fields = objectNode.fields();
+        while (fields.hasNext()) {
+            changed |= normalizeScientificDate(fields.next().getValue());
+        }
+        return changed;
     }
 
     public static String getOffsetValue(@Nonnull SourceRecord sourceRecord, String key) {
