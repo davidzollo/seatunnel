@@ -599,6 +599,9 @@ public class CoordinatorService implements DynamicMetricsProvider {
                 Address workerAddress = taskGroup.getValue();
                 if (workerAddress == null
                         || nodeEngine.getClusterService().getMember(workerAddress) == null) {
+                    // Once the worker has already left the cluster, its task group context is no
+                    // longer reachable and should not block record cleanup forever.
+                    updated.getCleanedTaskGroups().add(taskGroupLocation);
                     continue;
                 }
                 try {
@@ -653,6 +656,7 @@ public class CoordinatorService implements DynamicMetricsProvider {
             return false;
         }
         return PipelineStatus.CANCELED.equals(record.getFinalStatus())
+                || PipelineStatus.FAILED.equals(record.getFinalStatus())
                 || PipelineStatus.FINISHED.equals(record.getFinalStatus());
     }
 
@@ -687,32 +691,27 @@ public class CoordinatorService implements DynamicMetricsProvider {
         if (metricsImap == null) {
             return false;
         }
-        boolean lockedIMap = false;
         try {
-            lockedIMap =
-                    metricsImap.tryLock(Constant.IMAP_RUNNING_JOB_METRICS_KEY, 5, TimeUnit.SECONDS);
-            if (!lockedIMap) {
-                return false;
-            }
-
-            HashMap<TaskLocation, SeaTunnelMetricsContext> centralMap =
-                    metricsImap.get(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
-            if (centralMap == null || centralMap.isEmpty()) {
-                return true;
-            }
-
-            List<TaskLocation> toRemove =
-                    centralMap.keySet().stream()
-                            .filter(
-                                    taskLocation ->
-                                            pipelineLocation.equals(
-                                                    taskLocation
-                                                            .getTaskGroupLocation()
-                                                            .getPipelineLocation()))
-                            .collect(Collectors.toList());
-            if (!toRemove.isEmpty()) {
-                toRemove.forEach(centralMap::remove);
-                metricsImap.put(Constant.IMAP_RUNNING_JOB_METRICS_KEY, centralMap);
+            int partitionCount = engineConfig.getJobMetricsPartitionCount();
+            // Retry cleanup partition by partition so each bucket is filtered and removed in one
+            // atomic compute.
+            for (long partition = 0; partition < partitionCount; partition++) {
+                metricsImap.compute(
+                        partition,
+                        (key, centralMap) -> {
+                            if (centralMap == null || centralMap.isEmpty()) {
+                                return centralMap;
+                            }
+                            centralMap
+                                    .entrySet()
+                                    .removeIf(
+                                            entry ->
+                                                    pipelineLocation.equals(
+                                                            entry.getKey()
+                                                                    .getTaskGroupLocation()
+                                                                    .getPipelineLocation()));
+                            return centralMap.isEmpty() ? null : centralMap;
+                        });
             }
             return true;
         } catch (Exception e) {
@@ -722,10 +721,6 @@ public class CoordinatorService implements DynamicMetricsProvider {
                             pipelineLocation, ExceptionUtils.getMessage(e)),
                     e);
             return false;
-        } finally {
-            if (lockedIMap) {
-                metricsImap.unlock(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
-            }
         }
     }
 

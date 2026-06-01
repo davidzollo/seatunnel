@@ -114,15 +114,14 @@ public class JobExecutionIT {
 
     @Test
     public void testExecuteJobWithLockMetrics() throws Exception {
-        // lock metrics map
         IMap<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> metricsImap =
                 hazelcastInstance.getMap(Constant.IMAP_RUNNING_JOB_METRICS);
-        metricsImap.lock(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
         try {
+            lockAllMetricsPartitions(metricsImap);
             runJobFileWithAssertEndStatus(
                     "batch_fakesource_to_file.conf", "fake_to_file", JobStatus.FINISHED);
         } finally {
-            metricsImap.unlock(Constant.IMAP_RUNNING_JOB_METRICS_KEY);
+            unlockAllMetricsPartitions(metricsImap);
         }
     }
 
@@ -220,6 +219,28 @@ public class JobExecutionIT {
             Assertions.assertEquals(
                     "UNKNOWABLE",
                     engineClient.getJobClient().getJobStatus(System.currentTimeMillis()));
+        }
+    }
+
+    /**
+     * Lock every metrics bucket so this legacy E2E scenario still blocks the whole running-metrics
+     * map after the storage layout changed from a single key to partitioned buckets.
+     */
+    private static void lockAllMetricsPartitions(
+            IMap<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> metricsImap) {
+        for (long partition = 0;
+                partition < SEATUNNEL_CONFIG.getEngineConfig().getJobMetricsPartitionCount();
+                partition++) {
+            metricsImap.lock(partition);
+        }
+    }
+
+    private static void unlockAllMetricsPartitions(
+            IMap<Long, HashMap<TaskLocation, SeaTunnelMetricsContext>> metricsImap) {
+        for (long partition = 0;
+                partition < SEATUNNEL_CONFIG.getEngineConfig().getJobMetricsPartitionCount();
+                partition++) {
+            metricsImap.unlock(partition);
         }
     }
 

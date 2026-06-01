@@ -132,6 +132,11 @@ public class YamlSeaTunnelDomConfigProcessor extends AbstractDomConfigProcessor 
                         getIntegerValue(
                                 ServerConfigOptions.JOB_METRICS_BACKUP_INTERVAL.key(),
                                 getTextContent(node)));
+            } else if (ServerConfigOptions.JOB_METRICS_PARTITION_COUNT.key().equals(name)) {
+                engineConfig.setJobMetricsPartitionCount(
+                        getIntegerValue(
+                                ServerConfigOptions.JOB_METRICS_PARTITION_COUNT.key(),
+                                getTextContent(node)));
             } else if (ServerConfigOptions.TASK_EXECUTION_THREAD_SHARE_MODE.key().equals(name)) {
                 String mode = getTextContent(node).toUpperCase(Locale.ROOT);
                 if (!Arrays.asList("ALL", "OFF", "PART").contains(mode)) {
