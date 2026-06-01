@@ -101,6 +101,7 @@
         <module>connector-argodb</module>
         <module>connector-pi</module>
         <module>connector-pi-metadata</module>
+        <module>connector-snowflake-file</module>
     </modules>
 
     <dependencyManagement>

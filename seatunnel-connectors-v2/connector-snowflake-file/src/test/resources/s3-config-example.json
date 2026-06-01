@@ -1,0 +1,39 @@
+{
+  "comment": "SnowflakeFile S3配置示例 - 请根据您的实际环境修改",
+
+  "snowflake": {
+    "account": "your_account",
+    "warehouse": "your_warehouse",
+    "database": "your_database",
+    "schema": "your_schema",
+    "table": "your_table",
+    "user": "your_user",
+    "password": "your_password"
+  },
+
+  "s3": {
+    "bucket": "s3a://wt-auto-bucket",
+    "region": "cn-north-1",
+    "endpoint": "s3.cn-north-1.amazonaws.com.cn",
+    "access_key": "<AWS_ACCESS_KEY_ID>",
+    "secret_key": "<AWS_SECRET_ACCESS_KEY>",
+    "credentials_provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider",
+    "key_prefix": "snowflake-staging/",
+    "properties": {
+      "fs.s3a.impl.disable.cache": "true"
+    }
+  },
+
+  "file_format": {
+    "format": "CSV",
+    "field_delimiter": ",",
+    "record_delimiter": "\\n",
+    "file_extension": ".csv"
+  },
+
+  "performance": {
+    "buffer_size": 1048576,
+    "max_file_size": 104857600,
+    "purge_after_copy": true
+  }
+}
