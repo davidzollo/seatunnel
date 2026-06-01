@@ -271,14 +271,29 @@ public class RestHttpGetCommandProcessor extends HttpCommandProcessor<HttpGetCom
                         .getNodeEngine()
                         .getHazelcastInstance()
                         .getMap(Constant.IMAP_RUNNING_JOB_INFO);
+        SeaTunnelServer seaTunnelServer = getSeaTunnelServer(true);
         JsonArray jobs =
                 values.entrySet().stream()
+                        .filter(entry -> shouldShowAsRunningJob(seaTunnelServer, entry.getKey()))
                         .map(
                                 jobInfoEntry ->
                                         convertToJson(
                                                 jobInfoEntry.getValue(), jobInfoEntry.getKey()))
                         .collect(JsonArray::new, JsonArray::add, JsonArray::add);
         this.prepareResponse(command, jobs);
+    }
+
+    private boolean shouldShowAsRunningJob(SeaTunnelServer seaTunnelServer, long jobId) {
+        if (seaTunnelServer != null) {
+            return seaTunnelServer.getCoordinatorService().shouldShowAsRunningJob(jobId);
+        }
+        Integer statusOrdinal =
+                (Integer)
+                        NodeEngineUtil.sendOperationToMasterNode(
+                                        getNode().nodeEngine, new GetJobStatusOperation(jobId))
+                                .join();
+        JobStatus status = JobStatus.values()[statusOrdinal];
+        return !status.isEndState();
     }
 
     private void handleFinishedJobsInfo(HttpGetCommand command, String uri) {

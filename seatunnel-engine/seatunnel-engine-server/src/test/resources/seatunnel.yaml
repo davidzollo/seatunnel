@@ -20,6 +20,7 @@ seatunnel:
         backup-count: 1
         job-metrics-partition-count: 4
         print-execution-info-interval: 10
+        state-cleanup-delay-ms: 0
         slot-service:
             dynamic-slot: true
             slot-num: 5

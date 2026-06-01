@@ -21,6 +21,7 @@ seatunnel:
         job-metrics-partition-count: 10
         queue-type: blockingqueue
         print-execution-info-interval: 60
+        state-cleanup-delay-ms: 60000
         slot-service:
             dynamic-slot: true
         checkpoint:

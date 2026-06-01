@@ -95,6 +95,7 @@ seatunnel:
     engine:
         backup-count: 1
         print-execution-info-interval: 10
+        state-cleanup-delay-ms: 60000
         slot-service:
             dynamic-slot: true
         checkpoint:
@@ -110,7 +111,19 @@ If the cluster has more than one node, the checkpoint storage must be a distribu
 
 For information about checkpoint storage, you can refer to [Checkpoint Storage](checkpoint-storage.md)
 
-### 4.4 Expiration Configuration For Historical Jobs
+### 4.4 State Cleanup Delay
+
+SeaTunnel retains terminal job, pipeline, and task states in distributed maps for a short time before removing them. This retention is controlled by `state-cleanup-delay-ms`, whose default value is `60000` milliseconds. Keeping terminal state tombstones briefly allows late asynchronous callbacks to observe an end state instead of a missing map entry. Setting it to `0` restores more aggressive cleanup, but also narrows the protection window for terminal-state races.
+
+Example
+
+```yaml
+seatunnel:
+    engine:
+        state-cleanup-delay-ms: 60000
+```
+
+### 4.5 Expiration Configuration For Historical Jobs
 
 The information of each completed job, such as status, counters, and error logs, is stored in the IMap object. As the number of running jobs increases, the memory usage will increase, and eventually, the memory will overflow. Therefore, you can adjust the `history-job-expire-minutes` parameter to address this issue. The time unit for this parameter is minutes. The default value is 1440 minutes, which is one day.
 
@@ -122,7 +135,7 @@ seatunnel:
     history-job-expire-minutes: 1440
 ```
 
-### 4.5 Class Loader Cache Mode
+### 4.6 Class Loader Cache Mode
 
 This configuration primarily addresses the issue of resource leakage caused by constantly creating and attempting to destroy the class loader.
 If you encounter exceptions related to metaspace overflow, you can try enabling this configuration.
@@ -136,7 +149,7 @@ seatunnel:
     classloader-cache-mode: true
 ```
 
-### 4.6 Job Scheduling Strategy
+### 4.7 Job Scheduling Strategy
 
 When resources are insufficient, the job scheduling strategy can be configured in the following two modes:
 

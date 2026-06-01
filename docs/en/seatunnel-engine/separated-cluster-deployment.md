@@ -135,6 +135,7 @@ seatunnel:
     engine:
         backup-count: 1
         print-execution-info-interval: 10
+        state-cleanup-delay-ms: 60000
         slot-service:
             dynamic-slot: true
         checkpoint:
@@ -156,7 +157,19 @@ The checkpoint configuration is only read by the Master service, and the Worker 
 
 For information about checkpoint storage, you can view [checkpoint storage](checkpoint-storage.md).
 
-### 4.4 History Job Expiry Configuration
+### 4.4 State Cleanup Delay (This parameter is invalid on the Worker node)
+
+SeaTunnel retains terminal job, pipeline, and task states in distributed maps for a short time before removing them. This retention is controlled by `state-cleanup-delay-ms`, whose default value is `60000` milliseconds. Keeping terminal state tombstones briefly allows late asynchronous callbacks to observe an end state instead of a missing map entry. Setting it to `0` restores more aggressive cleanup, but also narrows the protection window for terminal-state races.
+
+Example
+
+```yaml
+seatunnel:
+    engine:
+        state-cleanup-delay-ms: 60000
+```
+
+### 4.5 History Job Expiry Configuration
 
 The information of each completed job, such as status, counters, and error logs, is stored in an IMap object. As the number of running jobs increases, the memory will increase, and eventually the memory will overflow. Therefore, you can adjust the `history-job-expire-minutes` parameter to solve this problem. The time unit of this parameter is minutes. The default value is 1440 minutes, that is, one day.
 
@@ -168,7 +181,7 @@ seatunnel:
     history-job-expire-minutes: 1440
 ```
 
-### 4.5 Class Loader Cache Mode
+### 4.6 Class Loader Cache Mode
 
 This configuration mainly solves the problem of resource leakage caused by continuously creating and attempting to destroy class loaders.
 If you encounter an exception related to metaspace space overflow, you can try to enable this configuration.
@@ -182,7 +195,7 @@ seatunnel:
     classloader-cache-mode: true
 ```
 
-### 4.6 Persistence Configuration of IMap (This parameter is invalid on the Worker node)
+### 4.7 Persistence Configuration of IMap (This parameter is invalid on the Worker node)
 
 :::tip
 
@@ -280,7 +293,7 @@ netty-common-4.1.89.Final.jar
 seatunnel-hadoop3-3.1.4-uber.jar
 ```
 
-### 4.7 Job Scheduling Strategy
+### 4.8 Job Scheduling Strategy
 
 When resources are insufficient, the job scheduling strategy can be configured in the following two modes:
 

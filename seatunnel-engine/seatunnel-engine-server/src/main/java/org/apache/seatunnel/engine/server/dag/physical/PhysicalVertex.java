@@ -389,7 +389,9 @@ public class PhysicalVertex {
             RetryUtils.retryWithException(
                     () -> {
                         updateStateTimestamps(targetState);
-                        runningJobStateIMap.set(taskGroupLocation, targetState);
+                        if (runningJobStateIMap.get(taskGroupLocation) != null) {
+                            runningJobStateIMap.set(taskGroupLocation, targetState);
+                        }
                         return null;
                     },
                     new RetryUtils.RetryMaterial(
@@ -465,6 +467,13 @@ public class PhysicalVertex {
         // we must update runningJobStateTimestampsIMap first and then can update
         // runningJobStateIMap
         Long[] stateTimestamps = runningJobStateTimestampsIMap.get(taskGroupLocation);
+        if (stateTimestamps == null) {
+            log.warn(
+                    "{} state timestamps have already been cleaned, skip persisting transition to {}",
+                    taskFullName,
+                    targetState);
+            return;
+        }
         stateTimestamps[targetState.ordinal()] = System.currentTimeMillis();
         runningJobStateTimestampsIMap.set(taskGroupLocation, stateTimestamps);
     }

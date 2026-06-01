@@ -55,6 +55,7 @@ import org.apache.seatunnel.engine.core.job.JobInfo;
 import org.apache.seatunnel.engine.core.job.JobResult;
 import org.apache.seatunnel.engine.core.job.JobStatus;
 import org.apache.seatunnel.engine.core.job.PipelineStatus;
+import org.apache.seatunnel.engine.server.CoordinatorService;
 import org.apache.seatunnel.engine.server.SeaTunnelServer;
 import org.apache.seatunnel.engine.server.checkpoint.CheckpointManager;
 import org.apache.seatunnel.engine.server.checkpoint.CheckpointPlan;
@@ -68,6 +69,7 @@ import org.apache.seatunnel.engine.server.dag.physical.SubPlan;
 import org.apache.seatunnel.engine.server.execution.TaskExecutionState;
 import org.apache.seatunnel.engine.server.execution.TaskGroupLocation;
 import org.apache.seatunnel.engine.server.execution.TaskLocation;
+import org.apache.seatunnel.engine.server.master.cleanup.JobCleanupRecord;
 import org.apache.seatunnel.engine.server.master.cleanup.PipelineCleanupRecord;
 import org.apache.seatunnel.engine.server.metrics.JobMetricsCollector;
 import org.apache.seatunnel.engine.server.metrics.JobMetricsUtil;
@@ -100,6 +102,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -141,6 +144,8 @@ public class JobMaster implements DynamicMetricsProvider {
     private CompletableFuture<JobResult> jobMasterCompleteFuture;
 
     private JobImmutableInformation jobImmutableInformation;
+
+    private long initializationTimestamp;
 
     private LogicalDag logicalDag;
 
@@ -229,6 +234,7 @@ public class JobMaster implements DynamicMetricsProvider {
     public synchronized void init(
             long initializationTimestamp, boolean restart, ClassLoader zetaClassLoader)
             throws Exception {
+        this.initializationTimestamp = initializationTimestamp;
         Thread.currentThread().setContextClassLoader(zetaClassLoader);
         jobImmutableInformation =
                 nodeEngine.getSerializationService().toObject(jobImmutableInformationData);
@@ -604,37 +610,64 @@ public class JobMaster implements DynamicMetricsProvider {
                         });
     }
 
-    private void removeJobIMap() {
+    private JobCleanupRecord createJobCleanupRecord() {
         Long jobId = getJobImmutableInformation().getJobId();
-        runningJobStateTimestampsIMap.remove(jobId);
+        Set<Object> stateKeys = new LinkedHashSet<>();
+        Set<Object> timestampKeys = new LinkedHashSet<>();
+        stateKeys.add(jobId);
+        timestampKeys.add(jobId);
 
         getPhysicalPlan()
                 .getPipelineList()
                 .forEach(
                         pipeline -> {
-                            runningJobStateIMap.remove(pipeline.getPipelineLocation());
-                            runningJobStateTimestampsIMap.remove(pipeline.getPipelineLocation());
+                            stateKeys.add(pipeline.getPipelineLocation());
+                            timestampKeys.add(pipeline.getPipelineLocation());
                             pipeline.getCoordinatorVertexList()
                                     .forEach(
                                             coordinator -> {
-                                                runningJobStateIMap.remove(
-                                                        coordinator.getTaskGroupLocation());
-                                                runningJobStateTimestampsIMap.remove(
+                                                stateKeys.add(coordinator.getTaskGroupLocation());
+                                                timestampKeys.add(
                                                         coordinator.getTaskGroupLocation());
                                             });
 
                             pipeline.getPhysicalVertexList()
                                     .forEach(
                                             task -> {
-                                                runningJobStateIMap.remove(
-                                                        task.getTaskGroupLocation());
-                                                runningJobStateTimestampsIMap.remove(
-                                                        task.getTaskGroupLocation());
+                                                stateKeys.add(task.getTaskGroupLocation());
+                                                timestampKeys.add(task.getTaskGroupLocation());
                                             });
+
+                            if (checkpointManager != null) {
+                                String checkpointStateImapKey =
+                                        checkpointManager
+                                                .getCheckpointCoordinator(pipeline.getPipelineId())
+                                                .getCheckpointStateImapKey();
+                                stateKeys.add(checkpointStateImapKey);
+                            }
                         });
 
-        runningJobStateIMap.remove(jobId);
-        runningJobInfoIMap.remove(jobId);
+        return new JobCleanupRecord(
+                initializationTimestamp,
+                physicalPlan.getJobStatus(),
+                stateKeys,
+                timestampKeys,
+                System.currentTimeMillis());
+    }
+
+    private void scheduleRemoveJobStateMaps() {
+        Long jobId = getJobImmutableInformation().getJobId();
+        JobCleanupRecord cleanupRecord = createJobCleanupRecord();
+        IMap<Long, JobCleanupRecord> pendingJobCleanupIMap =
+                nodeEngine.getHazelcastInstance().getMap(Constant.IMAP_PENDING_JOB_CLEANUP);
+        pendingJobCleanupIMap.put(jobId, cleanupRecord);
+
+        CoordinatorService coordinatorService = seaTunnelServer.getCoordinatorService();
+        if (coordinatorService == null) {
+            LOGGER.warning(String.format("Skip delayed cleanup scheduling for job %s", jobId));
+            return;
+        }
+        coordinatorService.schedulePendingJobCleanup(jobId, cleanupRecord);
     }
 
     public JobDAGInfo getJobDAGInfo() {
@@ -741,7 +774,7 @@ public class JobMaster implements DynamicMetricsProvider {
         checkpointManager.clearCheckpointIfNeed(physicalPlan.getJobStatus());
         jobHistoryService.storeJobInfo(jobImmutableInformation.getJobId(), getJobDAGInfo());
         jobHistoryService.storeFinishedJobState(this);
-        removeJobIMap();
+        scheduleRemoveJobStateMaps();
     }
 
     public void storeJobEndState() {
