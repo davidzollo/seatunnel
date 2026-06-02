@@ -61,6 +61,10 @@ public class SFTPFileSystem extends FileSystem {
     public static final String FS_SFTP_HOST_PORT = "fs.sftp.host.port";
     public static final String FS_SFTP_KEYFILE = "fs.sftp.keyfile";
     public static final String FS_SFTP_CONNECTION_MAX = "fs.sftp.connection.max";
+
+    /** Hadoop configuration key for the filename decoding used by remote SFTP entries. */
+    public static final String FS_SFTP_FILENAME_ENCODING = "fs.sftp.filename.encoding";
+
     public static final String E_SAME_DIRECTORY_ONLY = "only same directory renames are supported";
     public static final String E_HOST_NULL = "Invalid host specified";
     public static final String E_USER_NULL =
@@ -125,10 +129,25 @@ public class SFTPFileSystem extends FileSystem {
         String user = conf.get(FS_SFTP_USER_PREFIX + host, null);
         String pwd = conf.get(FS_SFTP_PASSWORD_PREFIX + host + "." + user, null);
         String keyFile = conf.get(FS_SFTP_KEYFILE, null);
+        String filenameEncoding = conf.get(FS_SFTP_FILENAME_ENCODING, "UTF-8");
 
         ChannelSftp channel = connectionPool.connect(host, port, user, pwd, keyFile);
+        setFilenameEncoding(channel, filenameEncoding);
 
         return channel;
+    }
+
+    /**
+     * Reapply the filename decoding whenever a pooled channel is checked out so one job's
+     * non-default encoding does not leak into another job.
+     */
+    static void setFilenameEncoding(ChannelSftp channel, String filenameEncoding)
+            throws IOException {
+        try {
+            channel.setFilenameEncoding(filenameEncoding);
+        } catch (SftpException e) {
+            throw new IOException("Failed to set SFTP filename encoding: " + filenameEncoding, e);
+        }
     }
 
     private void disconnect(ChannelSftp channel) throws IOException {

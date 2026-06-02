@@ -80,6 +80,7 @@ public class SftpFileSourceFactory implements TableSourceFactory {
                 .optional(BaseSourceConfigOptions.COMPRESS_CODEC)
                 .optional(BaseSourceConfigOptions.ARCHIVE_COMPRESS_CODEC)
                 .optional(BaseSourceConfigOptions.ENCODING)
+                .optional(SftpConfigOptions.SFTP_FILENAME_ENCODING)
                 .optional(BaseSourceConfigOptions.NULL_FORMAT)
                 .optional(BaseSourceConfigOptions.FILENAME_EXTENSION)
                 .build();

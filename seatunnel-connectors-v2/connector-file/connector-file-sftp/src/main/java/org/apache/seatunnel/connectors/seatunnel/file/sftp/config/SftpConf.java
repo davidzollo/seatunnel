@@ -51,6 +51,8 @@ public class SftpConf extends HadoopConf {
         sftpOptions.put(
                 "fs.sftp.password." + host + "." + config.get(SftpConfigOptions.SFTP_USER),
                 config.get(SftpConfigOptions.SFTP_PASSWORD));
+        config.getOptional(SftpConfigOptions.SFTP_FILENAME_ENCODING)
+                .ifPresent(value -> sftpOptions.put("fs.sftp.filename.encoding", value));
         hadoopConf.setExtraOptions(sftpOptions);
         return hadoopConf;
     }
