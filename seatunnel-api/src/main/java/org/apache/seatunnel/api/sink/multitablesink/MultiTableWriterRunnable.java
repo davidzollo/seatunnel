@@ -232,6 +232,12 @@ public class MultiTableWriterRunnable implements Runnable {
         tableIdWriterMap.remove(tableId);
     }
 
+    /** Registers a sink writer for a table discovered after the runnable has already started. */
+    public synchronized void registerWriter(
+            String tableId, SinkWriter<SeaTunnelRow, ?, ?> sinkWriter) {
+        tableIdWriterMap.put(tableId, sinkWriter);
+    }
+
     private static class TableFailure {
         private final String tableId;
         private final Throwable error;
