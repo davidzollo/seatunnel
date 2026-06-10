@@ -119,9 +119,22 @@ public class JdbcBatchStatementExecutorBuilder {
                             !clickhouseServerEnableExperimentalLightweightDelete);
             JdbcBatchStatementExecutor updateExecutor;
             if (supportReplacingMergeTreeTableUpsert()) {
-                // ReplacingMergeTree Update Row: upsert row by order-by-keys(update_after event)
-                updateExecutor = createInsertExecutor(table, rowType, valueRowConverter);
-                convertUpdateBeforeEventToDeleteAction = false;
+                if (supportUpsert) {
+                    updateExecutor =
+                            createUpsertExecutor(
+                                    table,
+                                    rowType,
+                                    primaryKeys,
+                                    pkExtractor,
+                                    pkRowConverter,
+                                    valueRowConverter);
+                    convertUpdateBeforeEventToDeleteAction = true;
+                } else {
+                    // ReplacingMergeTree Update Row: upsert row by order-by-keys(update_after
+                    // event)
+                    updateExecutor = createInsertExecutor(table, rowType, valueRowConverter);
+                    convertUpdateBeforeEventToDeleteAction = false;
+                }
             } else {
                 // *MergeTree Update Row:
                 // 1. delete(update_before event) + insert or update by query
@@ -151,8 +164,21 @@ public class JdbcBatchStatementExecutorBuilder {
         JdbcBatchStatementExecutor deleteExecutor =
                 createAlterTableDeleteExecutor(table, primaryKeys, pkRowConverter);
         JdbcBatchStatementExecutor updateExecutor;
+        boolean ignoreUpdateBefore = true;
         if (supportReplacingMergeTreeTableUpsert()) {
-            updateExecutor = createInsertExecutor(table, rowType, valueRowConverter);
+            if (supportUpsert) {
+                updateExecutor =
+                        createUpsertExecutor(
+                                table,
+                                rowType,
+                                primaryKeys,
+                                pkExtractor,
+                                pkRowConverter,
+                                valueRowConverter);
+                ignoreUpdateBefore = false;
+            } else {
+                updateExecutor = createInsertExecutor(table, rowType, valueRowConverter);
+            }
         } else {
             // Other-Engine Update Row:
             // 1. insert or update by query primary-keys(insert/update_after event)
@@ -168,9 +194,14 @@ public class JdbcBatchStatementExecutorBuilder {
                                     valueRowConverter)
                             : createInsertOrUpdateExecutor(
                                     table, rowType, primaryKeys, valueRowConverter);
+            ignoreUpdateBefore = !supportUpsert;
         }
         return new ReduceBufferedBatchStatementExecutor(
-                updateExecutor, deleteExecutor, pkExtractor, Function.identity(), true);
+                updateExecutor,
+                deleteExecutor,
+                pkExtractor,
+                Function.identity(),
+                ignoreUpdateBefore);
     }
 
     private static JdbcBatchStatementExecutor createInsertBufferedExecutor(
