@@ -166,7 +166,7 @@ public class ClickhouseProxy implements AutoCloseable {
 
     public Map<String, String> getClickhouseTableSchema(
             ClickHouseRequest<?> request, String table) {
-        String sql = "desc " + table;
+        String sql = "desc " + ClickhouseUtil.quoteTableIdentifier(table);
         Map<String, String> schema = new LinkedHashMap<>();
         try (ClickHouseResponse response = request.query(sql).executeAndWait()) {
             response.records()
@@ -219,7 +219,7 @@ public class ClickhouseProxy implements AutoCloseable {
     }
 
     public List<ClickHouseColumn> getClickHouseColumns(String table) {
-        String sql = "SELECT * FROM " + table + " WHERE 1 = 0";
+        String sql = "SELECT * FROM " + ClickhouseUtil.quoteTableIdentifier(table) + " WHERE 1 = 0";
         try (ClickHouseResponse response = this.clickhouseRequest.query(sql).executeAndWait()) {
             return response.getColumns();
 
@@ -690,13 +690,18 @@ public class ClickhouseProxy implements AutoCloseable {
     }
 
     public boolean isExistsData(String tableName) throws ExecutionException, InterruptedException {
-        String queryDataSql = "SELECT count(*) FROM " + tableName;
+        String queryDataSql = getIsExistsDataSql(tableName);
         try (ClickHouseResponse response = clickhouseRequest.query(queryDataSql).executeAndWait()) {
             return response.firstRecord().getValue(0).asInteger() > 0;
         } catch (ClickHouseException e) {
             throw new ClickhouseConnectorException(
                     SeaTunnelAPIErrorCode.TABLE_NOT_EXISTED, "Cannot get table from clickhouse", e);
         }
+    }
+
+    /** Builds the save-mode data-existence SQL with a quoted ClickHouse table identifier. */
+    static String getIsExistsDataSql(String tableName) {
+        return "SELECT count(*) FROM " + ClickhouseUtil.quoteTableIdentifier(tableName);
     }
 
     public void dropTable(TablePath tablePath, boolean ignoreIfNotExists) {

@@ -150,16 +150,18 @@ public class ClickhouseCatalogUtil extends CatalogUtil {
 
     public String getDropTableSql(TablePath tablePath, boolean ignoreIfNotExists) {
         if (ignoreIfNotExists) {
-            return "DROP TABLE IF EXISTS "
-                    + tablePath.getDatabaseName()
-                    + "."
-                    + tablePath.getTableName();
+            return "DROP TABLE IF EXISTS " + getQuotedTableFullName(tablePath);
         } else {
-            return "DROP TABLE " + tablePath.getDatabaseName() + "." + tablePath.getTableName();
+            return "DROP TABLE " + getQuotedTableFullName(tablePath);
         }
     }
 
     public String getTruncateTableSql(TablePath tablePath) {
-        return "TRUNCATE TABLE " + tablePath.getDatabaseName() + "." + tablePath.getTableName();
+        return "TRUNCATE TABLE " + getQuotedTableFullName(tablePath);
+    }
+
+    private String getQuotedTableFullName(TablePath tablePath) {
+        return ClickhouseUtil.quoteTableIdentifier(
+                tablePath.getDatabaseName() + "." + tablePath.getTableName());
     }
 }

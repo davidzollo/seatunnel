@@ -20,6 +20,7 @@ package org.apache.seatunnel.connectors.seatunnel.clickhouse.util;
 import org.apache.seatunnel.api.table.catalog.ConstraintKey;
 import org.apache.seatunnel.api.table.catalog.PhysicalColumn;
 import org.apache.seatunnel.api.table.catalog.PrimaryKey;
+import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
 import org.apache.seatunnel.api.table.type.BasicType;
 import org.apache.seatunnel.connectors.seatunnel.clickhouse.config.ClickhouseSinkOptions;
@@ -152,5 +153,17 @@ public class ClickhouseCatalogUtilTest {
         assertFalse(
                 ddl.contains("INDEX idx_status"),
                 "DDL should not contain index definitions when options are missing");
+    }
+
+    @Test
+    void quotesTableIdentifierInDropAndTruncateSql() {
+        TablePath tablePath = TablePath.of("st3355_empty_db", "9-1_users1");
+
+        assertEquals(
+                "DROP TABLE IF EXISTS `st3355_empty_db`.`9-1_users1`",
+                ClickhouseCatalogUtil.INSTANCE.getDropTableSql(tablePath, true));
+        assertEquals(
+                "TRUNCATE TABLE `st3355_empty_db`.`9-1_users1`",
+                ClickhouseCatalogUtil.INSTANCE.getTruncateTableSql(tablePath));
     }
 }

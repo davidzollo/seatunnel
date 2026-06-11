@@ -122,4 +122,11 @@ public class ClickhouseProxyTest {
 
         Assertions.assertEquals("datasource01", host);
     }
+
+    @Test
+    public void testGetIsExistsDataSqlQuotesTableIdentifier() {
+        Assertions.assertEquals(
+                "SELECT count(*) FROM `st3355_empty_db`.`9-1_users1`",
+                ClickhouseProxy.getIsExistsDataSql("st3355_empty_db.9-1_users1"));
+    }
 }

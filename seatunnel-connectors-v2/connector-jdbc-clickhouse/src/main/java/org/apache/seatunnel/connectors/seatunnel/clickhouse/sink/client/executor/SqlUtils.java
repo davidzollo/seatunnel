@@ -17,6 +17,8 @@
 
 package org.apache.seatunnel.connectors.seatunnel.clickhouse.sink.client.executor;
 
+import org.apache.seatunnel.connectors.seatunnel.clickhouse.util.ClickhouseUtil;
+
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
@@ -24,7 +26,7 @@ import static java.lang.String.format;
 
 public class SqlUtils {
     public static String quoteIdentifier(String identifier) {
-        return "\"" + identifier + "\"";
+        return ClickhouseUtil.quoteIdentifier(identifier);
     }
 
     public static String getInsertIntoStatement(String tableName, String[] fieldNames) {
@@ -36,7 +38,9 @@ public class SqlUtils {
                 Arrays.stream(fieldNames)
                         .map(fieldName -> ":" + fieldName)
                         .collect(Collectors.joining(", "));
-        return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, placeholders);
+        return String.format(
+                "INSERT INTO %s (%s) VALUES (%s)",
+                ClickhouseUtil.quoteTableIdentifier(tableName), columns, placeholders);
     }
 
     public static String getDeleteStatement(
@@ -48,7 +52,9 @@ public class SqlUtils {
                         .map(fieldName -> format("%s = :%s", quoteIdentifier(fieldName), fieldName))
                         .collect(Collectors.joining(" AND "));
         String deleteStatement =
-                format("DELETE FROM %s WHERE %s", quoteIdentifier(tableName), conditionClause);
+                format(
+                        "DELETE FROM %s WHERE %s",
+                        ClickhouseUtil.quoteTableIdentifier(tableName), conditionClause);
         if (enableExperimentalLightweightDelete) {
             deleteStatement += " settings allow_experimental_lightweight_delete = true";
         }
@@ -74,7 +80,7 @@ public class SqlUtils {
                         .collect(Collectors.joining(" AND "));
         return String.format(
                 "ALTER TABLE %s UPDATE %s WHERE %s settings mutations_sync = 1",
-                tableName, setClause, conditionClause);
+                ClickhouseUtil.quoteTableIdentifier(tableName), setClause, conditionClause);
     }
 
     public static String getAlterTableDeleteStatement(String tableName, String[] conditionFields) {
@@ -84,7 +90,7 @@ public class SqlUtils {
                         .collect(Collectors.joining(" AND "));
         return String.format(
                 "ALTER TABLE %s DELETE WHERE %s settings mutations_sync = 1",
-                tableName, conditionClause);
+                ClickhouseUtil.quoteTableIdentifier(tableName), conditionClause);
     }
 
     public static String getRowExistsStatement(String tableName, String[] conditionFields) {
@@ -93,6 +99,7 @@ public class SqlUtils {
                         .map(field -> format("%s = :%s", quoteIdentifier(field), field))
                         .collect(Collectors.joining(" AND "));
         return String.format(
-                "SELECT 1 FROM %s WHERE %s", quoteIdentifier(tableName), fieldExpressions);
+                "SELECT 1 FROM %s WHERE %s",
+                ClickhouseUtil.quoteTableIdentifier(tableName), fieldExpressions);
     }
 }

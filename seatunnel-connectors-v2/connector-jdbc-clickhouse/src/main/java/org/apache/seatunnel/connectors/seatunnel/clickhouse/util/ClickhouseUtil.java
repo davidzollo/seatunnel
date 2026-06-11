@@ -45,6 +45,35 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ClickhouseUtil {
 
+    /** Quotes a single ClickHouse identifier with backticks and escapes embedded backticks. */
+    public static String quoteIdentifier(String identifier) {
+        return "`" + identifier.replace("`", "``") + "`";
+    }
+
+    /**
+     * Quotes each part of a ClickHouse table identifier.
+     *
+     * <p>Callers may pass a raw table name, a raw database.table name, or an identifier whose parts
+     * are already backtick-quoted. Already quoted parts are kept unchanged so the helper can be
+     * used safely by both catalog and SQL generation paths.
+     */
+    public static String quoteTableIdentifier(String tableIdentifier) {
+        if (StringUtils.isBlank(tableIdentifier)) {
+            return tableIdentifier;
+        }
+        return Arrays.stream(tableIdentifier.split("\\."))
+                .map(ClickhouseUtil::quoteIdentifierIfNeeded)
+                .collect(Collectors.joining("."));
+    }
+
+    /** Quotes one identifier part unless it is already wrapped with ClickHouse backticks. */
+    private static String quoteIdentifierIfNeeded(String identifier) {
+        if (identifier.startsWith("`") && identifier.endsWith("`")) {
+            return identifier;
+        }
+        return quoteIdentifier(identifier);
+    }
+
     public static List<ClickHouseNode> createNodes(ReadonlyConfig config) {
         return createNodes(
                 config.get(ClickhouseBaseOptions.HOST),

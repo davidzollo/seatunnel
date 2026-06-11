@@ -118,11 +118,7 @@ public class ClickhouseSourceFactory implements TableSourceFactory {
             try (ClickhouseProxy proxy = new ClickhouseProxy(currentServer);
                     ClickHouseResponse response =
                             proxy.getClickhouseConnection()
-                                    .query(
-                                            generateQuerySql(
-                                                    sql,
-                                                    tablePath.getDatabaseName(),
-                                                    tablePath.getTableName()))
+                                    .query(generateQuerySql(sql, tablePath))
                                     .executeAndWait()) {
 
                 boolean isComplexSql =
@@ -360,16 +356,24 @@ public class ClickhouseSourceFactory implements TableSourceFactory {
                 filteredColumns);
     }
 
-    private String modifySQLToLimit1(String sql) {
+    private static String modifySQLToLimit1(String sql) {
         return String.format("SELECT * FROM (%s) s LIMIT 1", sql);
     }
 
-    private String generateQuerySql(String sql, String database, String table) {
+    /**
+     * Builds the probing SQL used to infer ClickHouse source columns.
+     *
+     * <p>Custom SQL is wrapped as a subquery. Table mode uses the full table path and quotes each
+     * identifier part so special table names can be probed during source initialization.
+     */
+    static String generateQuerySql(String sql, TablePath tablePath) {
         if (StringUtils.isNotEmpty(sql)) {
             return modifySQLToLimit1(sql);
         }
 
-        return String.format("SELECT * FROM %s.%s LIMIT 1", database, table);
+        return String.format(
+                "SELECT * FROM %s LIMIT 1",
+                ClickhouseUtil.quoteTableIdentifier(tablePath.getFullName()));
     }
 
     @Override

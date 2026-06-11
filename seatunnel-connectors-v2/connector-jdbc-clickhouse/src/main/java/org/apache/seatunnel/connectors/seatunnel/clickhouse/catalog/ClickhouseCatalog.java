@@ -195,7 +195,7 @@ public class ClickhouseCatalog implements Catalog {
     @Override
     public boolean isExistsData(TablePath tablePath) {
         try {
-            return proxy.isExistsData(tablePath.getFullName());
+            return proxy.isExistsData(tablePath.getFullNameWithQuoted());
         } catch (ExecutionException | InterruptedException e) {
             throw new RuntimeException(e);
         }
