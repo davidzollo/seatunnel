@@ -374,6 +374,12 @@ public class PostgresCatalog extends AbstractJdbcCatalog {
         return CatalogUtils.getCatalogTable(defaultConnection, sqlQuery, new PostgresTypeMapper());
     }
 
+    @Override
+    public CatalogTable getTable(TablePath tablePath, String sqlQuery) throws SQLException {
+        Connection connection = getConnection(getJdbcURL(tablePath));
+        return CatalogUtils.getCatalogTable(connection, sqlQuery, new PostgresTypeMapper());
+    }
+
     protected Collection<String> plugins(TablePath tablePath) {
         String dbUrl = getJdbcURL(tablePath);
         try {

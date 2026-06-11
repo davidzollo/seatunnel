@@ -37,6 +37,7 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcConnectionConfi
 import org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcOptions;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.config.JdbcSourceTableConfig;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.connection.JdbcConnectionProvider;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectLoader;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.source.JdbcSourceTable;
@@ -57,6 +58,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -85,10 +88,16 @@ public class JdbcCatalogUtils {
                         CatalogTable catalogTable =
                                 getCatalogTable(tableConfig, jdbcCatalog, jdbcDialect);
                         TablePath tablePath = catalogTable.getTableId().toTablePath();
+                        String sourceQuery = getNormalizedSourceQuery(tableConfig, jdbcDialect);
                         JdbcSourceTable jdbcSourceTable =
                                 JdbcSourceTable.builder()
                                         .tablePath(tablePath)
-                                        .query(tableConfig.getQuery())
+                                        .query(sourceQuery)
+                                        .jdbcUrl(
+                                                resolveTableJdbcUrl(
+                                                        jdbcConnectionConfig,
+                                                        jdbcCatalog,
+                                                        tablePath))
                                         .partitionColumn(tableConfig.getPartitionColumn())
                                         .partitionNumber(tableConfig.getPartitionNumber())
                                         .partitionStart(tableConfig.getPartitionStart())
@@ -134,10 +143,12 @@ public class JdbcCatalogUtils {
             for (JdbcSourceTableConfig tableConfig : tablesConfig) {
                 CatalogTable catalogTable = getCatalogTable(tableConfig, connection, jdbcDialect);
                 TablePath tablePath = catalogTable.getTableId().toTablePath();
+                String sourceQuery = getNormalizedSourceQuery(tableConfig, jdbcDialect);
                 JdbcSourceTable jdbcSourceTable =
                         JdbcSourceTable.builder()
                                 .tablePath(tablePath)
-                                .query(tableConfig.getQuery())
+                                .query(sourceQuery)
+                                .jdbcUrl(jdbcConnectionConfig.getUrl())
                                 .partitionColumn(tableConfig.getPartitionColumn())
                                 .partitionNumber(tableConfig.getPartitionNumber())
                                 .partitionStart(tableConfig.getPartitionStart())
@@ -181,7 +192,10 @@ public class JdbcCatalogUtils {
                 // ignore
                 log.debug("User-defined table path: {}", tablePath);
             }
-            CatalogTable tableOfQuery = jdbcCatalog.getTable(tableConfig.getQuery());
+            String sqlQuery =
+                    normalizePostgresFamilyTablePathQuery(
+                            tableConfig.getQuery(), tablePath, jdbcDialect);
+            CatalogTable tableOfQuery = jdbcCatalog.getTable(tablePath, sqlQuery);
             if (tableOfPath == null) {
                 String catalogName =
                         tableOfQuery.getTableId() == null
@@ -203,6 +217,20 @@ public class JdbcCatalogUtils {
         }
 
         return jdbcCatalog.getTable(tableConfig.getQuery());
+    }
+
+    /**
+     * Keep runtime split/read connections on the same database that the catalog used for this
+     * table_path.
+     */
+    static String resolveTableJdbcUrl(
+            JdbcConnectionConfig jdbcConnectionConfig,
+            AbstractJdbcCatalog jdbcCatalog,
+            TablePath tablePath) {
+        if (jdbcCatalog == null || tablePath == null) {
+            return jdbcConnectionConfig.getUrl();
+        }
+        return jdbcCatalog.getTableJdbcUrl(tablePath);
     }
 
     static CatalogTable mergeCatalogTable(CatalogTable tableOfPath, CatalogTable tableOfQuery) {
@@ -344,8 +372,10 @@ public class JdbcCatalogUtils {
                 // ignore
                 log.debug("User-defined table path: {}", tablePath);
             }
-            CatalogTable tableOfQuery =
-                    getCatalogTable(connection, tableConfig.getQuery(), jdbcDialect);
+            String sqlQuery =
+                    normalizePostgresFamilyTablePathQuery(
+                            tableConfig.getQuery(), tablePath, jdbcDialect);
+            CatalogTable tableOfQuery = getCatalogTable(connection, sqlQuery, jdbcDialect);
             if (tableOfPath == null) {
                 String catalogName =
                         tableOfQuery.getTableId() == null
@@ -376,6 +406,102 @@ public class JdbcCatalogUtils {
                 jdbcDialect.getResultSetMetaData(connection, sqlQuery);
         return CatalogUtils.getCatalogTable(
                 resultSetMetaData, jdbcDialect.getJdbcDialectTypeMapper(), sqlQuery);
+    }
+
+    /**
+     * Returns the SQL query that should be stored in JdbcSourceTable after metadata loading.
+     *
+     * <p>The normalized query is intentionally limited to table_path + query cases. Query-only
+     * configurations do not have a physical table path that can safely define the database context.
+     */
+    private static String getNormalizedSourceQuery(
+            JdbcSourceTableConfig tableConfig, JdbcDialect jdbcDialect) {
+        if (StringUtils.isEmpty(tableConfig.getTablePath())
+                || StringUtils.isEmpty(tableConfig.getQuery())) {
+            return tableConfig.getQuery();
+        }
+        TablePath tablePath = jdbcDialect.parse(tableConfig.getTablePath());
+        return normalizePostgresFamilyTablePathQuery(
+                tableConfig.getQuery(), tablePath, jdbcDialect);
+    }
+
+    /**
+     * Removes the database qualifier emitted by older Web versions for PostgreSQL-family generated
+     * projection SQL.
+     *
+     * <p>PostgreSQL-compatible databases do not support cross-database relation names inside a
+     * database connection. When table_path already selects the target database, a legacy query like
+     * {@code FROM "db"."schema"."table"} must be prepared and executed as {@code FROM
+     * "schema"."table"} to stay compatible with origin/2.6-release Web output.
+     */
+    static String normalizePostgresFamilyTablePathQuery(
+            String sqlQuery, TablePath tablePath, JdbcDialect jdbcDialect) {
+        if (StringUtils.isBlank(sqlQuery)
+                || tablePath == null
+                || !isPostgresFamilyDialect(jdbcDialect)
+                || StringUtils.isBlank(tablePath.getDatabaseName())
+                || StringUtils.isBlank(tablePath.getSchemaName())
+                || StringUtils.isBlank(tablePath.getTableName())) {
+            return sqlQuery;
+        }
+
+        String database = tablePath.getDatabaseName();
+        String schema = tablePath.getSchemaName();
+        String table = tablePath.getTableName();
+        String normalizedQuery =
+                replaceRelationQualifier(
+                        sqlQuery,
+                        quotePgIdentifier(database)
+                                + "."
+                                + quotePgIdentifier(schema)
+                                + "."
+                                + quotePgIdentifier(table),
+                        quotePgIdentifier(schema) + "." + quotePgIdentifier(table));
+        return replaceRelationQualifier(
+                normalizedQuery, database + "." + schema + "." + table, schema + "." + table);
+    }
+
+    /**
+     * Checks whether a dialect uses PostgreSQL-style database and schema semantics for relation
+     * names.
+     */
+    private static boolean isPostgresFamilyDialect(JdbcDialect jdbcDialect) {
+        if (jdbcDialect == null) {
+            return false;
+        }
+        String dialectName = jdbcDialect.dialectName();
+        return DatabaseIdentifier.POSTGRESQL.equalsIgnoreCase(dialectName)
+                || DatabaseIdentifier.OPENGAUSS.equalsIgnoreCase(dialectName)
+                || DatabaseIdentifier.HIGHGO.equalsIgnoreCase(dialectName)
+                || DatabaseIdentifier.GAUSSDB.equalsIgnoreCase(dialectName)
+                || DatabaseIdentifier.GREENPLUM.equalsIgnoreCase(dialectName)
+                || DatabaseIdentifier.REDSHIFT.equalsIgnoreCase(dialectName)
+                || DatabaseIdentifier.HOLOGRES.equalsIgnoreCase(dialectName)
+                || DatabaseIdentifier.ANALYTIC_DB_PG.equalsIgnoreCase(dialectName);
+    }
+
+    /**
+     * Replaces a matching FROM/JOIN relation only when the relation exactly matches table_path.
+     *
+     * <p>This keeps custom predicates and other SQL clauses untouched.
+     */
+    private static String replaceRelationQualifier(
+            String sqlQuery, String relation, String replacementRelation) {
+        Pattern pattern =
+                Pattern.compile(
+                        "\\b(FROM|JOIN)\\s+" + Pattern.quote(relation) + "(?=\\s|$|;|\\)|,)",
+                        Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(sqlQuery);
+        return matcher.replaceAll("$1 " + Matcher.quoteReplacement(replacementRelation));
+    }
+
+    /**
+     * Quotes a PostgreSQL identifier and escapes embedded double quotes.
+     *
+     * <p>The generated value is only used for exact relation matching.
+     */
+    private static String quotePgIdentifier(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 
     private static Connection getConnection(JdbcConnectionConfig config, JdbcDialect jdbcDialect)

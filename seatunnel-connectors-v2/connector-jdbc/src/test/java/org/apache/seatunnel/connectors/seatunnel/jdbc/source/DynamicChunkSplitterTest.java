@@ -66,6 +66,7 @@ public class DynamicChunkSplitterTest {
                         TablePath.of("db1", "schema1", "table1"),
                         "split1",
                         null,
+                        null,
                         "id",
                         BasicType.INT_TYPE,
                         1,
@@ -83,6 +84,7 @@ public class DynamicChunkSplitterTest {
                         TablePath.of("db1", "schema1", "table1"),
                         "split1",
                         "select * from table1",
+                        null,
                         "id",
                         BasicType.INT_TYPE,
                         1,
@@ -110,6 +112,7 @@ public class DynamicChunkSplitterTest {
                         TablePath.of("db1", "schema1", "table1"),
                         "split1",
                         "select * from table1",
+                        null,
                         "id",
                         BasicType.INT_TYPE,
                         1,
@@ -126,6 +129,7 @@ public class DynamicChunkSplitterTest {
                 new JdbcSourceSplit(
                         TablePath.of("db1", "schema1", "table1"),
                         "split1",
+                        null,
                         null,
                         "id",
                         BasicType.STRING_TYPE,
@@ -298,7 +302,10 @@ public class DynamicChunkSplitterTest {
 
         DynamicChunkSplitter splitter = new DynamicChunkSplitter(config);
         JdbcSourceTable table =
-                JdbcSourceTable.builder().tablePath(TablePath.of("db", "schema", "table")).build();
+                JdbcSourceTable.builder()
+                        .tablePath(TablePath.of("db", "schema", "table"))
+                        .jdbcUrl("jdbc:postgresql://localhost:5432/qa_source")
+                        .build();
 
         Collection<JdbcSourceSplit> splits = splitter.generateSplits(table);
 
@@ -307,6 +314,7 @@ public class DynamicChunkSplitterTest {
         assertNull(split.getSplitKeyName());
         assertNull(split.getSplitStart());
         assertNull(split.getSplitEnd());
+        assertEquals("jdbc:postgresql://localhost:5432/qa_source", split.getJdbcUrl());
     }
 
     /** The enable_concurrent_read option must default to true so existing jobs are unaffected. */

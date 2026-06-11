@@ -33,6 +33,8 @@ public class JdbcSourceSplit implements SourceSplit {
     private final TablePath tablePath;
     private final String splitId;
     private final String splitQuery;
+    // Split readers may need a different database URL than the datasource default URL.
+    private final String jdbcUrl;
     private final String splitKeyName;
     private final SeaTunnelDataType splitKeyType;
     private final Object splitStart;

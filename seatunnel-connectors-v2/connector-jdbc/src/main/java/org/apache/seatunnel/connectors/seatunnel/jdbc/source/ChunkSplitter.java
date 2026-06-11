@@ -47,14 +47,16 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
 public abstract class ChunkSplitter implements AutoCloseable, Serializable {
 
     protected JdbcSourceConfig config;
-    protected final JdbcConnectionProvider connectionProvider;
     protected final JdbcDialect jdbcDialect;
+    protected final Map<String, JdbcConnectionProvider> connectionProviders =
+            new ConcurrentHashMap<>();
 
     private final int fetchSize;
     private final boolean autoCommit;
@@ -68,8 +70,6 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
                         config.getJdbcConnectionConfig().getUrl(),
                         config.getCompatibleMode(),
                         config.getJdbcConnectionConfig().getDialect());
-        this.connectionProvider =
-                jdbcDialect.getJdbcConnectionProvider(config.getJdbcConnectionConfig());
     }
 
     public static ChunkSplitter create(JdbcSourceConfig config) {
@@ -82,9 +82,8 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
 
     @Override
     public synchronized void close() {
-        if (connectionProvider != null) {
-            connectionProvider.closeConnection();
-        }
+        connectionProviders.values().forEach(JdbcConnectionProvider::closeConnection);
+        connectionProviders.clear();
     }
 
     public Collection<JdbcSourceSplit> generateSplits(JdbcSourceTable table) throws Exception {
@@ -133,8 +132,9 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
     protected abstract PreparedStatement createSplitStatement(
             JdbcSourceSplit split, TableSchema schema) throws SQLException;
 
-    protected PreparedStatement createPreparedStatement(String sql) throws SQLException {
-        Connection connection = getOrEstablishConnection();
+    protected PreparedStatement createPreparedStatement(String sql, String jdbcUrl)
+            throws SQLException {
+        Connection connection = getOrEstablishConnection(jdbcUrl);
         // set autoCommit mode only if it was explicitly configured.
         // keep connection default otherwise.
         if (connection.getAutoCommit() != autoCommit) {
@@ -147,9 +147,9 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
         return jdbcDialect.creatPreparedStatement(connection, sql, fetchSize);
     }
 
-    protected Connection getOrEstablishConnection() throws SQLException {
+    protected Connection getOrEstablishConnection(String jdbcUrl) throws SQLException {
         try {
-            return connectionProvider.getOrEstablishConnection();
+            return getConnectionProvider(jdbcUrl).getOrEstablishConnection();
         } catch (ClassNotFoundException e) {
             throw new JdbcConnectorException(
                     CommonErrorCodeDeprecated.CLASS_NOT_FOUND,
@@ -158,12 +158,22 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
         }
     }
 
+    protected JdbcConnectionProvider getConnectionProvider(String jdbcUrl) {
+        return connectionProviders.computeIfAbsent(jdbcUrl, this::createConnectionProvider);
+    }
+
+    protected JdbcConnectionProvider createConnectionProvider(String jdbcUrl) {
+        return jdbcDialect.getJdbcConnectionProvider(
+                config.getJdbcConnectionConfig().copyWithUrl(jdbcUrl));
+    }
+
     protected JdbcSourceSplit createSingleSplit(JdbcSourceTable table) {
 
         return new JdbcSourceSplit(
                 table.getTablePath(),
                 createSplitId(table.getTablePath(), 0),
                 table.getQuery(),
+                table.getJdbcUrl(),
                 null,
                 null,
                 null,
@@ -181,7 +191,7 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
                     String.format(
                             "SELECT * FROM %s", jdbcDialect.tableIdentifier(split.getTablePath()));
         }
-        return createPreparedStatement(splitQuery);
+        return createPreparedStatement(splitQuery, split.getJdbcUrl());
     }
 
     protected Object queryMin(JdbcSourceTable table, String columnName, Object excludedLowerBound)
@@ -208,7 +218,8 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
                             columnName);
         }
 
-        try (PreparedStatement ps = getOrEstablishConnection().prepareStatement(minQuery)) {
+        try (PreparedStatement ps =
+                getOrEstablishConnection(table.getJdbcUrl()).prepareStatement(minQuery)) {
             ps.setObject(1, excludedLowerBound);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -245,7 +256,7 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
                             columnName,
                             jdbcDialect.tableIdentifier(table.getTablePath()));
         }
-        try (Statement stmt = getOrEstablishConnection().createStatement()) {
+        try (Statement stmt = getOrEstablishConnection(table.getJdbcUrl()).createStatement()) {
             log.info("Split table, query min max: {}", sqlQuery);
             try (ResultSet resultSet = stmt.executeQuery(sqlQuery)) {
                 if (resultSet.next()) {

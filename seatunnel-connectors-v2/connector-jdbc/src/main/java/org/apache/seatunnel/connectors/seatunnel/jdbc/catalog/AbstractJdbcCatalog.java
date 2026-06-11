@@ -717,6 +717,29 @@ public abstract class AbstractJdbcCatalog implements Catalog {
         return CatalogUtils.getCatalogTable(defaultConnection, sqlQuery);
     }
 
+    /**
+     * Load query metadata from the database resolved by the physical table path.
+     *
+     * <p>When table_path and query are configured together, the query is a projection over the
+     * physical table. Its metadata must be prepared on the same database connection as table_path,
+     * otherwise multi-database catalogs can resolve the table path correctly but execute the query
+     * against the default database.
+     */
+    public CatalogTable getTable(TablePath tablePath, String sqlQuery) throws SQLException {
+        Connection connection = getConnection(getJdbcURL(tablePath));
+        return CatalogUtils.getCatalogTable(connection, sqlQuery);
+    }
+
+    /**
+     * Expose the resolved runtime JDBC URL for a physical table path.
+     *
+     * <p>Metadata lookup and actual split/read execution must stay on the same target database for
+     * multi-database catalogs such as PostgreSQL-family engines.
+     */
+    public String getTableJdbcUrl(TablePath tablePath) {
+        return getJdbcURL(tablePath);
+    }
+
     protected void truncateTableInternal(TablePath tablePath) throws CatalogException {
         try {
             executeInternal(getJdbcURL(tablePath), getTruncateTableSql(tablePath));

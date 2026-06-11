@@ -89,6 +89,7 @@ public class DynamicChunkSplitter extends ChunkSplitter {
                                 table.getTablePath(),
                                 createSplitId(table.getTablePath(), 0),
                                 table.getQuery(),
+                                table.getJdbcUrl(),
                                 splitKeyName,
                                 splitKeyType,
                                 null,
@@ -116,6 +117,7 @@ public class DynamicChunkSplitter extends ChunkSplitter {
                             table.getTablePath(),
                             createSplitId(table.getTablePath(), i),
                             table.getQuery(),
+                            table.getJdbcUrl(),
                             splitKeyName,
                             splitKeyType,
                             chunk.getChunkStart(),
@@ -143,6 +145,7 @@ public class DynamicChunkSplitter extends ChunkSplitter {
                 table.getTablePath(),
                 createSplitId(table.getTablePath(), index),
                 table.getQuery(),
+                table.getJdbcUrl(),
                 splitKeyName,
                 splitKeyType,
                 null,
@@ -159,7 +162,7 @@ public class DynamicChunkSplitter extends ChunkSplitter {
             return createStringColumnSplitStatement(splitQuery, split);
         }
         String splitQuery = createDynamicSplitQuerySQL(split, schema);
-        PreparedStatement statement = createPreparedStatement(splitQuery);
+        PreparedStatement statement = createPreparedStatement(splitQuery, split.getJdbcUrl());
         prepareDynamicSplitStatement(statement, split);
         return statement;
     }
@@ -198,9 +201,9 @@ public class DynamicChunkSplitter extends ChunkSplitter {
     private PreparedStatement createStringColumnSplitStatement(String query, JdbcSourceSplit split)
             throws SQLException {
         if (split.isNull() || (split.getSplitStart() == null && split.getSplitEnd() == null)) {
-            return createPreparedStatement(query);
+            return createPreparedStatement(query, split.getJdbcUrl());
         }
-        PreparedStatement statement = createPreparedStatement(query);
+        PreparedStatement statement = createPreparedStatement(query, split.getJdbcUrl());
         statement.setInt(1, (Integer) split.getSplitStart());
         return statement;
     }
@@ -289,6 +292,7 @@ public class DynamicChunkSplitter extends ChunkSplitter {
                             table.getTablePath(),
                             createSplitId(table.getTablePath(), i),
                             splitQuery,
+                            table.getJdbcUrl(),
                             splitKeyName,
                             splitKeyType,
                             i,
@@ -363,7 +367,7 @@ public class DynamicChunkSplitter extends ChunkSplitter {
                         inverseSamplingRate);
                 Object[] sample =
                         jdbcDialect.sampleDataFromColumn(
-                                getOrEstablishConnection(),
+                                getOrEstablishConnection(table.getJdbcUrl()),
                                 table,
                                 splitColumnName,
                                 inverseSamplingRate,
@@ -380,7 +384,8 @@ public class DynamicChunkSplitter extends ChunkSplitter {
     }
 
     private Long queryApproximateRowCnt(JdbcSourceTable table) throws SQLException {
-        return jdbcDialect.approximateRowCntStatement(getOrEstablishConnection(), table);
+        return jdbcDialect.approximateRowCntStatement(
+                getOrEstablishConnection(table.getJdbcUrl()), table);
     }
 
     private double calculateDistributionFactor(
@@ -603,7 +608,7 @@ public class DynamicChunkSplitter extends ChunkSplitter {
         // chunk end might be null when max values are removed
         Object chunkEnd =
                 jdbcDialect.queryNextChunkMax(
-                        getOrEstablishConnection(),
+                        getOrEstablishConnection(table.getJdbcUrl()),
                         table,
                         splitColumnName,
                         chunkSize,

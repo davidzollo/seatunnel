@@ -138,6 +138,7 @@ public class FixedChunkSplitter extends ChunkSplitter {
                             table.getTablePath(),
                             createSplitId(table.getTablePath(), i),
                             splitQuery,
+                            table.getJdbcUrl(),
                             splitKeyName,
                             splitKeyType,
                             i,
@@ -152,7 +153,8 @@ public class FixedChunkSplitter extends ChunkSplitter {
 
     private PreparedStatement createStringColumnSplitStatement(JdbcSourceSplit split)
             throws SQLException {
-        PreparedStatement statement = createPreparedStatement(split.getSplitQuery());
+        PreparedStatement statement =
+                createPreparedStatement(split.getSplitQuery(), split.getJdbcUrl());
         statement.setInt(1, (Integer) split.getSplitStart());
         return statement;
     }
@@ -175,6 +177,7 @@ public class FixedChunkSplitter extends ChunkSplitter {
                             table.getTablePath(),
                             createSplitId(table.getTablePath(), i),
                             table.getQuery(),
+                            table.getJdbcUrl(),
                             splitKeyName,
                             splitKeyType,
                             parameterValues[i][0],
@@ -204,7 +207,7 @@ public class FixedChunkSplitter extends ChunkSplitter {
                             splitKeyName,
                             splitKeyName);
         }
-        PreparedStatement statement = createPreparedStatement(splitQuery);
+        PreparedStatement statement = createPreparedStatement(splitQuery, split.getJdbcUrl());
 
         Object[] parameterValues = new Object[] {split.getSplitStart(), split.getSplitEnd()};
         for (int i = 0; i < parameterValues.length; i++) {

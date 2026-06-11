@@ -33,6 +33,8 @@ public class JdbcSourceTable implements Serializable {
 
     private final TablePath tablePath;
     private final String query;
+    // Runtime read must stay on the same database that metadata lookup resolved from table_path.
+    private final String jdbcUrl;
     private final String partitionColumn;
     private final Integer partitionNumber;
     private final BigDecimal partitionStart;

@@ -29,6 +29,8 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.utils.CatalogUtils
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.redshift.RedshiftTypeConverter;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.redshift.RedshiftTypeMapper;
 
+import org.apache.commons.lang3.StringUtils;
+
 import lombok.extern.slf4j.Slf4j;
 
 import java.sql.ResultSet;
@@ -210,5 +212,29 @@ public class RedshiftCatalog extends AbstractJdbcCatalog {
                 getConnection(getUrlFromDatabaseName(defaultDatabase)),
                 sqlQuery,
                 new RedshiftTypeMapper());
+    }
+
+    /**
+     * Keep Redshift query metadata lookup on the database selected by table_path and preserve the
+     * Redshift-specific type mapper for projected query columns.
+     */
+    @Override
+    public CatalogTable getTable(TablePath tablePath, String sqlQuery) throws SQLException {
+        String databaseName =
+                StringUtils.isNotBlank(tablePath.getDatabaseName())
+                        ? tablePath.getDatabaseName()
+                        : defaultDatabase;
+        return CatalogUtils.getCatalogTable(
+                getConnection(getUrlFromDatabaseName(databaseName)),
+                sqlQuery,
+                new RedshiftTypeMapper());
+    }
+
+    @Override
+    protected String getJdbcURL(TablePath tablePath) {
+        return getUrlFromDatabaseName(
+                StringUtils.isNotBlank(tablePath.getDatabaseName())
+                        ? tablePath.getDatabaseName()
+                        : defaultDatabase);
     }
 }

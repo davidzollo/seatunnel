@@ -289,10 +289,25 @@ class JdbcSourceSplitEnumeratorTest {
         CatalogTable catalogTable =
                 CatalogTable.of(
                         tableId, tableSchema, Collections.emptyMap(), Collections.emptyList(), "");
-        return JdbcSourceTable.builder().tablePath(tablePath).catalogTable(catalogTable).build();
+        return JdbcSourceTable.builder()
+                .tablePath(tablePath)
+                .jdbcUrl("jdbc:mysql://localhost:3306/test")
+                .catalogTable(catalogTable)
+                .build();
     }
 
     private JdbcSourceSplit createSplit(TablePath tablePath, String splitId) {
-        return new JdbcSourceSplit(tablePath, splitId, "SELECT 1", "id", null, 0, 1, 0, 1, false);
+        return new JdbcSourceSplit(
+                tablePath,
+                splitId,
+                "SELECT 1",
+                "jdbc:mysql://localhost:3306/test",
+                "id",
+                null,
+                0,
+                1,
+                0,
+                1,
+                false);
     }
 }

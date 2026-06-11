@@ -110,6 +110,39 @@ public class JdbcConnectionConfig implements Serializable {
         return transactionTimeoutSec < 0 ? Optional.empty() : Optional.of(transactionTimeoutSec);
     }
 
+    /**
+     * Clone the current connection options while swapping only the JDBC URL.
+     *
+     * <p>Source split/read stages use this to stay on the same target database that metadata lookup
+     * resolved from table_path.
+     */
+    public JdbcConnectionConfig copyWithUrl(String url) {
+        return JdbcConnectionConfig.builder()
+                .url(url)
+                .driverName(driverName)
+                .compatibleMode(compatibleMode)
+                .connectionCheckTimeoutSeconds(connectionCheckTimeoutSeconds)
+                .maxRetries(maxRetries)
+                .username(username)
+                .password(password)
+                .query(query)
+                .autoCommit(autoCommit)
+                .batchSize(batchSize)
+                .xaDataSourceClassName(xaDataSourceClassName)
+                .decimalTypeNarrowing(decimalTypeNarrowing)
+                .intTypeNarrowing(intTypeNarrowing)
+                .bitTypeNarrowing(bitTypeNarrowing)
+                .maxCommitAttempts(maxCommitAttempts)
+                .transactionTimeoutSec(transactionTimeoutSec)
+                .useKerberos(useKerberos)
+                .kerberosPrincipal(kerberosPrincipal)
+                .kerberosKeytabPath(kerberosKeytabPath)
+                .krb5Path(krb5Path)
+                .dialect(dialect)
+                .properties(properties)
+                .build();
+    }
+
     public static JdbcConnectionConfig.Builder builder() {
         return new JdbcConnectionConfig.Builder();
     }

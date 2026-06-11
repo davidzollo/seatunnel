@@ -27,13 +27,20 @@ import org.apache.seatunnel.api.table.catalog.TableIdentifier;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
 import org.apache.seatunnel.api.table.type.BasicType;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.utils.CatalogUtils;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.redshift.RedshiftTypeMapper;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class RedshiftCatalogTest {
 
@@ -98,5 +105,54 @@ public class RedshiftCatalogTest {
                         + "PRIMARY KEY (\"test\",\"test2\")\n"
                         + ");",
                 sql);
+    }
+
+    /**
+     * Verify that query metadata lookup uses the database from table_path and keeps the
+     * Redshift-specific type mapper instead of falling back to AbstractJdbcCatalog defaults.
+     */
+    @Test
+    void testQueryMetadataLookupUsesTargetDatabaseAndRedshiftMapper() throws SQLException {
+        Connection connection = Mockito.mock(Connection.class);
+        AtomicReference<String> capturedUrl = new AtomicReference<>();
+        RedshiftCatalog catalog =
+                new RedshiftCatalog(
+                        "test",
+                        "test",
+                        "test",
+                        new org.apache.seatunnel.common.utils.JdbcUrlUtil.UrlInfo(
+                                "jdbc:redshift://localhost:5432/default_db",
+                                "jdbc:redshift://localhost:5432",
+                                "localhost",
+                                5432,
+                                "default_db",
+                                ""),
+                        "public") {
+                    @Override
+                    protected Connection getConnection(String url) {
+                        capturedUrl.set(url);
+                        return connection;
+                    }
+                };
+        TablePath tablePath = TablePath.of("qa_sink", "public", "orders");
+        String sqlQuery = "SELECT id FROM public.orders";
+
+        try (MockedStatic<CatalogUtils> catalogUtils = Mockito.mockStatic(CatalogUtils.class)) {
+            catalogUtils
+                    .when(
+                            () ->
+                                    CatalogUtils.getCatalogTable(
+                                            Mockito.same(connection),
+                                            Mockito.eq(sqlQuery),
+                                            Mockito.argThat(
+                                                    mapper ->
+                                                            mapper instanceof RedshiftTypeMapper)))
+                    .thenReturn(CATALOG_TABLE);
+
+            CatalogTable actual = catalog.getTable(tablePath, sqlQuery);
+
+            Assertions.assertSame(CATALOG_TABLE, actual);
+            Assertions.assertEquals("jdbc:redshift://localhost:5432/qa_sink", capturedUrl.get());
+        }
     }
 }

@@ -169,6 +169,12 @@ public class GaussDBCatalog extends PostgresCatalog {
     }
 
     @Override
+    public CatalogTable getTable(TablePath tablePath, String sqlQuery) throws SQLException {
+        Connection connection = getConnection(getJdbcURL(tablePath));
+        return CatalogUtils.getCatalogTable(connection, sqlQuery, new GaussDBTypeMapper());
+    }
+
+    @Override
     protected String getTruncateTableSql(TablePath tablePath) {
         String schemaName = tablePath.getSchemaName();
         String tableName = tablePath.getTableName();
