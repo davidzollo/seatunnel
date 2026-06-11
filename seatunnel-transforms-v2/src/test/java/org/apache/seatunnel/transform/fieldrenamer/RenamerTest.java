@@ -493,4 +493,103 @@ public class RenamerTest {
                 ((AlterTableAddColumnEvent) newAlterTableColumnsEvent.getEvents().get(0))
                         .getAfterColumn());
     }
+
+    /**
+     * Verifies that a database-less legacy specific rule keeps matching same-name tables from
+     * different databases on multi-database reads instead of failing the specific rule pre-check or
+     * silently skipping the rename.
+     */
+    @Test
+    void testSpecificRuleLegacyShapeMatchesAcrossDatabases() {
+        CatalogTable db1Table = buildSingleColumnTable("db1", "public", "users");
+        CatalogTable db2Table = buildSingleColumnTable("db2", "public", "users");
+        FieldRenamerConfig config = new FieldRenamerConfig();
+        config.setSpecific(
+                Collections.singletonList(
+                        new FieldRenamerConfig.SpecificModify("public.users", "f1", "renamed")));
+        FieldRenamerTransform transform =
+                new FieldRenamerTransform(Arrays.asList(db1Table, db2Table), config);
+
+        List<CatalogTable> produced = transform.getProducedCatalogTables();
+
+        Assertions.assertEquals(
+                "renamed", produced.get(0).getTableSchema().getColumns().get(0).getName());
+        Assertions.assertEquals(
+                "renamed", produced.get(1).getTableSchema().getColumns().get(0).getName());
+    }
+
+    /**
+     * Verifies that a full-name specific rule only binds to the table of its own database when
+     * same-name tables from different databases are read in one job.
+     */
+    @Test
+    void testSpecificRuleFullNameBindsSingleDatabase() {
+        CatalogTable db1Table = buildSingleColumnTable("db1", "public", "users");
+        CatalogTable db2Table = buildSingleColumnTable("db2", "public", "users");
+        FieldRenamerConfig config = new FieldRenamerConfig();
+        config.setSpecific(
+                Collections.singletonList(
+                        new FieldRenamerConfig.SpecificModify(
+                                "db1.public.users", "f1", "only_db1")));
+        FieldRenamerTransform transform =
+                new FieldRenamerTransform(Arrays.asList(db1Table, db2Table), config);
+
+        List<CatalogTable> produced = transform.getProducedCatalogTables();
+
+        Assertions.assertEquals(
+                "only_db1", produced.get(0).getTableSchema().getColumns().get(0).getName());
+        Assertions.assertEquals(
+                "f1", produced.get(1).getTableSchema().getColumns().get(0).getName());
+    }
+
+    /**
+     * Verifies that a full-name specific rule wins over a database-less legacy rule matching the
+     * same table and field, regardless of the rule order in the config.
+     */
+    @Test
+    void testSpecificRuleFullNameTakesPrecedenceOverLegacyShape() {
+        CatalogTable db1Table = buildSingleColumnTable("db1", "public", "users");
+        CatalogTable db2Table = buildSingleColumnTable("db2", "public", "users");
+        FieldRenamerConfig config = new FieldRenamerConfig();
+        config.setSpecific(
+                Arrays.asList(
+                        new FieldRenamerConfig.SpecificModify("public.users", "f1", "legacy_name"),
+                        new FieldRenamerConfig.SpecificModify(
+                                "db1.public.users", "f1", "exact_name")));
+        FieldRenamerTransform transform =
+                new FieldRenamerTransform(Arrays.asList(db1Table, db2Table), config);
+
+        List<CatalogTable> produced = transform.getProducedCatalogTables();
+
+        Assertions.assertEquals(
+                "exact_name", produced.get(0).getTableSchema().getColumns().get(0).getName());
+        Assertions.assertEquals(
+                "legacy_name", produced.get(1).getTableSchema().getColumns().get(0).getName());
+    }
+
+    /** Builds a catalog table holding one string column named f1 under the given table path. */
+    private static CatalogTable buildSingleColumnTable(
+            String database, String schema, String table) {
+        return CatalogTable.of(
+                TableIdentifier.of("catalog", database, schema, table),
+                TableSchema.builder()
+                        .column(
+                                PhysicalColumn.of(
+                                        "f1",
+                                        BasicType.STRING_TYPE,
+                                        10,
+                                        false,
+                                        null,
+                                        null,
+                                        "varchar(10)",
+                                        false,
+                                        false,
+                                        null,
+                                        null,
+                                        null))
+                        .build(),
+                Collections.emptyMap(),
+                new ArrayList<>(),
+                null);
+    }
 }

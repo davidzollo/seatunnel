@@ -297,4 +297,158 @@ public class MapperTransformTest {
         Assertions.assertEquals(20, decimalType.getPrecision());
         Assertions.assertEquals(5, decimalType.getScale());
     }
+
+    /**
+     * Verifies that a specific rule carrying the database segment binds only to the table of that
+     * database when one job reads same-name tables from different databases.
+     */
+    @Test
+    public void testSpecificRuleBindsByDatabaseForSameNameTables() {
+        CatalogTable db1Table = buildSingleColumnTable("db1", "public", "users");
+        CatalogTable db2Table = buildSingleColumnTable("db2", "public", "users");
+        ReadonlyConfig config =
+                buildSpecificConfig(
+                        buildRenameRule("db1.public.users", "id_db1"),
+                        buildRenameRule("db2.public.users", "id_db2"));
+
+        MapperTransform db1Transform = new MapperTransform(config, db1Table);
+        MapperTransform db2Transform = new MapperTransform(config, db2Table);
+
+        Assertions.assertEquals("id_db1", db1Transform.getOutputColumns()[0].getName());
+        Assertions.assertEquals("id_db2", db2Transform.getOutputColumns()[0].getName());
+    }
+
+    /**
+     * Verifies that a database-less legacy rule keeps matching every same-name table so that
+     * existing job configs remain valid after the database comparison was introduced.
+     */
+    @Test
+    public void testSpecificRuleLegacyShapeMatchesAcrossDatabases() {
+        CatalogTable db1Table = buildSingleColumnTable("db1", "public", "users");
+        CatalogTable db2Table = buildSingleColumnTable("db2", "public", "users");
+        ReadonlyConfig config = buildSpecificConfig(buildRenameRule("public.users", "renamed"));
+
+        MapperTransform db1Transform = new MapperTransform(config, db1Table);
+        MapperTransform db2Transform = new MapperTransform(config, db2Table);
+
+        Assertions.assertEquals("renamed", db1Transform.getOutputColumns()[0].getName());
+        Assertions.assertEquals("renamed", db2Transform.getOutputColumns()[0].getName());
+    }
+
+    /**
+     * Verifies that two-segment rules fall back to database.table matching for tables without
+     * schema, so MySQL-family multi-database rules can bind to the right database.
+     */
+    @Test
+    public void testSpecificRuleBindsByDatabaseForSchemaLessTables() {
+        CatalogTable db1Table = buildSingleColumnTable("db1", null, "users");
+        CatalogTable db2Table = buildSingleColumnTable("db2", null, "users");
+        ReadonlyConfig config =
+                buildSpecificConfig(
+                        buildRenameRule("db1.users", "id_db1"),
+                        buildRenameRule("db2.users", "id_db2"));
+
+        MapperTransform db1Transform = new MapperTransform(config, db1Table);
+        MapperTransform db2Transform = new MapperTransform(config, db2Table);
+
+        Assertions.assertEquals("id_db1", db1Transform.getOutputColumns()[0].getName());
+        Assertions.assertEquals("id_db2", db2Transform.getOutputColumns()[0].getName());
+    }
+
+    /**
+     * Covers the rule input name matching matrix shared by the runtime rule binding and the
+     * multi-catalog pre-check.
+     */
+    @Test
+    public void testMatchesInputTableMatrix() {
+        TableIdentifier pgTable = TableIdentifier.of("catalog", "db1", "public", "users");
+        TableIdentifier mysqlTable = TableIdentifier.of("catalog", "db1", null, "users");
+
+        Assertions.assertTrue(MapperTransform.matchesInputTable("users", pgTable));
+        Assertions.assertTrue(MapperTransform.matchesInputTable("public.users", pgTable));
+        Assertions.assertTrue(MapperTransform.matchesInputTable("db1.public.users", pgTable));
+        Assertions.assertFalse(MapperTransform.matchesInputTable("db2.public.users", pgTable));
+        Assertions.assertFalse(MapperTransform.matchesInputTable("other.users", pgTable));
+
+        Assertions.assertTrue(MapperTransform.matchesInputTable("users", mysqlTable));
+        Assertions.assertTrue(MapperTransform.matchesInputTable("db1.users", mysqlTable));
+        Assertions.assertFalse(MapperTransform.matchesInputTable("db2.users", mysqlTable));
+    }
+
+    /**
+     * Covers the multi-catalog chain used by the engine job parsing and the web model inference:
+     * the pre-check must accept database-scoped rules and each same-name table must produce its own
+     * mapped schema.
+     */
+    @Test
+    public void testMultiCatalogTransformBindsRulesPerDatabase() {
+        CatalogTable db1Table = buildSingleColumnTable("db1", "public", "users");
+        CatalogTable db2Table = buildSingleColumnTable("db2", "public", "users");
+        ReadonlyConfig config =
+                buildSpecificConfig(
+                        buildRenameRule("db1.public.users", "id_db1"),
+                        buildRenameRule("db2.public.users", "id_db2"));
+
+        MapperMultiCatalogTransform transform =
+                new MapperMultiCatalogTransform(Lists.newArrayList(db1Table, db2Table), config);
+        List<CatalogTable> produced = transform.getProducedCatalogTables();
+
+        Assertions.assertEquals(
+                "id_db1", produced.get(0).getTableSchema().getColumns().get(0).getName());
+        Assertions.assertEquals(
+                "id_db2", produced.get(1).getTableSchema().getColumns().get(0).getName());
+    }
+
+    /** Builds a catalog table holding one string column named key1 under the given table path. */
+    private static CatalogTable buildSingleColumnTable(
+            String database, String schema, String table) {
+        return CatalogTable.of(
+                TableIdentifier.of("catalog", database, schema, table),
+                TableSchema.builder()
+                        .column(
+                                PhysicalColumn.of(
+                                        "key1",
+                                        BasicType.STRING_TYPE,
+                                        1L,
+                                        Boolean.FALSE,
+                                        null,
+                                        null))
+                        .build(),
+                new HashMap<>(),
+                new ArrayList<>(),
+                "comment");
+    }
+
+    /**
+     * Builds a specific rule renaming column key1 to the given output column name for the table
+     * referenced by the input name.
+     */
+    private static MapperConfig.SpecificModify buildRenameRule(
+            String inputName, String outputColumnName) {
+        return new MapperConfig.SpecificModify(
+                inputName,
+                "users",
+                null,
+                Lists.newArrayList(
+                        MapperConfig.Column.builder()
+                                .position(1)
+                                .inputName("key1")
+                                .outputName(outputColumnName)
+                                .action(MapperConfig.Action.MODIFY)
+                                .build()),
+                null,
+                null,
+                null,
+                null);
+    }
+
+    /** Wraps the given specific rules into a readonly config for the mapper transform. */
+    private static ReadonlyConfig buildSpecificConfig(MapperConfig.SpecificModify... rules) {
+        return ReadonlyConfig.fromMap(
+                new HashMap<String, Object>() {
+                    {
+                        put(MapperConfig.SPECIFIC.key(), Lists.newArrayList(rules));
+                    }
+                });
+    }
 }

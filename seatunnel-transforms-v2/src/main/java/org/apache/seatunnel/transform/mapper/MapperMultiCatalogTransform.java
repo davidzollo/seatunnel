@@ -19,7 +19,6 @@ package org.apache.seatunnel.transform.mapper;
 
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
-import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.transform.SeaTunnelTransform;
 import org.apache.seatunnel.transform.common.AbstractMultiCatalogSupportTransform;
@@ -27,10 +26,8 @@ import org.apache.seatunnel.transform.exception.TransformCommonError;
 import org.apache.seatunnel.transform.exception.TransformExceptionUtil;
 
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 public class MapperMultiCatalogTransform extends AbstractMultiCatalogSupportTransform {
@@ -62,29 +59,16 @@ public class MapperMultiCatalogTransform extends AbstractMultiCatalogSupportTran
                 getPluginName(),
                 specificModifies.iterator(),
                 modify -> {
-                    TablePath configPath = TablePath.of(modify.getInputName(), true);
+                    // Reuse the per-table rule matching so the pre-check accepts exactly the
+                    // rules that MapperTransform binds at runtime, otherwise a rule could pass
+                    // validation here and still be skipped or wrongly bound during execution
                     boolean found =
                             inputCatalogTables.stream()
                                     .anyMatch(
-                                            table -> {
-                                                TablePath inputPath =
-                                                        table.getTableId().toTablePath();
-                                                return inputPath
-                                                                .getTableName()
-                                                                .equals(configPath.getTableName())
-                                                        && (StringUtils.isBlank(
-                                                                        configPath.getSchemaName())
-                                                                || Objects.equals(
-                                                                        inputPath.getSchemaName(),
-                                                                        configPath.getSchemaName()))
-                                                        && (StringUtils.isBlank(
-                                                                        configPath
-                                                                                .getDatabaseName())
-                                                                || Objects.equals(
-                                                                        inputPath.getDatabaseName(),
-                                                                        configPath
-                                                                                .getDatabaseName()));
-                                            });
+                                            table ->
+                                                    MapperTransform.matchesInputTable(
+                                                            modify.getInputName(),
+                                                            table.getTableId()));
 
                     if (!found) {
                         throw TransformCommonError.cannotFindInputTableError(

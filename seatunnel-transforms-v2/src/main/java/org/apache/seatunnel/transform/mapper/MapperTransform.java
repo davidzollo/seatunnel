@@ -84,19 +84,10 @@ public class MapperTransform extends MultipleFieldOutputTransform {
         this.specificModified =
                 config.get(MapperConfig.SPECIFIC).stream()
                         .filter(
-                                specificModify -> {
-                                    TablePath tablePath =
-                                            TablePath.of(specificModify.getInputName(), true);
-                                    return tablePath
-                                                    .getTableName()
-                                                    .equals(inputTableIdentifier.getTableName())
-                                            && (StringUtils.isBlank(tablePath.getSchemaName())
-                                                    || tablePath
-                                                            .getSchemaName()
-                                                            .equals(
-                                                                    inputTableIdentifier
-                                                                            .getSchemaName()));
-                                })
+                                specificModify ->
+                                        matchesInputTable(
+                                                specificModify.getInputName(),
+                                                inputTableIdentifier))
                         .findFirst()
                         .orElse(null);
 
@@ -713,5 +704,37 @@ public class MapperTransform extends MultipleFieldOutputTransform {
                     String.format("DECIMAL(%d, %d)", length, scale));
         }
         return convertSqlTypeToSeaTunnelDataType(sqlType.name());
+    }
+
+    /**
+     * Matches a specific rule input name against an input table identifier. The rule name accepts
+     * three shapes: table, schema.table and database.schema.table. Segments present in the rule
+     * must match the table exactly, while absent segments keep the legacy fuzzy matching. Without
+     * the database comparison, a multi-database read holding same-name tables from different
+     * databases would silently bind every table to the first rule and apply wrong field mappings.
+     */
+    static boolean matchesInputTable(String inputName, TableIdentifier identifier) {
+        // Two-segment names are parsed as schema.table first to keep the legacy behavior
+        if (matchesParsedPath(TablePath.of(inputName, true), identifier)) {
+            return true;
+        }
+        // Re-read two-segment names as database.table for tables without schema (for example
+        // the MySQL family), otherwise a database-scoped rule could never bind to its table
+        if (inputName.split("\\.").length == 2 && StringUtils.isBlank(identifier.getSchemaName())) {
+            return matchesParsedPath(TablePath.of(inputName, false), identifier);
+        }
+        return false;
+    }
+
+    /**
+     * Compares a parsed rule path with the table identifier. Blank rule segments are treated as
+     * wildcards while present segments require exact equality.
+     */
+    private static boolean matchesParsedPath(TablePath rulePath, TableIdentifier identifier) {
+        return rulePath.getTableName().equals(identifier.getTableName())
+                && (StringUtils.isBlank(rulePath.getSchemaName())
+                        || rulePath.getSchemaName().equals(identifier.getSchemaName()))
+                && (StringUtils.isBlank(rulePath.getDatabaseName())
+                        || rulePath.getDatabaseName().equals(identifier.getDatabaseName()));
     }
 }

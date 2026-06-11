@@ -148,11 +148,21 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
                 entry -> {
                     String tableName = entry.getTableName();
                     String field = entry.getFieldName();
-                    if (!tableFields.containsKey(tableName)) {
+                    // Collect the fields of every input table matched by the configured
+                    // reference: a database-less legacy rule may cover several same-name
+                    // tables under different databases on multi-database reads
+                    List<Set<String>> matchedTableFields =
+                            tableFields.entrySet().stream()
+                                    .filter(e -> matchesConfiguredTable(tableName, e.getKey()))
+                                    .map(Map.Entry::getValue)
+                                    .collect(Collectors.toList());
+                    if (matchedTableFields.isEmpty()) {
                         throw TransformCommonError.cannotFindInputTableError(
                                 PLUGIN_NAME, tableName);
                     }
-                    if (!tableFields.get(tableName).contains(field)) {
+                    // The field only needs to exist in one matched table: same-name tables of
+                    // other databases may legally miss the field and simply skip the rename
+                    if (matchedTableFields.stream().noneMatch(fields -> fields.contains(field))) {
                         throw TransformCommonError.cannotFindInputTableFieldError(
                                 PLUGIN_NAME, tableName, field);
                     }
@@ -300,7 +310,9 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
     private boolean shouldBeRenamedBySpecific(String tableName) {
         return config.getSpecific() != null
                 && config.getSpecific().stream()
-                        .anyMatch(specific -> specific.getTableName().equals(tableName));
+                        .anyMatch(
+                                specific ->
+                                        matchesConfiguredTable(specific.getTableName(), tableName));
     }
 
     private boolean shouldBeRenamedByRegex(String tableName) {
@@ -313,7 +325,8 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
 
     private boolean shouldBeRenamedByTableList(String tableName) {
         if (CollectionUtils.isNotEmpty(config.getMatchTables())) {
-            return config.getMatchTables().contains(tableName);
+            return config.getMatchTables().stream()
+                    .anyMatch(matchTable -> matchesConfiguredTable(matchTable, tableName));
         }
         return false;
     }
@@ -367,9 +380,12 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
                     List<FieldRenamerConfig.SpecificModify> newSpecificList =
                             new ArrayList<>(config.getSpecific());
                     newSpecificList.remove(specificValue.get());
+                    // Keep the original rule table scope: rewriting a database-less legacy
+                    // rule to this event's full name would silently drop the rule for the
+                    // same-name tables under other databases
                     newSpecificList.add(
                             new FieldRenamerConfig.SpecificModify(
-                                    tableName,
+                                    specificValue.get().getTableName(),
                                     newColumn.getName(),
                                     specificValue.get().getTargetName()));
                     config.setSpecific(newSpecificList);
@@ -580,9 +596,36 @@ public class FieldRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
         if (config.getSpecific() == null) {
             return Optional.empty();
         }
+        // A full-name rule is more precise than a database-less legacy rule, so it must win
+        // when both shapes match the same table and field
+        Optional<FieldRenamerConfig.SpecificModify> exactMatch =
+                config.getSpecific().stream()
+                        .filter(specific -> tableName.equals(specific.getTableName()))
+                        .filter(specific -> specific.getFieldName().equals(oldColumnName))
+                        .findFirst();
+        if (exactMatch.isPresent()) {
+            return exactMatch;
+        }
         return config.getSpecific().stream()
-                .filter(specific -> specific.getTableName().equals(tableName))
+                .filter(specific -> matchesConfiguredTable(specific.getTableName(), tableName))
                 .filter(specific -> specific.getFieldName().equals(oldColumnName))
                 .findFirst();
+    }
+
+    /**
+     * Matches a configured table reference against the actual table full name
+     * (database.schema.table). Exact full-name equality is tried first; the database-less
+     * schema.table form is compared as fallback because legacy web payloads persisted rules without
+     * the database segment, and multi-database reads would otherwise silently skip those rules or
+     * fail the specific rule pre-check.
+     */
+    private static boolean matchesConfiguredTable(String configuredName, String tableFullName) {
+        if (StringUtils.isBlank(configuredName)) {
+            return false;
+        }
+        if (configuredName.equals(tableFullName)) {
+            return true;
+        }
+        return configuredName.equals(TablePath.of(tableFullName).getSchemaAndTableName());
     }
 }
