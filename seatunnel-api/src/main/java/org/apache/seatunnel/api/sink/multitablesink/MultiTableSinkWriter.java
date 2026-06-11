@@ -32,10 +32,12 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -61,7 +63,8 @@ public class MultiTableSinkWriter
 
     private final List<MultiTableWriterRunnable> runnable = new ArrayList<>();
     private final Random random = new Random();
-    private final List<BlockingQueue<SeaTunnelRow>> blockingQueues = new ArrayList<>();
+    private final List<BlockingQueue<MultiTableWriterRunnable.QueueElement>> blockingQueues =
+            new ArrayList<>();
     private final ExecutorService executorService;
     private MultiTableResourceManager resourceManager;
     private volatile boolean submitted = false;
@@ -91,7 +94,8 @@ public class MultiTableSinkWriter
                                 }));
         sinkWritersWithIndex = new ArrayList<>();
         for (int i = 0; i < queueSize; i++) {
-            BlockingQueue<SeaTunnelRow> queue = new LinkedBlockingQueue<>(1024);
+            BlockingQueue<MultiTableWriterRunnable.QueueElement> queue =
+                    new LinkedBlockingQueue<>(1024);
             Map<String, SinkWriter<SeaTunnelRow, ?, ?>> tableIdWriterMap = new HashMap<>();
             ConcurrentMap<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkIdentifierMap =
                     new ConcurrentHashMap<>();
@@ -150,20 +154,53 @@ public class MultiTableSinkWriter
         }
     }
 
-    private void subSinkErrorCheck() {
+    /**
+     * Surfaces the first queue-worker failure through the checked IOException contract used by the
+     * schema-change, write and snapshot APIs.
+     */
+    private void subSinkErrorCheck() throws IOException {
+        IOException failure = currentSubSinkFailure();
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
+    /**
+     * Converts the first observed queue-worker failure into IOException so coordinator methods keep
+     * one consistent failure channel.
+     */
+    private IOException currentSubSinkFailure() {
         for (MultiTableWriterRunnable writerRunnable : runnable) {
-            if (writerRunnable.getThrowable() != null) {
-                throw new RuntimeException(
+            Throwable throwable = writerRunnable.getThrowable();
+            if (throwable != null) {
+                if (throwable instanceof IOException) {
+                    return (IOException) throwable;
+                }
+                return new IOException(
                         String.format(
                                 "table %s sink throw error", writerRunnable.getCurrentTableId()),
-                        writerRunnable.getThrowable());
+                        throwable);
             }
         }
+        return null;
     }
 
     @Override
     public void applySchemaChange(SchemaChangeEvent event) throws IOException {
         subSinkErrorCheck();
+        if (!hasSourceMatchedWriter(event)) {
+            return;
+        }
+        ensureQueueWorkersSubmitted();
+        subSinkErrorCheck();
+        enqueueSchemaChangeBarrier(event);
+    }
+
+    /**
+     * Keeps the schema-change path on the legacy source-table contract so unrelated table events
+     * can still return immediately without waking queue workers.
+     */
+    private boolean hasSourceMatchedWriter(SchemaChangeEvent event) {
         for (int i = 0; i < sinkWritersWithIndex.size(); i++) {
             for (Map.Entry<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkWriterEntry :
                     sinkWritersWithIndex.get(i).entrySet()) {
@@ -171,35 +208,153 @@ public class MultiTableSinkWriter
                         .getKey()
                         .getTableIdentifier()
                         .equals(event.tablePath().getFullName())) {
-                    log.info(
-                            "Start apply schema change for table {} sub-writer {}",
-                            sinkWriterEntry.getKey().getTableIdentifier(),
-                            sinkWriterEntry.getKey().getIndex());
-                    synchronized (runnable.get(i)) {
-                        if (sinkWriterEntry.getValue()
-                                instanceof SupportSchemaEvolutionSinkWriter) {
-                            ((SupportSchemaEvolutionSinkWriter) sinkWriterEntry.getValue())
-                                    .applySchemaChange(event);
-                        } else {
-                            // TODO remove deprecated method
-                            sinkWriterEntry.getValue().applySchemaChange(event);
-                        }
-                    }
-                    log.info(
-                            "Finish apply schema change for table {} sub-writer {}",
-                            sinkWriterEntry.getKey().getTableIdentifier(),
-                            sinkWriterEntry.getKey().getIndex());
+                    return true;
                 }
             }
         }
+        return false;
+    }
+
+    /**
+     * Collects every sub-writer that must observe this schema change event. We first route by
+     * source-table identifier, then fan the same event out to sibling sub-writers that advertise
+     * the same physical sink table identifier.
+     */
+    private List<SchemaChangeDispatchTarget> collectSchemaChangeDispatchTargets(
+            SchemaChangeEvent event) {
+        Set<String> primarySharedSinkIds = new HashSet<>();
+        Set<SinkIdentifier> primaryDispatchedKeys = new HashSet<>();
+        List<SchemaChangeDispatchTarget> dispatchTargets = new ArrayList<>();
+        for (int i = 0; i < sinkWritersWithIndex.size(); i++) {
+            for (Map.Entry<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkWriterEntry :
+                    sinkWritersWithIndex.get(i).entrySet()) {
+                if (sinkWriterEntry
+                        .getKey()
+                        .getTableIdentifier()
+                        .equals(event.tablePath().getFullName())) {
+                    dispatchTargets.add(
+                            new SchemaChangeDispatchTarget(
+                                    sinkWriterEntry.getKey(),
+                                    sinkWriterEntry.getValue(),
+                                    "source-match"));
+                    primaryDispatchedKeys.add(sinkWriterEntry.getKey());
+                    extractPhysicalSinkIdentifier(sinkWriterEntry.getValue())
+                            .ifPresent(primarySharedSinkIds::add);
+                }
+            }
+        }
+
+        // Step 2: when the matched sub-writer(s) advertised a physical sink table identifier,
+        // broadcast the event to every sibling sub-writer that targets the same physical table.
+        // Multi-table sinks that resolve a sink-table template per upstream source (e.g. JDBC
+        // sink with cdc${table_name}) end up with several sub-writers sharing one physical
+        // destination; without this fan-out the sibling sub-writers keep their in-memory output
+        // format pointing at the old schema and crash on the next commit with errors such as
+        // "Unknown column 'col4'". Dialect-level columnExists guards (JdbcDialect.applySchemaChange
+        // for ADD/DROP/CHANGE) make the duplicate ALTER attempts a safe no-op (issue #4252).
+        if (primarySharedSinkIds.isEmpty()) {
+            return dispatchTargets;
+        }
+        for (int i = 0; i < sinkWritersWithIndex.size(); i++) {
+            for (Map.Entry<SinkIdentifier, SinkWriter<SeaTunnelRow, ?, ?>> sinkWriterEntry :
+                    sinkWritersWithIndex.get(i).entrySet()) {
+                if (primaryDispatchedKeys.contains(sinkWriterEntry.getKey())) {
+                    continue;
+                }
+                Optional<String> siblingPhysicalSinkId =
+                        extractPhysicalSinkIdentifier(sinkWriterEntry.getValue());
+                if (siblingPhysicalSinkId.isPresent()
+                        && primarySharedSinkIds.contains(siblingPhysicalSinkId.get())) {
+                    dispatchTargets.add(
+                            new SchemaChangeDispatchTarget(
+                                    sinkWriterEntry.getKey(),
+                                    sinkWriterEntry.getValue(),
+                                    "shared-physical-sink " + siblingPhysicalSinkId.get()));
+                }
+            }
+        }
+        return dispatchTargets;
+    }
+
+    /**
+     * Routes schema changes through the same queue workers as data rows. Every queue must first
+     * drain older rows, then all workers stop at the shared barrier, and only then does one worker
+     * mutate the shared sink schema. That ordering closes the reviewer-reported hole where queued
+     * old-schema rows could be consumed by a freshly rebuilt writer.
+     */
+    private void enqueueSchemaChangeBarrier(SchemaChangeEvent event) throws IOException {
+        SchemaChangeBarrier schemaChangeBarrier =
+                new SchemaChangeBarrier(
+                        event, runnable.size(), this::dispatchSchemaChangeToTargets);
+        try {
+            for (BlockingQueue<MultiTableWriterRunnable.QueueElement> blockingQueue :
+                    blockingQueues) {
+                offerQueueElement(
+                        blockingQueue,
+                        MultiTableWriterRunnable.schemaChangeRequest(schemaChangeBarrier));
+            }
+        } catch (IOException e) {
+            schemaChangeBarrier.fail(e);
+            throw e;
+        }
+        schemaChangeBarrier.awaitCompletion();
+    }
+
+    /**
+     * Runs the final schema-change fan-out only after every queue worker has already drained older
+     * rows and reached the shared barrier.
+     */
+    private void dispatchSchemaChangeToTargets(SchemaChangeEvent event) throws IOException {
+        List<SchemaChangeDispatchTarget> dispatchTargets =
+                collectSchemaChangeDispatchTargets(event);
+        for (SchemaChangeDispatchTarget dispatchTarget : dispatchTargets) {
+            applySchemaChangeToTarget(event, dispatchTarget);
+        }
+    }
+
+    /**
+     * Applies the schema change to one sub-writer while every queue worker is already waiting on
+     * the same schema-change barrier.
+     */
+    private void applySchemaChangeToTarget(
+            SchemaChangeEvent event, SchemaChangeDispatchTarget dispatchTarget) throws IOException {
+        log.info(
+                "Start apply schema change for table {} sub-writer {} ({})",
+                dispatchTarget.getSinkIdentifier().getTableIdentifier(),
+                dispatchTarget.getSinkIdentifier().getIndex(),
+                dispatchTarget.getReason());
+        if (dispatchTarget.getWriter() instanceof SupportSchemaEvolutionSinkWriter) {
+            ((SupportSchemaEvolutionSinkWriter) dispatchTarget.getWriter())
+                    .applySchemaChange(event);
+        } else {
+            // TODO remove deprecated method
+            dispatchTarget.getWriter().applySchemaChange(event);
+        }
+        log.info(
+                "Finish apply schema change for table {} sub-writer {} ({})",
+                dispatchTarget.getSinkIdentifier().getTableIdentifier(),
+                dispatchTarget.getSinkIdentifier().getIndex(),
+                dispatchTarget.getReason());
+    }
+
+    /**
+     * Reads the optional physical sink identifier from one sub-writer and normalizes buggy null
+     * Optional implementations back to {@link Optional#empty()}.
+     */
+    private Optional<String> extractPhysicalSinkIdentifier(SinkWriter<SeaTunnelRow, ?, ?> writer) {
+        if (writer instanceof SupportSchemaEvolutionSinkWriter) {
+            // Defensive normalization keeps buggy connectors that return null Optional values from
+            // crashing the low-frequency but high-impact schema-change path.
+            Optional<String> physicalSinkIdentifier =
+                    ((SupportSchemaEvolutionSinkWriter) writer).getPhysicalSinkTableIdentifier();
+            return physicalSinkIdentifier == null ? Optional.empty() : physicalSinkIdentifier;
+        }
+        return Optional.empty();
     }
 
     @Override
     public void write(SeaTunnelRow element) throws IOException {
-        if (!submitted) {
-            submitted = true;
-            runnable.forEach(executorService::submit);
-        }
+        ensureQueueWorkersSubmitted();
         subSinkErrorCheck();
         Optional<Integer> primaryKey =
                 sinkPrimaryKeys.computeIfAbsent(
@@ -226,25 +381,45 @@ public class MultiTableSinkWriter
                             }
                             return pk;
                         });
+        if (sinkPrimaryKeys.size() == 1 || !primaryKey.isPresent()) {
+            int index = random.nextInt(blockingQueues.size());
+            BlockingQueue<MultiTableWriterRunnable.QueueElement> queue = blockingQueues.get(index);
+            offerQueueElement(queue, MultiTableWriterRunnable.rowRequest(element));
+        } else {
+            Object object = element.getField(primaryKey.get());
+            int index = 0;
+            if (object != null) {
+                index = Math.abs(object.hashCode()) % blockingQueues.size();
+            }
+            BlockingQueue<MultiTableWriterRunnable.QueueElement> queue = blockingQueues.get(index);
+            offerQueueElement(queue, MultiTableWriterRunnable.rowRequest(element));
+        }
+    }
+
+    /**
+     * Starts the queue workers exactly once before the first ordered request enters the queues.
+     * Schema changes must share the same bootstrap path as row writes so the first DDL cannot
+     * bypass the in-band barrier while another thread is still bringing the workers online.
+     */
+    private synchronized void ensureQueueWorkersSubmitted() {
+        if (submitted) {
+            return;
+        }
+        runnable.forEach(executorService::submit);
+        submitted = true;
+    }
+
+    /** Keeps queue insertion logic consistent for both row writes and schema-change barriers. */
+    private void offerQueueElement(
+            BlockingQueue<MultiTableWriterRunnable.QueueElement> queue,
+            MultiTableWriterRunnable.QueueElement queueElement)
+            throws IOException {
         try {
-            if (sinkPrimaryKeys.size() == 1 || !primaryKey.isPresent()) {
-                int index = random.nextInt(blockingQueues.size());
-                BlockingQueue<SeaTunnelRow> queue = blockingQueues.get(index);
-                while (!queue.offer(element, 500, TimeUnit.MILLISECONDS)) {
-                    subSinkErrorCheck();
-                }
-            } else {
-                Object object = element.getField(primaryKey.get());
-                int index = 0;
-                if (object != null) {
-                    index = Math.abs(object.hashCode()) % blockingQueues.size();
-                }
-                BlockingQueue<SeaTunnelRow> queue = blockingQueues.get(index);
-                while (!queue.offer(element, 500, TimeUnit.MILLISECONDS)) {
-                    subSinkErrorCheck();
-                }
+            while (!queue.offer(queueElement, 500, TimeUnit.MILLISECONDS)) {
+                subSinkErrorCheck();
             }
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new IOException(e);
         }
     }
@@ -410,16 +585,22 @@ public class MultiTableSinkWriter
         }
     }
 
-    private void checkQueueRemain() {
+    /**
+     * Waits until every queue drains its backlog or surfaces the worker failure that stopped
+     * progress.
+     */
+    private void checkQueueRemain() throws IOException {
         try {
-            for (BlockingQueue<SeaTunnelRow> blockingQueue : blockingQueues) {
+            for (BlockingQueue<MultiTableWriterRunnable.QueueElement> blockingQueue :
+                    blockingQueues) {
                 while (!blockingQueue.isEmpty()) {
                     Thread.sleep(100);
                     subSinkErrorCheck();
                 }
             }
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
+            throw new IOException(e);
         }
     }
 }

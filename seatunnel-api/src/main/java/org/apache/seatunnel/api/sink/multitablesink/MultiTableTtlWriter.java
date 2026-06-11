@@ -49,6 +49,16 @@ public class MultiTableTtlWriter
     private int queueIndex;
     private final SinkWriter.Context context;
     private volatile SinkWriter<SeaTunnelRow, ?, ?> sinkWriter;
+    /**
+     * Caches the resolved physical sink table so shared-sink schema-change routing still works
+     * after TTL closes the inner writer.
+     */
+    private volatile Optional<String> physicalSinkTableIdentifier = Optional.empty();
+    /**
+     * Marks whether the wrapper has already resolved the physical sink identifier at least once.
+     */
+    private volatile boolean physicalSinkIdentifierInitialized;
+
     private volatile Long lastWriteTime;
     private volatile Optional<Integer> primaryKey;
     private volatile MultiTableResourceManager multiTableResourceManager;
@@ -87,7 +97,11 @@ public class MultiTableTtlWriter
         this.state = state;
     }
 
-    public SinkWriter<SeaTunnelRow, ?, ?> prepare() {
+    /**
+     * Ensures the inner writer exists without treating metadata access or schema maintenance as row
+     * write activity. TTL should track real row writes only.
+     */
+    public synchronized SinkWriter<SeaTunnelRow, ?, ?> prepare() {
         if (sinkWriter == null) {
             try {
                 log.info("Create writer for table {} with index {}", tableIdentifier, index);
@@ -99,7 +113,6 @@ public class MultiTableTtlWriter
                             sink.restoreWriter(
                                     new SinkContextProxy(index, replicaNum, context), state);
                 }
-                lastWriteTime = System.currentTimeMillis();
                 isClosed = false;
                 if (sinkWriter instanceof SupportMultiTableSinkWriter
                         && multiTableResourceManager != null) {
@@ -107,6 +120,7 @@ public class MultiTableTtlWriter
                             ((SupportMultiTableSinkWriter<?>) sinkWriter);
                     sink.setMultiTableResourceManager(multiTableResourceManager, queueIndex);
                 }
+                cachePhysicalSinkTableIdentifier(sinkWriter);
                 traceLogAllWriters();
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -150,20 +164,42 @@ public class MultiTableTtlWriter
     @Override
     public void write(SeaTunnelRow row) throws IOException {
         prepare();
-        lastWriteTime = System.currentTimeMillis();
+        touchLastWriteTime();
         sinkWriter.write(row);
     }
 
     @Override
     public void applySchemaChange(SchemaChangeEvent event) throws IOException {
         prepare();
-        lastWriteTime = System.currentTimeMillis();
         if (sinkWriter instanceof SupportSchemaEvolutionSinkWriter) {
             ((SupportSchemaEvolutionSinkWriter) sinkWriter).applySchemaChange(event);
         } else {
             // TODO remove deprecated method
             sinkWriter.applySchemaChange(event);
         }
+    }
+
+    /**
+     * Delegates to the inner writer's physical-sink identifier so the multi-table coordinator can
+     * still detect shared physical sink tables when the wrapper sits in front of a writer that
+     * resolves a sink-table template per upstream source (issue #4252). Lazy / TTL-closed writers
+     * are prepared on demand once so the coordinator can keep broadcasting schema changes to every
+     * sibling writer that shares the same destination table. The coordinator probes this method
+     * either before the queue workers are submitted, or while every queue runnable is already
+     * frozen at the schema-change barrier; in both cases the lazy prepare path stays serialized
+     * with normal writes.
+     */
+    @Override
+    public Optional<String> getPhysicalSinkTableIdentifier() {
+        if (physicalSinkIdentifierInitialized) {
+            return physicalSinkTableIdentifier;
+        }
+        SinkWriter<SeaTunnelRow, ?, ?> current = sinkWriter;
+        if (current == null) {
+            current = prepare();
+        }
+        cachePhysicalSinkTableIdentifier(current);
+        return physicalSinkTableIdentifier;
     }
 
     @Override
@@ -202,6 +238,30 @@ public class MultiTableTtlWriter
             return state;
         }
         return Collections.emptyList();
+    }
+
+    /** Marks that a real data row has just used the inner writer, which should refresh TTL. */
+    private void touchLastWriteTime() {
+        lastWriteTime = System.currentTimeMillis();
+    }
+
+    /**
+     * Resolves the inner writer's physical sink identifier once and keeps the result even after the
+     * writer gets TTL-closed, so later schema changes can still fan out to this sibling writer.
+     */
+    private void cachePhysicalSinkTableIdentifier(SinkWriter<SeaTunnelRow, ?, ?> current) {
+        if (physicalSinkIdentifierInitialized) {
+            return;
+        }
+        if (current instanceof SupportSchemaEvolutionSinkWriter) {
+            Optional<String> physicalSinkIdentifier =
+                    ((SupportSchemaEvolutionSinkWriter) current).getPhysicalSinkTableIdentifier();
+            physicalSinkTableIdentifier =
+                    physicalSinkIdentifier == null ? Optional.empty() : physicalSinkIdentifier;
+        } else {
+            physicalSinkTableIdentifier = Optional.empty();
+        }
+        physicalSinkIdentifierInitialized = true;
     }
 
     private void traceLogAllWriters() {

@@ -195,6 +195,20 @@ public class JdbcSinkWriter extends AbstractJdbcSinkWriter<ConnectionPoolManager
         }
     }
 
+    /**
+     * Exposes the fully-qualified physical sink table this writer targets so the multi-table
+     * coordinator can detect overlap with sibling writers that resolve to the same destination via
+     * a sink-table template (e.g. {@code cdc${table_name}} collapsing same-name source tables to
+     * one physical sink). When overlap exists the coordinator broadcasts schema-change events to
+     * every co-sharing writer so their in-memory output format stays in sync with the actual
+     * database schema after one writer mutates it; the dialect's columnExists guards keep the
+     * duplicate ALTER attempts a safe no-op (issue #4252).
+     */
+    @Override
+    public Optional<String> getPhysicalSinkTableIdentifier() {
+        return sinkTablePath == null ? Optional.empty() : Optional.of(sinkTablePath.getFullName());
+    }
+
     @SneakyThrows
     @Override
     public void applySchemaChange(SchemaChangeEvent event) {
