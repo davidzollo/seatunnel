@@ -23,7 +23,6 @@ import org.apache.seatunnel.api.configuration.Option;
 import org.apache.seatunnel.api.configuration.Options;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -84,18 +83,30 @@ public class TableRenamerConfig implements Serializable {
     private List<SpecificModify> specific;
 
     @Data
-    @AllArgsConstructor
     @NoArgsConstructor
     public static class SpecificModify implements Serializable {
+        /** Optional database scope for multi-database specific rename rules. */
+        @JsonAlias("database")
+        private String database;
+
         @JsonAlias("table_name")
         private String tableName;
 
         @JsonAlias("target_name")
         private String targetName;
+
+        public SpecificModify(String tableName, String targetName) {
+            this(null, tableName, targetName);
+        }
+
+        public SpecificModify(String database, String tableName, String targetName) {
+            this.database = database;
+            this.tableName = tableName;
+            this.targetName = targetName;
+        }
     }
 
     @Data
-    @AllArgsConstructor
     @NoArgsConstructor
     public static class ReplacementsWithRegex implements Serializable {
         @JsonAlias("replace_from")
@@ -105,6 +116,11 @@ public class TableRenamerConfig implements Serializable {
         private String replaceTo;
 
         private final Boolean isRegex = true;
+
+        public ReplacementsWithRegex(String replaceFrom, String replaceTo) {
+            this.replaceFrom = replaceFrom;
+            this.replaceTo = replaceTo;
+        }
     }
 
     public static TableRenamerConfig of(ReadonlyConfig config) {

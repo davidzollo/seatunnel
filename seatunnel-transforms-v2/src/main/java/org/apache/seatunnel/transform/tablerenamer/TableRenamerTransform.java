@@ -44,7 +44,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -54,26 +53,20 @@ public class TableRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
     public static String PLUGIN_NAME = "TableRenamer";
     private List<CatalogTable> inputCatalogTable;
     private final TableRenamerConfig config;
-    private Map<String, String> tableNameMapping = new HashMap<>();
-    private Map<String, String> tableIdMapping = new HashMap<>();
-    private Map<String, String> specificMap;
+    /** Keeps the renamed table path for each upstream full table name. */
+    private final Map<String, TablePath> tablePathMapping = new HashMap<>();
+
+    /** Keeps row-level table id rewrites aligned with produced catalog tables. */
+    private final Map<String, String> tableIdMapping = new HashMap<>();
+
+    /** Stores exact specific rules, optionally scoped by database. */
+    private final Map<String, String> specificMap;
 
     public TableRenamerTransform(List<CatalogTable> inputCatalogTable, TableRenamerConfig config) {
         this.inputCatalogTable =
                 inputCatalogTable.stream().map(CatalogTable::copy).collect(Collectors.toList());
         this.config = config;
-        this.specificMap =
-                Optional.ofNullable(config.getSpecific())
-                        .map(
-                                e ->
-                                        e.stream()
-                                                .collect(
-                                                        Collectors.toMap(
-                                                                TableRenamerConfig.SpecificModify
-                                                                        ::getTableName,
-                                                                TableRenamerConfig.SpecificModify
-                                                                        ::getTargetName)))
-                        .orElse(Collections.emptyMap());
+        this.specificMap = initSpecificMap(config.getSpecific());
     }
 
     @Override
@@ -89,12 +82,14 @@ public class TableRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
     @Override
     public List<CatalogTable> getProducedCatalogTables() {
         preCheckForConfig(inputCatalogTable);
+        tablePathMapping.clear();
+        tableIdMapping.clear();
 
         List<CatalogTable> outputCatalogTable = new ArrayList<>();
         for (CatalogTable table : inputCatalogTable) {
-            String oldTableName = table.getTablePath().getSchemaAndTableName();
-            String newName = convertName(oldTableName);
-            String schemaName = table.getTablePath().getSchemaName();
+            TablePath oldTablePath = table.getTablePath();
+            String newName = convertName(oldTablePath);
+            String schemaName = oldTablePath.getSchemaName();
             String newTableName = newName;
             if (newName.contains(".")) {
                 String[] split = newName.split("\\.", 2);
@@ -108,8 +103,8 @@ public class TableRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
                             TableIdentifier.of(table.getTableId().getCatalogName(), newTablePath),
                             table);
             outputCatalogTable.add(newCatalogTable);
-            tableNameMapping.put(oldTableName, newTableName);
-            tableIdMapping.put(table.getTablePath().getFullName(), newTablePath.getFullName());
+            tablePathMapping.put(oldTablePath.getFullName(), newTablePath);
+            tableIdMapping.put(oldTablePath.getFullName(), newTablePath.getFullName());
         }
 
         return outputCatalogTable;
@@ -136,19 +131,14 @@ public class TableRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
         if (tablePath == null) {
             return event;
         }
-        String oldTableName = tablePath.getSchemaAndTableName();
-        String newTableName = tableNameMapping.get(oldTableName);
-        if (newTableName == null || newTableName.equals(oldTableName)) {
+        TablePath newTablePath = tablePathMapping.get(tablePath.getFullName());
+        if (newTablePath == null || newTablePath.equals(tablePath)) {
             return event;
         }
 
         if (event instanceof AlterTableColumnsEvent) {
             TableIdentifier newTableIdentifier =
-                    TableIdentifier.of(
-                            event.tableIdentifier().getCatalogName(),
-                            tablePath.getDatabaseName(),
-                            tablePath.getSchemaName(),
-                            newTableName);
+                    TableIdentifier.of(event.tableIdentifier().getCatalogName(), newTablePath);
             AlterTableColumnsEvent alterTableColumnsEvent = (AlterTableColumnsEvent) event;
             return new AlterTableColumnsEvent(
                     newTableIdentifier,
@@ -168,18 +158,13 @@ public class TableRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
         if (tablePath == null) {
             return event;
         }
-        String oldTableName = tablePath.getSchemaAndTableName();
-        String newTableName = tableNameMapping.get(oldTableName);
-        if (newTableName == null || newTableName.equals(oldTableName)) {
+        TablePath newTablePath = tablePathMapping.get(tablePath.getFullName());
+        if (newTablePath == null || newTablePath.equals(tablePath)) {
             return event;
         }
 
         TableIdentifier newTableIdentifier =
-                TableIdentifier.of(
-                        event.tableIdentifier().getCatalogName(),
-                        tablePath.getDatabaseName(),
-                        tablePath.getSchemaName(),
-                        newTableName);
+                TableIdentifier.of(event.tableIdentifier().getCatalogName(), newTablePath);
         AlterTableColumnEvent newEvent = event;
         switch (event.getEventType()) {
             case SCHEMA_CHANGE_ADD_COLUMN:
@@ -227,11 +212,27 @@ public class TableRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
 
     @VisibleForTesting
     public String convertName(String tableName) {
-        Optional<String> specificValue = getSpecificModify(tableName);
+        Optional<String> specificValue = getSpecificModify(null, tableName, tableName);
         if (specificValue.isPresent()) {
             return specificValue.get();
         }
+        return applyGlobalRename(tableName);
+    }
 
+    /**
+     * Applies specific table matching with database-aware exact lookup first and leaf fallback
+     * second, then reuses the legacy global rename pipeline.
+     */
+    private String convertName(TablePath tablePath) {
+        Optional<String> specificValue = getSpecificModify(tablePath);
+        if (specificValue.isPresent()) {
+            return specificValue.get();
+        }
+        return applyGlobalRename(tablePath.getSchemaAndTableName());
+    }
+
+    /** Applies the original non-specific rename pipeline. */
+    private String applyGlobalRename(String tableName) {
         String replaceTo = null;
         Map<Integer, Integer> replaceIndex = new LinkedHashMap<>();
 
@@ -292,11 +293,86 @@ public class TableRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
         return tableName;
     }
 
-    private Optional<String> getSpecificModify(String tableName) {
-        if (!specificMap.containsKey(tableName)) {
+    /** Resolves a specific rule for the given table path with database-aware fallback order. */
+    private Optional<String> getSpecificModify(TablePath tablePath) {
+        return getSpecificModify(
+                tablePath.getDatabaseName(),
+                tablePath.getSchemaAndTableName(),
+                tablePath.getTableName());
+    }
+
+    /** Resolves a specific rule by exact table name first and leaf table name second. */
+    private Optional<String> getSpecificModify(
+            String databaseName, String schemaAndTableName, String tableName) {
+        Optional<String> scopedExact = getSpecificModifyByKey(databaseName, schemaAndTableName);
+        if (scopedExact.isPresent()) {
+            return scopedExact;
+        }
+
+        Optional<String> scopedLeaf = getSpecificModifyByKey(databaseName, tableName);
+        if (scopedLeaf.isPresent()) {
+            return scopedLeaf;
+        }
+
+        Optional<String> legacyExact = getSpecificModifyByKey(null, schemaAndTableName);
+        if (legacyExact.isPresent()) {
+            return legacyExact;
+        }
+
+        return getSpecificModifyByKey(null, tableName);
+    }
+
+    /** Looks up a specific rule using the normalized scope key. */
+    private Optional<String> getSpecificModifyByKey(String databaseName, String tableName) {
+        String specificKey = buildSpecificKey(databaseName, tableName);
+        if (specificKey == null || !specificMap.containsKey(specificKey)) {
             return Optional.empty();
         }
-        return Optional.of(specificMap.get(tableName));
+        return Optional.of(specificMap.get(specificKey));
+    }
+
+    /** Builds the in-memory lookup map for specific rules with duplicate scope validation. */
+    private Map<String, String> initSpecificMap(
+            List<TableRenamerConfig.SpecificModify> specificModifies) {
+        if (CollectionUtils.isEmpty(specificModifies)) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, String> scopedSpecificMap = new HashMap<>();
+        for (TableRenamerConfig.SpecificModify specificModify : specificModifies) {
+            if (specificModify == null || StringUtils.isBlank(specificModify.getTableName())) {
+                continue;
+            }
+            String specificKey =
+                    buildSpecificKey(specificModify.getDatabase(), specificModify.getTableName());
+            String existedTarget =
+                    scopedSpecificMap.putIfAbsent(specificKey, specificModify.getTargetName());
+            if (existedTarget != null) {
+                throw TransformCommonError.configValidationFailed(
+                        PLUGIN_NAME,
+                        String.format(
+                                "Duplicate specific rule for database '%s' and table '%s'",
+                                StringUtils.defaultIfBlank(specificModify.getDatabase(), "*"),
+                                specificModify.getTableName()));
+            }
+        }
+        return scopedSpecificMap;
+    }
+
+    /**
+     * Builds the specific rule scope key and keeps legacy table-only matching when database is
+     * absent.
+     */
+    private String buildSpecificKey(String databaseName, String tableName) {
+        String normalizedTableName = StringUtils.trimToNull(tableName);
+        if (normalizedTableName == null) {
+            return null;
+        }
+        String normalizedDatabaseName = StringUtils.trimToNull(databaseName);
+        if (normalizedDatabaseName == null) {
+            return normalizedTableName;
+        }
+        return normalizedDatabaseName + "|" + normalizedTableName;
     }
 
     private void preCheckForConfig(List<CatalogTable> inputCatalogTable) {
@@ -304,19 +380,44 @@ public class TableRenamerTransform implements SeaTunnelTransform<SeaTunnelRow> {
             return;
         }
 
-        Set<String> upstreamInputTableNames =
-                inputCatalogTable.stream()
-                        .map(e -> e.getTablePath().getSchemaAndTableName())
-                        .collect(Collectors.toSet());
-
         List<String> notExistTables =
                 config.getSpecific().stream()
-                        .map(s -> s.getTableName())
-                        .filter(t -> !upstreamInputTableNames.contains(t))
+                        .filter(s -> s != null && StringUtils.isNotBlank(s.getTableName()))
+                        .filter(
+                                specificModify ->
+                                        inputCatalogTable.stream()
+                                                .map(CatalogTable::getTablePath)
+                                                .noneMatch(
+                                                        tablePath ->
+                                                                matchesSpecificRule(
+                                                                        tablePath, specificModify)))
+                        .map(this::buildSpecificScopeName)
                         .collect(Collectors.toList());
         if (!notExistTables.isEmpty()) {
             throw TransformCommonError.getCatalogTableWithNotExistTables(
                     PLUGIN_NAME, notExistTables);
         }
+    }
+
+    /**
+     * Matches a specific rule against the exact schema.table form first and leaf table form second.
+     */
+    private boolean matchesSpecificRule(
+            TablePath tablePath, TableRenamerConfig.SpecificModify specificModify) {
+        if (StringUtils.isNotBlank(specificModify.getDatabase())
+                && !StringUtils.equals(specificModify.getDatabase(), tablePath.getDatabaseName())) {
+            return false;
+        }
+
+        return StringUtils.equals(specificModify.getTableName(), tablePath.getSchemaAndTableName())
+                || StringUtils.equals(specificModify.getTableName(), tablePath.getTableName());
+    }
+
+    /** Builds a readable scoped name for config validation errors. */
+    private String buildSpecificScopeName(TableRenamerConfig.SpecificModify specificModify) {
+        if (StringUtils.isBlank(specificModify.getDatabase())) {
+            return specificModify.getTableName();
+        }
+        return specificModify.getDatabase() + "." + specificModify.getTableName();
     }
 }

@@ -186,6 +186,84 @@ public class TableRenamerTest {
     }
 
     @Test
+    public void testConvertWithDatabaseScopedSpecificRules() {
+        CatalogTable otherDatabaseTable = createTable("database-y", null, "Table-x");
+        SeaTunnelRow inputRow = new SeaTunnelRow(new Object[] {1L, 1L, 1L});
+        inputRow.setTableId(otherDatabaseTable.getTablePath().getFullName());
+        AlterTableAddColumnEvent inputEvent =
+                AlterTableAddColumnEvent.add(
+                        otherDatabaseTable.getTableId(),
+                        PhysicalColumn.of("f4", BasicType.LONG_TYPE, null, null, true, null, null));
+
+        TableRenamerConfig config =
+                new TableRenamerConfig()
+                        .setSpecific(
+                                Arrays.asList(
+                                        new TableRenamerConfig.SpecificModify(
+                                                "database-x", "Table-x", "table_x_a"),
+                                        new TableRenamerConfig.SpecificModify(
+                                                "database-y", "Table-x", "table_x_b")));
+        TableRenamerTransform transform =
+                new TableRenamerTransform(Arrays.asList(DEFAULT_TABLE, otherDatabaseTable), config);
+        List<CatalogTable> outputCatalogTable = transform.getProducedCatalogTables();
+        SeaTunnelRow outputRow = transform.map(inputRow);
+        SchemaChangeEvent outputEvent = transform.mapSchemaChangeEvent(inputEvent);
+
+        Assertions.assertEquals(
+                "database-x.table_x_a",
+                outputCatalogTable.get(0).getTableId().toTablePath().getFullName());
+        Assertions.assertEquals(
+                "database-y.table_x_b",
+                outputCatalogTable.get(1).getTableId().toTablePath().getFullName());
+        Assertions.assertEquals("database-y.table_x_b", outputRow.getTableId());
+        Assertions.assertEquals("database-y.table_x_b", outputEvent.tablePath().getFullName());
+    }
+
+    @Test
+    public void testConvertWithDatabaseScopedLeafTableMatching() {
+        CatalogTable schemaTable = createTable("database-x", "public", "Table-x");
+        TableRenamerConfig config =
+                new TableRenamerConfig()
+                        .setSpecific(
+                                Arrays.asList(
+                                        new TableRenamerConfig.SpecificModify(
+                                                "database-x", "Table-x", "renamed_table")));
+        TableRenamerTransform transform =
+                new TableRenamerTransform(Arrays.asList(schemaTable), config);
+        List<CatalogTable> outputCatalogTable = transform.getProducedCatalogTables();
+
+        Assertions.assertEquals(
+                "database-x.public.renamed_table",
+                outputCatalogTable.get(0).getTableId().toTablePath().getFullName());
+        Assertions.assertEquals("public", outputCatalogTable.get(0).getTableId().getSchemaName());
+        Assertions.assertEquals(
+                "renamed_table", outputCatalogTable.get(0).getTableId().getTableName());
+    }
+
+    @Test
+    public void testDuplicateDatabaseScopedSpecificRule() {
+        TableRenamerConfig config =
+                new TableRenamerConfig()
+                        .setSpecific(
+                                Arrays.asList(
+                                        new TableRenamerConfig.SpecificModify(
+                                                "database-x", "Table-x", "table_x_a"),
+                                        new TableRenamerConfig.SpecificModify(
+                                                "database-x", "Table-x", "table_x_b")));
+        try {
+            new TableRenamerTransform(Arrays.asList(DEFAULT_TABLE), config);
+            Assertions.fail("Should throw exception");
+        } catch (TransformException e) {
+            if (!TransformCommonErrorCode.CONFIG_VALIDATION_FAILED.equals(
+                    e.getSeaTunnelErrorCode())) {
+                Assertions.fail(e);
+            }
+        } catch (Throwable e) {
+            Assertions.fail(e);
+        }
+    }
+
+    @Test
     public void testTableNotFound() {
         List<CatalogTable> inputCatalogTable = Arrays.asList(DEFAULT_TABLE);
         TableRenamerConfig config =
@@ -208,5 +286,16 @@ public class TableRenamerTest {
         } catch (Throwable e) {
             Assertions.fail(e);
         }
+    }
+
+    /** Copies the default schema into a different table identifier for scope-specific tests. */
+    private CatalogTable createTable(String databaseName, String schemaName, String tableName) {
+        return CatalogTable.of(
+                TableIdentifier.of(
+                        DEFAULT_TABLE.getTableId().getCatalogName(),
+                        databaseName,
+                        schemaName,
+                        tableName),
+                DEFAULT_TABLE);
     }
 }
