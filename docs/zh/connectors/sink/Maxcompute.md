@@ -16,13 +16,16 @@ import ChangeLog from '../changelog/connector-maxcompute.md';
 
 |      参数名      |  类型   | 必须 | 默认值 |
 |----------------|---------|------|--------|
-| accessId       | string  | 是   | -      |
-| accesskey      | string  | 是   | -      |
+| accessId       | string  | 否   | -      |
+| accesskey      | string  | 否   | -      |
+| sts_token      | string  | 否   | -      |
 | endpoint       | string  | 是   | -      |
 | project        | string  | 是   | -      |
 | table_name     | string  | 是   | -      |
+| schema_name    | string  | 否   | -      |
 | partition_spec | string  | 否   | -      |
 | overwrite      | boolean | 否   | false  |
+| insert_strategy| string  | no   | upload |
 | common-options | string  | 否   |        |
 
 ### accessId [string]
@@ -32,6 +35,13 @@ import ChangeLog from '../changelog/connector-maxcompute.md';
 ### accesskey [string]
 
 `accesskey` 您的 Maxcompute accessKey，可从阿里云访问。
+
+### sts_token [string]
+
+`sts_token` 您的 MaxCompute STS Token，用于临时认证。 **注意：** 如果提供了 `sts_token`，则必须同时提供 `accessId` 和 `accesskey`。
+
+> **免密认证 (ECS RAM Role, 环境变量等)**
+> 要使用免密认证，只需将 `accessId`、`accesskey` 和 `sts_token` 全部留空不填。连接器将自动回退到阿里云默认凭据链 (DefaultCredentialsProvider) 读取凭证（包括环境变量、系统属性、CLI 配置文件、OIDC 以及 ECS RAM 角色）。
 
 ### endpoint [string]
 
@@ -48,6 +58,14 @@ import ChangeLog from '../changelog/connector-maxcompute.md';
 ### partition_spec [string]
 
 `partition_spec` Maxcompute 分区表的规范，例如：ds='20220101'。
+
+### schema_name [string]
+
+`schema_name` MaxCompute Schema 名称（Project 与 Table 之间的命名空间）。
+仅当表位于 MaxCompute 项目的**非默认 Schema** 时才需要设置。
+参见 [Schema 相关操作](https://help.aliyun.com/zh/maxcompute/user-guide/schema-related-operations)。
+
+默认值：不设置（使用项目默认 Schema）。
 
 ### overwrite [boolean]
 
@@ -148,6 +166,15 @@ CREATE TABLE IF NOT EXISTS `${table}`
 - `http://maxcompute:8080`
 
 默认值：未设置（从区域自动推断）
+
+### insert_strategy [string]
+
+如果将 `insert_strategy` 设置为 `upload`，插入操作将使用 upload 会话。
+如果设置为 `upsert`，插入操作将使用 upsert 会话。Upsert 会话 需要主键。
+
+注意：
+在同时存在更新或删除操作的情况下，使用 upload 会话进行插入操作，可能会导致插入的记录 比预期更晚出现在表中。
+当表中存在主键时，建议将 `insert_strategy` 设置为 `upsert`，以确保一致的 upsert 行为。
 
 ### 通用选项
 

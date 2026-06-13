@@ -86,15 +86,25 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
 
     private static final Pattern COMMENT_PATTERN = Pattern.compile("^(.*)--.*$");
 
+    public static final String DATABASE_NAME = "column_type_test";
+    public static final String SCHEMA_NAME = "dbo";
+    public static final String SCHEMA_EVOLUTION_DATABASE_NAME = "schema_change_test";
+    private static final String SCHEMA_EVOLUTION_SOURCE_TABLE = "products";
+    private static final String SCHEMA_EVOLUTION_SINK_TABLE = "products_sink";
+    private static final int INCREMENTAL_MARKER_ID = 1000;
+
     private static final String DISABLE_DB_CDC =
             "IF EXISTS(select 1 from sys.databases where name='#' AND is_cdc_enabled=1)\n"
                     + "EXEC sys.sp_cdc_disable_db";
-    private static final String SOURCE_TABLE = "column_type_test.dbo.full_types";
+    private static final String SOURCE_TABLE =
+            DATABASE_NAME + "." + SCHEMA_NAME + "." + "full_types";
     private static final String SOURCE_TABLE_NO_PRIMARY_KEY =
-            "column_type_test.dbo.full_types_no_primary_key";
+            DATABASE_NAME + "." + SCHEMA_NAME + "." + "full_types_no_primary_key";
     private static final String SOURCE_TABLE_CUSTOM_PRIMARY_KEY =
-            "column_type_test.dbo.full_types_custom_primary_key";
-    private static final String SINK_TABLE = "column_type_test.dbo.full_types_sink";
+            DATABASE_NAME + "." + SCHEMA_NAME + "." + "full_types_custom_primary_key";
+    private static final String SINK_TABLE =
+            DATABASE_NAME + "." + SCHEMA_NAME + "." + "full_types_sink";
+
     private static final String SELECT_SOURCE_SQL =
             "select\n"
                     + "  id,\n"
@@ -155,6 +165,16 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
                     + "  CONVERT(varchar(100), val_varbinary) as val_varbinary,\n"
                     + "  val_udtdecimal\n"
                     + "from %s order by id asc";
+    private static final String SELECT_SCHEMA_EVOLUTION_DATA_SQL =
+            "SELECT * FROM %s ORDER BY id ASC";
+    private static final String SELECT_SCHEMA_EVOLUTION_COLUMNS_SQL =
+            "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, "
+                    + "COALESCE(CAST(CHARACTER_MAXIMUM_LENGTH AS VARCHAR(20)), 'null'), "
+                    + "COALESCE(CAST(NUMERIC_PRECISION AS VARCHAR(20)), 'null'), "
+                    + "COALESCE(CAST(NUMERIC_SCALE AS VARCHAR(20)), 'null') "
+                    + "FROM INFORMATION_SCHEMA.COLUMNS "
+                    + "WHERE TABLE_CATALOG = '%s' AND TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s' "
+                    + "ORDER BY ORDINAL_POSITION";
 
     public static final MSSQLServerContainer MSSQL_SERVER_CONTAINER =
             new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2019-latest")
@@ -205,18 +225,17 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
 
     @TestTemplate
     public void test(TestContainer container) throws IOException, InterruptedException {
-        initializeSqlServerTable("column_type_test");
+        initializeSqlServerTable(DATABASE_NAME);
 
-        CompletableFuture<Void> executeJobFuture =
-                CompletableFuture.supplyAsync(
-                        () -> {
-                            try {
-                                container.executeJob("/sqlservercdc_to_console.conf");
-                            } catch (Exception e) {
-                                throw new RuntimeException(e);
-                            }
-                            return null;
-                        });
+        CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        container.executeJob("/sqlservercdc_to_console.conf");
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    return null;
+                });
 
         // snapshot stage
         await().atMost(60000, TimeUnit.MILLISECONDS)
@@ -241,20 +260,91 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
     }
 
     @TestTemplate
-    public void testCDCWithNoPrimaryKey(TestContainer container) {
-        initializeSqlServerTable("column_type_test");
+    @DisabledOnContainer(
+            value = {},
+            type = {EngineType.SPARK, EngineType.FLINK},
+            disabledReason =
+                    "Heartbeat action query is currently only supported by the zeta engine.")
+    public void testWithHeartbeat(TestContainer container) {
+        initializeSqlServerTable(DATABASE_NAME);
 
-        CompletableFuture<Void> executeJobFuture =
-                CompletableFuture.supplyAsync(
+        String createHeartbeatTable =
+                "IF OBJECT_ID('"
+                        + DATABASE_NAME
+                        + "."
+                        + SCHEMA_NAME
+                        + ".heartbeat', 'U') IS NULL\n"
+                        + "BEGIN\n"
+                        + "    CREATE TABLE "
+                        + DATABASE_NAME
+                        + "."
+                        + SCHEMA_NAME
+                        + ".heartbeat (\n"
+                        + "        ts DATETIME DEFAULT GETDATE()\n"
+                        + "    );\n"
+                        + "END";
+
+        executeSql(createHeartbeatTable);
+        executeSql("TRUNCATE TABLE " + DATABASE_NAME + "." + SCHEMA_NAME + ".heartbeat;");
+
+        CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        container.executeJob("/sqlservercdc_to_console_with_heartbeat.conf");
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    return null;
+                });
+
+        // snapshot stage
+        await().atMost(60000, TimeUnit.MILLISECONDS)
+                .untilAsserted(
                         () -> {
-                            try {
-                                container.executeJob(
-                                        "/sqlservercdc_to_sqlserver_with_no_primary_key.conf");
-                            } catch (Exception e) {
-                                throw new RuntimeException(e);
-                            }
-                            return null;
+                            Assertions.assertIterableEquals(
+                                    querySql(SELECT_SOURCE_SQL, SOURCE_TABLE),
+                                    querySql(SELECT_SINK_SQL, SINK_TABLE));
                         });
+
+        // insert update delete
+        updateSourceTable(SOURCE_TABLE);
+
+        // stream stage
+        await().atMost(60000, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () -> {
+                            Assertions.assertIterableEquals(
+                                    querySql(SELECT_SOURCE_SQL, SOURCE_TABLE),
+                                    querySql(SELECT_SINK_SQL, SINK_TABLE));
+                        });
+
+        await().atMost(10000, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () -> {
+                            List<List<Object>> query =
+                                    querySql(
+                                            "SELECT * FROM "
+                                                    + DATABASE_NAME
+                                                    + "."
+                                                    + SCHEMA_NAME
+                                                    + ".heartbeat");
+                            Assertions.assertFalse(query.isEmpty());
+                        });
+    }
+
+    @TestTemplate
+    public void testCDCWithNoPrimaryKey(TestContainer container) {
+        initializeSqlServerTable(DATABASE_NAME);
+
+        CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        container.executeJob("/sqlservercdc_to_sqlserver_with_no_primary_key.conf");
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    return null;
+                });
 
         // snapshot stage
         await().atMost(60000, TimeUnit.MILLISECONDS)
@@ -280,19 +370,18 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
 
     @TestTemplate
     public void testCDCWithCustomPrimaryKey(TestContainer container) {
-        initializeSqlServerTable("column_type_test");
+        initializeSqlServerTable(DATABASE_NAME);
 
-        CompletableFuture<Void> executeJobFuture =
-                CompletableFuture.supplyAsync(
-                        () -> {
-                            try {
-                                container.executeJob(
-                                        "/sqlservercdc_to_sqlserver_with_custom_primary_key.conf");
-                            } catch (Exception e) {
-                                throw new RuntimeException(e);
-                            }
-                            return null;
-                        });
+        CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        container.executeJob(
+                                "/sqlservercdc_to_sqlserver_with_custom_primary_key.conf");
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    return null;
+                });
 
         // snapshot stage
         await().atMost(60000, TimeUnit.MILLISECONDS)
@@ -323,7 +412,7 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
             disabledReason =
                     "This case checks SqlServer CDC earliest startup mode only on Zeta engine.")
     public void testEarliestStartupMode(TestContainer container) throws InterruptedException {
-        initializeSqlServerTable("column_type_test");
+        initializeSqlServerTable(DATABASE_NAME);
 
         Long jobId = JobIdGenerator.newJobId();
         CompletableFuture.runAsync(
@@ -364,7 +453,7 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
             disabledReason =
                     "This case requires obtaining the task health status and manually canceling the canceled task, which is currently only supported by the zeta engine.")
     public void testSqlServerCDCMetadataTrans(TestContainer container) throws InterruptedException {
-        initializeSqlServerTable("column_type_test");
+        initializeSqlServerTable(DATABASE_NAME);
 
         Long jobId = JobIdGenerator.newJobId();
         CompletableFuture.runAsync(
@@ -397,14 +486,14 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
 
     @Test
     public void testDialectCheckDisabledCDCTable() throws SQLException {
-        initializeSqlServerTable("column_type_test");
+        initializeSqlServerTable(DATABASE_NAME);
         JdbcSourceConfigFactory factory =
                 new SqlServerSourceConfigFactory()
                         .hostname(MSSQL_SERVER_CONTAINER.getHost())
                         .port(PORT)
                         .username("sa")
                         .password("Password!")
-                        .databaseList("column_type_test");
+                        .databaseList(DATABASE_NAME);
         SqlServerDialect dialect =
                 new SqlServerDialect(
                         (SqlServerSourceConfigFactory) factory, Collections.emptyList());
@@ -417,7 +506,11 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
                                             connection,
                                             Collections.singletonList(TableId.parse(SINK_TABLE))));
             Assertions.assertEquals(
-                    "Table column_type_test.dbo.full_types_sink is not enabled for capture",
+                    "Table "
+                            + DATABASE_NAME
+                            + "."
+                            + SCHEMA_NAME
+                            + ".full_types_sink is not enabled for capture",
                     exception.getMessage());
         }
     }
@@ -426,6 +519,50 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
      * Executes a JDBC statement using the default jdbc config without autocommitting the
      * connection.
      */
+    private void assertSchemaEvolutionTableStructureAndData(
+            String databaseName, String sourceTable, String sinkTable) {
+        String sourceTablePath = databaseName + "." + SCHEMA_NAME + "." + sourceTable;
+        String sinkTablePath = databaseName + "." + SCHEMA_NAME + "." + sinkTable;
+        await().atMost(120000, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () ->
+                                Assertions.assertIterableEquals(
+                                        querySql(SELECT_SCHEMA_EVOLUTION_DATA_SQL, sourceTablePath),
+                                        querySql(SELECT_SCHEMA_EVOLUTION_DATA_SQL, sinkTablePath)));
+        await().atMost(120000, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () ->
+                                Assertions.assertIterableEquals(
+                                        querySql(
+                                                String.format(
+                                                        SELECT_SCHEMA_EVOLUTION_COLUMNS_SQL,
+                                                        databaseName,
+                                                        SCHEMA_NAME,
+                                                        sourceTable)),
+                                        querySql(
+                                                String.format(
+                                                        SELECT_SCHEMA_EVOLUTION_COLUMNS_SQL,
+                                                        databaseName,
+                                                        SCHEMA_NAME,
+                                                        sinkTable))));
+    }
+
+    private void executeSqlFile(String sqlFile) {
+        final String ddlFile = String.format("ddl/%s.sql", sqlFile);
+        final URL ddlTestFile = TestSuiteBase.class.getClassLoader().getResource(ddlFile);
+        Assertions.assertNotNull(ddlTestFile, "Cannot locate " + ddlFile);
+        try (Connection connection = getJdbcConnection();
+                Statement statement = connection.createStatement()) {
+            List<String> statements =
+                    parseStatements(Files.readAllLines(Paths.get(ddlTestFile.toURI())));
+            for (String stmt : statements) {
+                statement.execute(stmt);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private void initializeSqlServerTable(String sqlFile) {
         final String ddlFile = String.format("ddl/%s.sql", sqlFile);
         final URL ddlTestFile = TestSuiteBase.class.getClassLoader().getResource(ddlFile);
@@ -436,26 +573,30 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
             String ddlContent = String.join("\n", ddlLines);
             String actualDatabaseName = extractDatabaseName(ddlContent);
             dropTestDatabase(connection, actualDatabaseName);
-            final List<String> statements =
-                    Arrays.stream(
-                                    ddlLines.stream()
-                                            .map(String::trim)
-                                            .filter(x -> !x.startsWith("--") && !x.isEmpty())
-                                            .map(
-                                                    x -> {
-                                                        final Matcher m =
-                                                                COMMENT_PATTERN.matcher(x);
-                                                        return m.matches() ? m.group(1) : x;
-                                                    })
-                                            .collect(Collectors.joining("\n"))
-                                            .split(";"))
-                            .collect(Collectors.toList());
+            final List<String> statements = parseStatements(ddlLines);
             for (String stmt : statements) {
                 statement.execute(stmt);
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private List<String> parseStatements(List<String> ddlLines) {
+        return Arrays.stream(
+                        ddlLines.stream()
+                                .map(String::trim)
+                                .filter(x -> !x.startsWith("--") && !x.isEmpty())
+                                .map(
+                                        x -> {
+                                            final Matcher m = COMMENT_PATTERN.matcher(x);
+                                            return m.matches() ? m.group(1) : x;
+                                        })
+                                .collect(Collectors.joining("\n"))
+                                .split(";"))
+                .map(String::trim)
+                .filter(x -> !x.isEmpty())
+                .collect(Collectors.toList());
     }
 
     private String extractDatabaseName(String ddlContent) {
@@ -518,8 +659,9 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
     }
 
     private void executeSql(String sql) {
-        try (Connection connection = getJdbcConnection()) {
-            connection.createStatement().execute(sql);
+        try (Connection connection = getJdbcConnection();
+                Statement statement = connection.createStatement()) {
+            statement.execute(sql);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -637,6 +779,150 @@ public class SqlServerCDCIT extends TestSuiteBase implements TestResource {
                             Assertions.assertIterableEquals(
                                     querySql(selectSql, sourceTable),
                                     querySql(selectSql, sinkTable));
+                        });
+    }
+
+    @TestTemplate
+    @DisabledOnContainer(
+            value = {},
+            type = {EngineType.SPARK},
+            disabledReason =
+                    "This case validates SqlServer CDC schema evolution on the Flink engine & zeta engine.")
+    public void testWithSchemaEvolution(TestContainer container) {
+        initializeSqlServerTable("schema_change_test");
+
+        CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        container.executeJob("/sqlservercdc_to_sqlserver_with_schema_change.conf");
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    return null;
+                });
+
+        assertSchemaEvolutionTableStructureAndData(
+                SCHEMA_EVOLUTION_DATABASE_NAME,
+                SCHEMA_EVOLUTION_SOURCE_TABLE,
+                SCHEMA_EVOLUTION_SINK_TABLE);
+
+        waitForSchemaEvolutionIncrementalStarted();
+
+        executeSqlFile("sqlserver_schema_change_add_columns");
+        assertSchemaEvolutionTableStructureAndData(
+                SCHEMA_EVOLUTION_DATABASE_NAME,
+                SCHEMA_EVOLUTION_SOURCE_TABLE,
+                SCHEMA_EVOLUTION_SINK_TABLE);
+
+        executeSqlFile("sqlserver_schema_change_drop_columns");
+        assertSchemaEvolutionTableStructureAndData(
+                SCHEMA_EVOLUTION_DATABASE_NAME,
+                SCHEMA_EVOLUTION_SOURCE_TABLE,
+                SCHEMA_EVOLUTION_SINK_TABLE);
+
+        executeSqlFile("sqlserver_schema_change_rename_columns");
+        assertSchemaEvolutionTableStructureAndData(
+                SCHEMA_EVOLUTION_DATABASE_NAME,
+                SCHEMA_EVOLUTION_SOURCE_TABLE,
+                SCHEMA_EVOLUTION_SINK_TABLE);
+
+        executeSqlFile("sqlserver_schema_change_modify_columns");
+        assertSchemaEvolutionTableStructureAndData(
+                SCHEMA_EVOLUTION_DATABASE_NAME,
+                SCHEMA_EVOLUTION_SOURCE_TABLE,
+                SCHEMA_EVOLUTION_SINK_TABLE);
+    }
+
+    private void waitForSchemaEvolutionIncrementalStarted() {
+        String sourceTablePath =
+                SCHEMA_EVOLUTION_DATABASE_NAME
+                        + "."
+                        + SCHEMA_NAME
+                        + "."
+                        + SCHEMA_EVOLUTION_SOURCE_TABLE;
+        String sinkTablePath =
+                SCHEMA_EVOLUTION_DATABASE_NAME
+                        + "."
+                        + SCHEMA_NAME
+                        + "."
+                        + SCHEMA_EVOLUTION_SINK_TABLE;
+        executeSql(
+                String.format(
+                        "INSERT INTO %s VALUES (%d, 'incremental-marker', 'ensure-stream-phase', 9.9)",
+                        sourceTablePath, INCREMENTAL_MARKER_ID));
+        await().atMost(60000, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () ->
+                                Assertions.assertEquals(
+                                        querySql(
+                                                        String.format(
+                                                                "SELECT COUNT(1) FROM %s WHERE id = %d",
+                                                                sourceTablePath,
+                                                                INCREMENTAL_MARKER_ID))
+                                                .get(0)
+                                                .get(0),
+                                        querySql(
+                                                        String.format(
+                                                                "SELECT COUNT(1) FROM %s WHERE id = %d",
+                                                                sinkTablePath,
+                                                                INCREMENTAL_MARKER_ID))
+                                                .get(0)
+                                                .get(0)));
+    }
+
+    @TestTemplate
+    @DisabledOnContainer(
+            value = {},
+            type = {EngineType.SPARK},
+            disabledReason = "Currently SPARK do not support cdc")
+    public void testTimestampStartupMode(TestContainer container) throws InterruptedException {
+        initializeSqlServerTable(DATABASE_NAME);
+        executeSql("TRUNCATE TABLE " + DATABASE_NAME + "." + SCHEMA_NAME + ".full_types_sink;");
+
+        // Use full fields insert to avoid implicit conversion error for varbinary columns with null
+        // value
+        executeSql(
+                "INSERT INTO "
+                        + SOURCE_TABLE_CUSTOM_PRIMARY_KEY
+                        + " VALUES (1, 'cč1', 'vcč', 'tč', N'cč', N'vcč', N'tč', 1.123, 2, 3.323, 4.323, 5.323, 6.323, 1, 22, 333, 4444, 55555, '2018-07-13', '10:23:45', '2018-07-13 11:23:45.34', '2018-07-13 13:23:45.78', '2018-07-13 14:23:45', '<a>b</a>',SYSDATETIMEOFFSET(),CAST('test_varbinary' AS varbinary(100)), 5.32)");
+
+        // sleep for a while to make sure the timestamp is different
+        TimeUnit.SECONDS.sleep(5);
+        long startTimestamp = System.currentTimeMillis();
+        TimeUnit.SECONDS.sleep(5);
+
+        executeSql(
+                "INSERT INTO "
+                        + SOURCE_TABLE_CUSTOM_PRIMARY_KEY
+                        + " VALUES (2, 'cč2', 'vcč', 'tč', N'cč', N'vcč', N'tč', 1.123, 2, 3.323, 4.323, 5.323, 6.323, 1, 22, 333, 4444, 55555, '2018-07-13', '10:23:45', '2018-07-13 11:23:45.34', '2018-07-13 13:23:45.78', '2018-07-13 14:23:45', '<a>b</a>',SYSDATETIMEOFFSET(),CAST('test_varbinary' AS varbinary(100)), 5.32)");
+
+        CompletableFuture.runAsync(
+                () -> {
+                    try {
+                        container.executeJob(
+                                "/sqlservercdc_to_sqlserver_timestamp.conf",
+                                Arrays.asList("timestamp=" + startTimestamp));
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+
+        await().atMost(300000, TimeUnit.MILLISECONDS)
+                .untilAsserted(
+                        () -> {
+                            List<List<Object>> sinkRows =
+                                    querySql(
+                                            "SELECT id FROM "
+                                                    + DATABASE_NAME
+                                                    + "."
+                                                    + SCHEMA_NAME
+                                                    + ".full_types_sink ORDER BY id ASC");
+                            Assertions.assertTrue(
+                                    sinkRows.stream()
+                                            .anyMatch(row -> row.get(0).toString().equals("2")));
+                            Assertions.assertFalse(
+                                    sinkRows.stream()
+                                            .anyMatch(row -> row.get(0).toString().equals("1")));
                         });
     }
 }

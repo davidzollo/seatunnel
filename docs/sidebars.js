@@ -25,24 +25,78 @@ const sidebars = {
             "label": "Introduction",
             "items": [
                 "introduction/about",
-                "introduction/architecture",
+                "introduction/how-it-works",
                 {
                     "type": "category",
                     "label": "Concepts",
                     "items": [
                         "introduction/concepts/config",
-                        "introduction/concepts/config-encryption-decryption",
                         "introduction/concepts/connector-v2-features",
-                        "introduction/concepts/connector-isolated-dependency",
-                        "introduction/concepts/schema-feature",
-                        "introduction/concepts/JobEnvConfig",
-                        "introduction/concepts/sink-options-placeholders",
-                        "introduction/concepts/sql-config",
-                        "introduction/concepts/speed-limit",
-                        "introduction/concepts/event-listener",
-                        "introduction/concepts/schema-evolution",
-                        "introduction/concepts/metalake",
-                        "introduction/concepts/incompatible-changes"
+                        "introduction/concepts/schema-feature"
+                    ]
+                },
+                {
+                    "type": "category",
+                    "label": "Configuration",
+                    "items": [
+                        "introduction/configuration/JobEnvConfig",
+                        "introduction/configuration/sql-config",
+                        "introduction/configuration/config-encryption-decryption",
+                        "introduction/configuration/metalake",
+                        "introduction/configuration/sink-options-placeholders",
+                        "introduction/configuration/schema-evolution",
+                        "introduction/configuration/speed-limit"
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "category",
+            "label": "Architecture",
+            "items": [
+                "architecture/overview",
+                "architecture/design-philosophy",
+                "architecture/configuration-and-option-system",
+                "architecture/core-api-design",
+                "architecture/transform-plugin-system",
+                "architecture/cdc-pipeline-architecture",
+                "architecture/data-format-handling",
+                "architecture/table-schema-and-type-system",
+                "architecture/plugin-discovery-and-class-loading",
+                {
+                    "type": "category",
+                    "label": "API Design",
+                    "items": [
+                        "architecture/api-design/source-architecture",
+                        "architecture/api-design/sink-architecture",
+                        "architecture/api-design/catalog-table",
+                        "architecture/api-design/translation-layer",
+                        "architecture/api-design/flink-translation-layer",
+                        "architecture/api-design/spark-translation-layer"
+                    ]
+                },
+                {
+                    "type": "category",
+                    "label": "Engine",
+                    "items": [
+                        "architecture/engine/engine-architecture",
+                        "architecture/engine/dag-execution",
+                        "architecture/engine/resource-management"
+                    ]
+                },
+                {
+                    "type": "category",
+                    "label": "Fault Tolerance",
+                    "items": [
+                        "architecture/fault-tolerance/checkpoint-mechanism",
+                        "architecture/fault-tolerance/exactly-once"
+                    ]
+                },
+                {
+                    "type": "category",
+                    "label": "Features",
+                    "items": [
+                        "architecture/features/multi-table"
                     ]
                 }
             ]
@@ -51,6 +105,7 @@ const sidebars = {
             "type": "category",
             "label": "Getting Started",
             "items": [
+                "getting-started/overview",
                 {
                     "type": "category",
                     "label": "Locally",
@@ -61,6 +116,8 @@ const sidebars = {
                         "getting-started/locally/quick-start-spark"
                     ]
                 },
+                "getting-started/job-configuration-guide",
+                "getting-started/submit-job-to-remote-zeta-cluster",
                 {
                     "type": "category",
                     "label": "Docker",
@@ -82,6 +139,10 @@ const sidebars = {
             "type": "category",
             "label": "Connectors",
             "items": [
+                "connectors/connector-isolated-dependency",
+                "connectors/connector-faq",
+                "connectors/cdc-production-cookbook",
+                "connectors/connector-faq",
                 {
                     "type": "category",
                     "label": "Source",
@@ -176,7 +237,7 @@ const sidebars = {
                 "image": "/img/favicon.ico"
             },
             "items": [
-                 {
+                {
                     "type": "category",
                     "label": "Common Options",
                     "items": [
@@ -205,7 +266,8 @@ const sidebars = {
                 "transforms/table-filter",
                 "transforms/table-merge",
                 "transforms/table-rename",
-                "transforms/transform-multi-table"
+                "transforms/transform-multi-table",
+                "transforms/multi-table-transform-and-join-boundary"
             ]
         },
         {
@@ -213,6 +275,7 @@ const sidebars = {
             "label": "Engines",
             "items": [
                 "engines/overview",
+                "engines/event-listener",
                 {
                     "type": "category",
                     "label": "SeaTunnel Engine (Zeta)",
@@ -230,16 +293,20 @@ const sidebars = {
                             ]
                         },
                         "engines/zeta/checkpoint-storage",
+                        "engines/zeta/state-storage-and-recovery",
                         "engines/zeta/engine-jar-storage-mode",
                         "engines/zeta/tcp",
                         "engines/zeta/resource-isolation",
+                        "engines/zeta/rest-api-and-web-ui",
                         {
                             "type": "category",
                             "label": "REST API",
                             "items": [
                                 "engines/zeta/rest-api-v1",
                                 "engines/zeta/rest-api-v2",
-                                "engines/zeta/security"
+                                "engines/zeta/rest-api-job-lifecycle",
+                                "engines/zeta/security",
+                                "engines/zeta/python-sdk"
                             ]
                         },
                         "engines/zeta/user-command",
@@ -264,11 +331,24 @@ const sidebars = {
         },
         {
             "type": "category",
+            "label": "Tools",
+            "items": [
+                "tools/overview",
+                "tools/seatunnel-skill",
+                "tools/seatunnel-mcp",
+                "tools/x2seatunnel"
+            ]
+        },
+        {
+            "type": "category",
             "label": "Developer",
             "items": [
                 "developer/setup",
+                "developer/contribution-path",
                 "developer/coding-guide",
                 "developer/how-to-create-your-connector",
+                "developer/source-connector-development",
+                "developer/sink-connector-development",
                 "developer/contribute-plugin",
                 "developer/contribute-transform-v2-guide",
                 "developer/docs-format-specification",

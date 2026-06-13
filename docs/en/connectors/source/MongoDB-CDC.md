@@ -41,36 +41,41 @@ They can be downloaded via install-plugin.sh or from the Maven central repositor
 
 4.Permissions:changeStream and read
 
-```shell
-use admin;
-db.createRole(
-    {
-        role: "strole",
-        privileges: [{
-            resource: { db: "", collection: "" },
-            actions: [
-                "splitVector",
-                "listDatabases",
-                "listCollections",
-                "collStats",
-                "find",
-                "changeStream" ]
-        }],
-        roles: [
-            { role: 'read', db: 'config' }
-        ]
-    }
-);
+```
+// 1) Switch to the target database
+use <DB_NAME>
 
-db.createUser(
-  {
-      user: 'stuser',
-      pwd: 'stpw',
-      roles: [
-         { role: 'strole', db: 'admin' }
+// 2) Create role (common permissions for CDC scenarios)
+db.createRole({
+  role: "<ROLE_NAME>",
+  privileges: [
+    {
+      resource: { db: "<DB_NAME>", collection: "" },
+      actions: [
+        "collStats",
+        "splitVector",
+        "listDatabases",
+        "find",
+        "listCollections",
+        "changeStream"
       ]
-  }
-);
+    }
+  ],
+  roles: []
+})
+
+// 3) Create user and bind read + custom role
+db.createUser({
+  user: "<USER_NAME>",
+  pwd: "<PASSWORD>",
+  roles: [
+    { role: "read", db: "<DB_NAME>" },
+    { role: "<ROLE_NAME>", db: "<DB_NAME>" }
+  ]
+})
+
+// 4) Grant additional role to user (use when user exists or additional authorization is needed)
+db.grantRolesToUser("<USER_NAME>", ["<ROLE_NAME>"])
 ```
 
 ## Data Type Mapping
@@ -122,8 +127,41 @@ For specific types in MongoDB, we use Extended JSON format to map them to Seatun
 | poll.await.time.ms                 | Long   | No       | 1000    | The amount of time to wait before checking for new results on the change stream.                                                                                                                                                                                            |
 | heartbeat.interval.ms              | String | No       | 0       | The length of time in milliseconds between sending heartbeat messages. Use 0 to disable.                                                                                                                                                                                    |
 | incremental.snapshot.chunk.size.mb | Long   | No       | 64      | The chunk size mb of incremental snapshot.                                                                                                                                                                                                                                  |
+| startup.mode                       | Enum   | No       | INITIAL | Optional startup mode for MongoDB CDC consumer, valid enumerations are `initial`, `latest` and `timestamp`. See the [Startup Mode](#startup-mode) section below.                                                                                                            |
+| startup.timestamp                  | Long   | No       | -       | Start from the specified epoch timestamp (in milliseconds). Only used when `startup.mode` is `timestamp`.                                                                                                                                                                   |
 | exactly_once                       | Boolean| No       | false   | Enable exactly once semantic. Enabling this may cause an out-of-memory risk during the large table snapshot stage in recovery.                                                                                                                                              |
 | common-options                     |        | No       | -       | Source plugin common parameters, please refer to [Source Common Options](../common-options/source-common-options.md) for details.                                                                                                                                                          |
+
+### Startup Mode
+
+The `startup.mode` option controls where the connector starts reading when a job is submitted:
+
+- `initial` (default): reads a snapshot of the monitored collections first, then switches to the change stream.
+- `latest`: skips the snapshot entirely and starts from the latest change-stream position, so only changes made after the job starts are captured. Snapshot-related options such as `incremental.snapshot.chunk.size.mb` are ignored in this mode.
+- `timestamp`: skips the snapshot and starts reading the change stream from the position given by `startup.timestamp`.
+
+When a job is restored from a checkpoint or savepoint, it resumes from the checkpointed change-stream position regardless of `startup.mode`, so a restart never falls back to a new snapshot.
+
+For example, to consume only changes made after the job starts:
+
+```hocon
+source {
+  MongoDB-CDC {
+    hosts = "mongo0:27017"
+    database = ["inventory"]
+    collection = ["inventory.products"]
+    startup.mode = "latest"
+    schema = {
+      fields {
+        "_id" : string,
+        "name" : string,
+        "description" : string,
+        "weight" : string
+      }
+    }
+  }
+}
+```
 
 ### Tips
 

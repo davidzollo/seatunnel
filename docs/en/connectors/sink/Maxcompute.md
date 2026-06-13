@@ -14,15 +14,18 @@ Used to read data from Maxcompute.
 
 ## Options
 
-|      name      |  type   | required | default value |
+|      name      | type    | required | default value |
 |----------------|---------|----------|---------------|
-| accessId       | string  | yes      | -             |
-| accesskey      | string  | yes      | -             |
+| accessId       | string  | no       | -             |
+| accesskey      | string  | no       | -             |
+| sts_token      | string  | no       | -             |
 | endpoint       | string  | yes      | -             |
 | project        | string  | yes      | -             |
 | table_name     | string  | yes      | -             |
+| schema_name    | string  | no       | -             |
 | partition_spec | string  | no       | -             |
 | overwrite      | boolean | no       | false         |
+| insert_strategy| string  | no       | upload        |
 | common-options | string  | no       |               |
 
 ### accessId [string]
@@ -32,6 +35,13 @@ Used to read data from Maxcompute.
 ### accesskey [string]
 
 `accesskey` Your Maxcompute accessKey which cloud be access from Alibaba Cloud.
+
+### sts_token [string]
+
+`sts_token` Your MaxCompute STS Token for temporary authentication. **Note:** If `sts_token` is provided, `accessId` and `accesskey` are strictly required.
+
+> **Passwordless Authentication (ECS RAM Role, Environment Variables, etc.)**
+> To use passwordless authentication seamlessly, simply leave `accessId`, `accesskey`, and `sts_token` all blank. The connector will automatically fall back to the Aliyun DefaultCredentialsProvider chain (Environment Variables, System Properties, CLI Profiles, OIDC, ECS RAM Roles).
 
 ### endpoint [string]
 
@@ -48,6 +58,14 @@ Used to read data from Maxcompute.
 ### partition_spec [string]
 
 `partition_spec` This spec of Maxcompute partition table eg:ds='20220101'.
+
+### schema_name [string]
+
+`schema_name` The MaxCompute Schema name (the namespace between Project and Table).
+Only required when the table resides in a **non-default schema** within your MaxCompute project.
+See [Schema-related operations](https://www.alibabacloud.com/help/en/maxcompute/user-guide/schema-related-operations).
+
+Default: not set (uses the project default schema).
 
 ### overwrite [boolean]
 
@@ -133,6 +151,7 @@ Example values:
 Default: `yyyy-MM-dd HH:mm:ss`
 
 ### tunnel_endpoint [String]
+
 Specifies the custom endpoint URL for the MaxCompute Tunnel service.
 
 By default, the endpoint is automatically inferred from the configured region.
@@ -149,6 +168,15 @@ Example values:
 - `http://maxcompute:8080`
 
 Default: Not set (auto-inferred from region)
+
+### insert_strategy [string]
+
+If `insert_strategy` is set to `upload`, insert operations use an upload session.
+If set to `upsert`, insert operations use an upsert session. Upsert sessions require a primary key.
+
+**Note**:
+Using upload sessions for insert operations alongside update or delete operations may cause insert records to appear in the table later than expected.
+When a primary key is present, it is recommended to set `insert_strategy` to `upsert` to ensure consistent upsert behavior.
 
 ### common options
 

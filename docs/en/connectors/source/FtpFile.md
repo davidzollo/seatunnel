@@ -76,11 +76,21 @@ If you use SeaTunnel Engine, It automatically integrated the hadoop jar when you
 | null_format                 | string  | no       | -                           |
 | binary_chunk_size           | int     | no       | 1024                        |
 | binary_complete_file_mode   | boolean | no       | false                       |
+| discovery_mode              | string  | no       | once                        |
+| scan_interval               | string  | no       | 10S |
+| start_mode                  | string  | no       | earliest                    |
+| sync_mode                   | string  | no       | full                        |
+| target_path                 | string  | no       | -                           |
+| target_hadoop_conf          | map     | no       | -                           |
+| update_strategy             | string  | no       | distcp                      |
+| compare_mode                | string  | no       | len_mtime                   |
 | common-options              |         | no       | -                           |
 | file_filter_modified_start  | string  | no       | -                           | 
 | file_filter_modified_end    | string  | no       | -                           | 
 | quote_char                  | string  | no       | "                           |
 | escape_char                 | string  | no       | -                           |
+| sort_files_by_modification_time | boolean | no       | false                       |
+| metalake_type               | string  | no       | gravitino                   |
 
 ### host [string]
 
@@ -273,6 +283,15 @@ Each element is converted to a row with the following schema:
 - `parent_id`: ID of the parent element
 - `child_ids`: Comma-separated list of child element IDs
 
+When `markdown_rag_metadata_enabled` is set to `true`, SeaTunnel appends the following RAG metadata fields after `child_ids`:
+- `source_uri`: Source file path or URI
+- `document_id`: Stable document identifier derived from `source_uri`
+- `chunk_id`: Stable chunk identifier derived from document identity, chunk order, and content hash
+- `chunk_index`: One-based chunk order in the parsed document
+- `content_hash`: SHA-256 hash of the emitted `text` value
+
+The option defaults to `false`, so the original Markdown schema is unchanged unless you enable it.
+
 Note: Markdown format only supports reading, not writing.
 
 ### connection_mode [string]
@@ -362,6 +381,16 @@ Only need to be configured when the file_format_type are text, json, excel, xml 
 
 The schema information of upstream data. For more details, please refer to [Schema Feature](../../introduction/concepts/schema-feature.md).
 
+#### metadata_table_id [string]
+
+The table identifier in the metadata service to fetch table schema. For Gravitino, the format should be `{catalog}.{database}.{table}`, such as `mysql-catalog.test_db.users`.
+
+When specified, the connector will fetch table schema from the external metadata service instead of using manual `columns` definition.
+
+> When using Gravitino as the metadata source, the column types from Gravitino will be automatically converted to SeaTunnel data types. For detailed type mapping information, please refer to [Gravitino Type Mapping](../../introduction/concepts/gravitino-type-mapping.md).
+
+For more information, please refer to [Metadata SPI](../../introduction/concepts/metadata-spi.md).
+
 ### read_columns [list]
 
 The read column list of the data source, user can use it to implement field projection.
@@ -434,6 +463,66 @@ Only used when file_format_type is binary.
 
 Whether to read the complete file as a single chunk instead of splitting into chunks. When enabled, the entire file content will be read into memory at once. Default is false.
 
+### discovery_mode [string]
+
+File discovery mode. Supported values: `once` (default), `continuous`.
+
+- `once`: enumerate current files once and finish (bounded).
+- `continuous`: keep scanning the path and processing new/changed files at runtime (unbounded).
+
+In the current implementation, `discovery_mode=continuous` requires `sync_mode=update` (binary only) to avoid repeated transfers.
+
+### scan_interval [string]
+
+Only used when `discovery_mode=continuous`. Scan interval for periodic discovery; value must be greater than `0`. Recommended shorthand format `10S`, `30S` (case-insensitive, e.g. `10s`); ISO-8601 format `PT10S`, `PT30S` is also supported. Default is `10S`.
+
+### start_mode [string]
+
+Only used when `discovery_mode=continuous`. Supported values: `earliest` (default), `latest`.
+
+- `earliest`: read existing files on startup.
+- `latest`: only process files modified after the job starts.
+
+### sync_mode [string]
+
+File sync mode. Supported values: `full` (default), `update`.
+When `update`, the source compares files between source/target and only reads new/changed files (currently only supports `file_format_type=binary`).
+
+**Performance considerations**
+- Update mode triggers an extra `getFileStatus` call on the target for each source file.
+- For remote file systems (FTP/SFTP), this adds per-file network overhead. It is not recommended for massive small-file scenarios.
+
+**Requirements / limitations**
+- `target_path` should typically align with sink `path` (same filesystem and same relative path layout).
+- When `update_strategy=distcp`, correctness depends on source/target clock synchronization.
+- When `compare_mode=checksum`, filesystem checksum support is required. If checksum is unavailable, SeaTunnel falls back to content comparison (more expensive) and logs a warning.
+
+Example:
+
+```hocon
+sync_mode = "update"
+file_format_type = "binary"
+target_path = "/path/to/your/sink/path"
+update_strategy = "distcp"
+compare_mode = "len_mtime"
+```
+
+### target_path [string]
+
+Only used when `sync_mode=update`. Target base path used for comparison (it should usually be the same as sink `path`).
+
+### target_hadoop_conf [map]
+
+Only used when `sync_mode=update`. Extra Hadoop configuration for target filesystem. You can set `fs.defaultFS` in this map to override target defaultFS.
+
+### update_strategy [string]
+
+Only used when `sync_mode=update`. Supported values: `distcp` (default), `strict`.
+
+### compare_mode [string]
+
+Only used when `sync_mode=update`. Supported values: `len_mtime` (default), `checksum` (only valid when `update_strategy=strict`).
+
 ### file_filter_modified_start [string]
 
 File modification time filter. The connector will filter some files base on the last modification start time (include start time). The default data format is `yyyy-MM-dd HH:mm:ss`.
@@ -449,6 +538,14 @@ A single character that encloses CSV fields, allowing fields with commas, line b
 ### escape_char [string]
 
 A single character that allows the quote or other special characters to appear inside a CSV field without ending the field.
+
+### sort_files_by_modification_time [boolean]
+
+Whether to sort files by modification time in descending order. Default is `false`.
+
+When enabled, files will be sorted by their modification time (newest first). This is useful when:
+- Reading files with evolving schemas and you want schema inference to use the latest file
+- You need to process files in chronological order
 
 ### common options
 
@@ -570,6 +667,93 @@ sink {
 
 ```
 
+### Incremental Sync (sync_mode=update, binary)
+
+`sync_mode=update` compares files between source and `target_path`, then only reads new/changed files.
+In most cases, `target_path` should be aligned with sink `path` (same filesystem and same relative paths).
+
+```hocon
+env {
+  parallelism = 1
+  job.mode = "BATCH"
+}
+
+source {
+  FtpFile {
+    host = "192.168.31.48"
+    port = 21
+    user = tyrantlucifer
+    password = tianchao
+
+    path = "/seatunnel/read/binary/"
+    file_format_type = "binary"
+
+    sync_mode = "update"
+    target_path = "/seatunnel/read/binary2/"
+    update_strategy = "distcp"
+    compare_mode = "len_mtime"
+  }
+}
+sink {
+  FtpFile {
+    host = "192.168.31.48"
+    port = 21
+    user = tyrantlucifer
+    password = tianchao
+
+    path = "/seatunnel/read/binary2/"
+    tmp_path = "/seatunnel/read/binary2-tmp/"
+    file_format_type = "binary"
+  }
+}
+```
+
+### Continuous Discovery (discovery_mode=continuous)
+
+`discovery_mode=continuous` keeps the job running and periodically scans the path for new/changed files (long-running job, recommended to run with `job.mode="STREAMING"`).
+
+**Note:** `discovery_mode=continuous` currently requires `sync_mode="update"` (binary-only) to avoid repeated transfers without keeping an unbounded "seen" state. `target_path` should align with the sink `path` on the same filesystem.
+
+```hocon
+env {
+  parallelism = 1
+  job.mode = "STREAMING"
+}
+
+source {
+  FtpFile {
+    host = "192.168.31.48"
+    port = 21
+    user = tyrantlucifer
+    password = tianchao
+
+    path = "/seatunnel/watch/src/"
+    file_format_type = "binary"
+
+    discovery_mode = "continuous"
+    scan_interval = "10S"
+    start_mode = "latest"
+
+    sync_mode = "update"
+    target_path = "/seatunnel/watch/dst/"
+    update_strategy = "distcp"
+    compare_mode = "len_mtime"
+  }
+}
+sink {
+  FtpFile {
+    host = "192.168.31.48"
+    port = 21
+    user = tyrantlucifer
+    password = tianchao
+
+    path = "/seatunnel/watch/dst/"
+    tmp_path = "/seatunnel/watch/dst-tmp/"
+    file_format_type = "binary"
+  }
+}
+```
+
 ### Filter File
 
 ```hocon
@@ -600,4 +784,3 @@ sink {
 ## Changelog
 
 <ChangeLog />
-

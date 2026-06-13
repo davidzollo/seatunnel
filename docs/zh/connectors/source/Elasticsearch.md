@@ -13,7 +13,7 @@ import ChangeLog from '../changelog/connector-elasticsearch.md';
 - [x] [批处理](../../introduction/concepts/connector-v2-features.md)
 - [ ] [流处理](../../introduction/concepts/connector-v2-features.md)
 - [ ] [精准一次](../../introduction/concepts/connector-v2-features.md)
-- [x] [column projection](../../introduction/concepts/connector-v2-features.md)
+- [x] [列投影](../../introduction/concepts/connector-v2-features.md)
 - [ ] [并行度](../../introduction/concepts/connector-v2-features.md)
 - [ ] [支持用户自定义的分片](../../introduction/concepts/connector-v2-features.md)
 
@@ -46,6 +46,8 @@ import ChangeLog from '../changelog/connector-elasticsearch.md';
 | tls_truststore_password | string  | no       | -                                   |
 | pit_keep_alive          | long    | no       | 60000 (1 minute)                    |
 | pit_batch_size          | int     | no       | 100                                 |
+| slice_max               | int     | no       | 1（SCROLL 需 ES >= 5.0，PIT 需 ES >= 7.10） |
+| runtime_fields          | array   | no       | -                                   |
 | common-options          |         | no       | -                                   |
 
 ### hosts [array]
@@ -206,6 +208,45 @@ PIT 应保持活动的时间量（以毫秒为单位）
 
 ### pit_batch_size  [int]
 每次 PIT 搜索请求返回的最大数量
+
+### runtime_fields [array]
+
+在查询时动态计算字段（Elasticsearch 7.11+）。每个 runtime field 需要包含：
+- **name**: 字段名
+- **type**: 数据类型（boolean, date, double, geo_point, ip, keyword, long）
+- **script**: Painless 脚本，用于计算字段值
+- **script_lang** (可选): 脚本语言（默认：painless）
+- **script_params** (可选): 脚本参数
+
+示例：
+```hocon
+runtime_fields = [
+  {
+    name = "day_of_week"
+    type = "keyword"
+    script = "emit(doc['timestamp'].value.dayOfWeekEnum.toString())"
+  },
+  {
+    name = "total_price"
+    type = "double"
+    script = "emit(doc['quantity'].value * doc['price'].value)"
+  }
+]
+```
+
+**性能与限制：**
+- 运行时字段在查询阶段计算，数据量大时会影响性能
+- 适合临时分析、字段试验与低频查询
+- 需要 Elasticsearch 7.11 及以上版本
+
+### slice_max [int]
+将单个索引拆分为多个切片以并行读取。仅对 SCROLL/PIT 生效，配置 > 1 时启用切片。
+
+**版本要求：**
+- SCROLL 切片（sliced scroll）需要 Elasticsearch 5.0 及以上版本。
+- PIT 切片需要 Elasticsearch 7.10 及以上版本（PIT 在 7.10.0 引入）。
+
+**取舍说明：**切片能提升吞吐，但可能降低跨切片的一致性。对一致性要求高时，建议使用 PIT（共享快照）或将 `slice_max = 1`；对追加写或写入较少的场景，开启切片通常可以接受。
 
 ### common options
 
@@ -377,6 +418,113 @@ source {
     search_api_type = PIT
     pit_keep_alive = 60000  # 1 minute in milliseconds
     pit_batch_size = 100
+  }
+}
+```
+
+Demo8: Runtime Fields（Elasticsearch 7.11+）
+
+> 该示例演示如何在查询时计算字段值，而无需重建索引。
+
+```hocon
+source {
+  Elasticsearch {
+    hosts = ["https://elasticsearch:9200"]
+    username = "elastic"
+    password = "elasticsearch"
+    tls_verify_certificate = false
+    tls_verify_hostname = false
+    
+    index = "sales_data"
+    
+    # 定义运行时字段
+    runtime_fields = [
+      {
+        name = "total_amount"
+        type = "double"
+        script = "emit(doc['quantity'].value * doc['price'].value)"
+      },
+      {
+        name = "day_of_week"
+        type = "keyword"
+        script = "emit(doc['order_date'].value.dayOfWeekEnum.getDisplayName(TextStyle.FULL, Locale.ROOT))"
+      },
+      {
+        name = "order_category"
+        type = "keyword"
+        script = """
+          double amount = doc['quantity'].value * doc['price'].value;
+          if (amount > 1000) {
+            emit('high_value');
+          } else if (amount > 100) {
+            emit('medium_value');
+          } else {
+            emit('low_value');
+          }
+        """
+      },
+      {
+        name = "price_with_tax"
+        type = "double"
+        script = "emit(doc['price'].value * (1 + params.tax_rate))"
+        script_params = {
+          tax_rate = 0.13
+        }
+      }
+    ]
+    
+    source = [
+      "product_id",
+      "quantity",
+      "price",
+      "order_date",
+      "total_amount",
+      "day_of_week",
+      "order_category",
+      "price_with_tax"
+    ]
+    
+    schema = {
+      fields {
+        product_id = string
+        quantity = int
+        price = double
+        order_date = timestamp
+        total_amount = double
+        day_of_week = string
+        order_category = string
+        price_with_tax = double
+      }
+    }
+  }
+}
+
+sink {
+  Console {
+  }
+}
+```
+
+Demo9: PIT + slicing 并行读取
+```hocon
+source {
+  Elasticsearch {
+    hosts = ["https://elasticsearch:9200"]
+    username = "elastic"
+    password = "elasticsearch"
+    tls_verify_certificate = false
+    tls_verify_hostname = false
+
+    index = "st_index"
+    query = {"range": {"c_int": {"gte": 10, "lte": 20}}}
+
+    search_type = DSL
+    search_api_type = PIT
+    pit_keep_alive = 60000
+    pit_batch_size = 100
+
+    # 开启切片并行读取
+    slice_max = 2
   }
 }
 ```
