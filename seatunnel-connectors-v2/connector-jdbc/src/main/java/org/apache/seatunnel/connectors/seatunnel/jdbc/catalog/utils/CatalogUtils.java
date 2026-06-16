@@ -327,10 +327,14 @@ public class CatalogUtils {
             throws SQLException {
         TableSchema.Builder schemaBuilder = TableSchema.builder();
         Map<String, String> unsupported = new LinkedHashMap<>();
+        Map<String, Column> columns = new LinkedHashMap<>();
+        LinkedHashSet<String> duplicateColumns = new LinkedHashSet<>();
         for (int index = 1; index <= metadata.getColumnCount(); index++) {
             try {
                 Column column = columnConverter.apply(metadata, index);
-                schemaBuilder.column(column);
+                if (columns.putIfAbsent(column.getName(), column) != null) {
+                    duplicateColumns.add(column.getName());
+                }
             } catch (SeaTunnelRuntimeException e) {
                 if (e.getSeaTunnelErrorCode()
                         .equals(CommonErrorCode.CONVERT_TO_SEATUNNEL_TYPE_ERROR_SIMPLE)) {
@@ -343,6 +347,13 @@ public class CatalogUtils {
         if (!unsupported.isEmpty()) {
             throw CommonError.getCatalogTableWithUnsupportedType("UNKNOWN", sqlQuery, unsupported);
         }
+        if (!duplicateColumns.isEmpty()) {
+            log.warn(
+                    "Duplicate columns found in jdbc query metadata, keeping first definition. query : {}, duplicate columns : {}",
+                    sqlQuery,
+                    duplicateColumns);
+        }
+        columns.values().forEach(schemaBuilder::column);
         String catalogName = "jdbc_catalog";
         return CatalogTable.of(
                 TableIdentifier.of(catalogName, "default", "default", "default"),
