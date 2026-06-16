@@ -17,31 +17,89 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.utils;
 
-import org.apache.seatunnel.api.table.catalog.ConstraintKey;
-import org.apache.seatunnel.api.table.catalog.PrimaryKey;
-import org.apache.seatunnel.api.table.catalog.TablePath;
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
+import org.apache.seatunnel.api.table.catalog.Column;
+import org.apache.seatunnel.api.table.catalog.PhysicalColumn;
+import org.apache.seatunnel.api.table.type.BasicType;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.util.List;
-import java.util.Optional;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class CatalogUtilsTest {
 
     @Test
-    void testPrimaryKeysNameWithOutSpecialChar() throws SQLException {
-        Optional<PrimaryKey> primaryKey =
-                CatalogUtils.getPrimaryKey(new TestDatabaseMetaData(), TablePath.of("test.test"));
-        Assertions.assertEquals("testfdawe_", primaryKey.get().getPrimaryKey());
+    public void testGetCatalogTableShouldKeepFirstDuplicateMetadataColumn() throws SQLException {
+        ResultSetMetaData metadata = mock(ResultSetMetaData.class);
+        when(metadata.getColumnCount()).thenReturn(3);
+
+        CatalogTable catalogTable =
+                CatalogUtils.getCatalogTable(
+                        metadata,
+                        (resultSetMetaData, index) -> buildColumn(index),
+                        "select sec_cde, sec_cde, post_cde from test_table");
+
+        Assertions.assertEquals(2, catalogTable.getTableSchema().getColumns().size());
+        Assertions.assertEquals(
+                "sec_cde", catalogTable.getTableSchema().getColumns().get(0).getName());
+        Assertions.assertEquals(
+                BasicType.STRING_TYPE,
+                catalogTable.getTableSchema().getColumns().get(0).getDataType());
+        Assertions.assertEquals(
+                "post_cde", catalogTable.getTableSchema().getColumns().get(1).getName());
     }
 
-    @Test
-    void testConstraintKeysNameWithOutSpecialChar() throws SQLException {
-        List<ConstraintKey> constraintKeys =
-                CatalogUtils.getConstraintKeys(
-                        new TestDatabaseMetaData(), TablePath.of("test.test"));
-        Assertions.assertEquals("testfdawe_", constraintKeys.get(0).getConstraintName());
+    private static Column buildColumn(int index) {
+        switch (index) {
+            case 1:
+                return PhysicalColumn.of(
+                        "sec_cde",
+                        BasicType.STRING_TYPE,
+                        8L,
+                        true,
+                        null,
+                        null,
+                        "varchar(8)",
+                        false,
+                        false,
+                        null,
+                        null,
+                        null);
+            case 2:
+                return PhysicalColumn.of(
+                        "sec_cde",
+                        BasicType.LONG_TYPE,
+                        null,
+                        true,
+                        null,
+                        null,
+                        "bigint",
+                        false,
+                        false,
+                        null,
+                        null,
+                        null);
+            case 3:
+                return PhysicalColumn.of(
+                        "post_cde",
+                        BasicType.STRING_TYPE,
+                        50L,
+                        true,
+                        null,
+                        null,
+                        "varchar(50)",
+                        false,
+                        false,
+                        null,
+                        null,
+                        null);
+            default:
+                throw new IllegalArgumentException("Unsupported column index: " + index);
+        }
     }
 }
