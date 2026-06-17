@@ -32,13 +32,13 @@ ls connectors | rg 'connector-(http-base|jdbc)'
 ls "${SEATUNNEL_HOME}/lib" | rg 'postgresql'
 ```
 
-4. 运行任务前，先看一眼 HTTP 返回内容。这里直接使用 [Http Source](../../connectors/source/Http.md) 里的示例接口，返回 JSON 顶层应该能看到 `c_string` 和 `c_int` 这些字段：
+4. 运行任务前，先看一眼 HTTP 返回内容。这篇教程使用一个公开 JSON 示例接口，本地模式可以直接访问，不需要额外启动 mock 服务：
 
 ```bash
-curl http://mockserver:1080/example/http
+curl https://jsonplaceholder.typicode.com/todos/1
 ```
 
-如果你的真实接口把有效数据包在更深层字段里，就要先补 `json_field` 或 `content_field`，否则别急着运行。
+返回 JSON 顶层应该能看到 `id`、`title` 和 `completed` 这些字段。如果你的真实接口把有效数据包在更深层字段里，就要先补 `json_field` 或 `content_field`，否则别急着运行。
 
 5. 先准备 PostgreSQL 目标库，并给 sink 用户授予在 `public` schema 自动建表的权限，因为这篇教程使用了 `generate_sink_sql = true`：
 
@@ -64,13 +64,14 @@ env {
 source {
   Http {
     plugin_output = "http_orders"
-    url = "http://mockserver:1080/example/http"
+    url = "https://jsonplaceholder.typicode.com/todos/1"
     method = "GET"
     format = "json"
     schema = {
       fields {
-        c_string = string
-        c_int = int
+        id = int
+        title = string
+        completed = boolean
       }
     }
   }
@@ -85,8 +86,8 @@ sink {
     password = "test"
     generate_sink_sql = true
     database = "test"
-    table = "public.http_orders"
-    primary_keys = ["c_string"]
+    table = "public.http_todos"
+    primary_keys = ["id"]
     batch_size = 100
   }
 }
@@ -107,11 +108,11 @@ cd "${SEATUNNEL_HOME}"
 2. 查询目标表，核对行数和 API 返回结果。
 
 ```sql
-SELECT COUNT(*) FROM public.http_orders;
-SELECT c_string, c_int FROM public.http_orders ORDER BY c_string;
+SELECT COUNT(*) FROM public.http_todos;
+SELECT id, title, completed FROM public.http_todos ORDER BY id;
 ```
 
-如果目标表里的数据和 HTTP 返回内容一致，这条链路就是通的。使用默认 mock 返回时，查询结果里应该能看到和 `curl` 输出一致的 `c_string`、`c_int` 值。
+如果目标表里的数据和 HTTP 返回内容一致，这条链路就是通的。使用上面的示例接口时，查询结果里应该能看到 `id = 1`，`title = delectus aut autem`，`completed = false`。
 
 ## 常见坑
 

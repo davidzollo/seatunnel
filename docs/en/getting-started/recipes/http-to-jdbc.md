@@ -32,13 +32,13 @@ ls connectors | rg 'connector-(http-base|jdbc)'
 ls "${SEATUNNEL_HOME}/lib" | rg 'postgresql'
 ```
 
-4. Inspect the HTTP response before running the job. The sample endpoint from the [Http source](../../connectors/source/Http.md) should return a JSON body that contains top-level fields such as `c_string` and `c_int`:
+4. Inspect the HTTP response before running the job. This recipe uses a public JSON sample endpoint so that local mode can reach it without any extra mock service:
 
 ```bash
-curl http://mockserver:1080/example/http
+curl https://jsonplaceholder.typicode.com/todos/1
 ```
 
-If your real API nests the useful records under another field, define `json_field` or `content_field` before you continue.
+The response should contain top-level fields such as `id`, `title`, and `completed`. If your real API nests the useful records under another field, define `json_field` or `content_field` before you continue.
 
 5. Prepare the PostgreSQL target database and grant the sink user permission to create tables in `public`, because this recipe uses `generate_sink_sql = true`:
 
@@ -64,13 +64,14 @@ env {
 source {
   Http {
     plugin_output = "http_orders"
-    url = "http://mockserver:1080/example/http"
+    url = "https://jsonplaceholder.typicode.com/todos/1"
     method = "GET"
     format = "json"
     schema = {
       fields {
-        c_string = string
-        c_int = int
+        id = int
+        title = string
+        completed = boolean
       }
     }
   }
@@ -85,8 +86,8 @@ sink {
     password = "test"
     generate_sink_sql = true
     database = "test"
-    table = "public.http_orders"
-    primary_keys = ["c_string"]
+    table = "public.http_todos"
+    primary_keys = ["id"]
     batch_size = 100
   }
 }
@@ -107,11 +108,11 @@ cd "${SEATUNNEL_HOME}"
 2. Query the target table and compare the row count with the API response.
 
 ```sql
-SELECT COUNT(*) FROM public.http_orders;
-SELECT c_string, c_int FROM public.http_orders ORDER BY c_string;
+SELECT COUNT(*) FROM public.http_todos;
+SELECT id, title, completed FROM public.http_todos ORDER BY id;
 ```
 
-If the rows in the target table match the HTTP response, the pipeline is working. With the default mock response, you should see the same `c_string` and `c_int` values you saw in `curl`.
+If the rows in the target table match the HTTP response, the pipeline is working. With the sample endpoint above, you should see row `id = 1` with title `delectus aut autem` and `completed = false`.
 
 ## Common pitfalls
 
