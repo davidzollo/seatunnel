@@ -20,6 +20,7 @@ package org.apache.seatunnel.e2e.common.container.flink;
 import org.apache.seatunnel.shade.com.google.common.collect.Lists;
 
 import org.apache.seatunnel.common.utils.FileUtils;
+import org.apache.seatunnel.common.utils.JsonUtils;
 import org.apache.seatunnel.e2e.common.container.AbstractTestContainer;
 import org.apache.seatunnel.e2e.common.container.ContainerExtendedFactory;
 import org.apache.seatunnel.e2e.common.container.TestContainer;
@@ -36,12 +37,15 @@ import org.testcontainers.utility.DockerLoggerFactory;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -65,6 +69,18 @@ public abstract class AbstractTestFlinkContainer extends AbstractTestContainer {
                     "restart-strategy.fixed-delay.delay: 1000");
 
     protected static final String DEFAULT_DOCKER_IMAGE = "flink:1.13.6-scala_2.11";
+
+    /**
+     * Cache the expected Flink job name for tests that submit a logical SeaTunnel job id.
+     *
+     * <p>Flink exposes its own runtime JID in the REST API, so E2E tests need a stable way to
+     * resolve the logical id they passed to {@code executeJob(..., jobId, ...)} back to the live
+     * Flink job entry.
+     */
+    private final Map<String, String> trackedJobNames = new ConcurrentHashMap<>();
+
+    /** Cache the resolved runtime Flink JID once a logical job id has been matched. */
+    private final Map<String, String> trackedFlinkJobIds = new ConcurrentHashMap<>();
 
     protected GenericContainer<?> jobManager;
     protected GenericContainer<?> taskManager;
@@ -186,6 +202,18 @@ public abstract class AbstractTestFlinkContainer extends AbstractTestContainer {
     }
 
     @Override
+    public Container.ExecResult executeJob(String confFile, String jobId, String... variables)
+            throws IOException, InterruptedException {
+        trackLogicalJob(jobId, confFile);
+        log.info("test in container: {}", identifier());
+        return executeJob(
+                jobManager,
+                confFile,
+                jobId,
+                variables != null ? Arrays.asList(variables) : Collections.emptyList());
+    }
+
+    @Override
     public String getServerLogs() {
         return jobManager.getLogs() + "\n" + taskManager.getLogs();
     }
@@ -193,6 +221,24 @@ public abstract class AbstractTestFlinkContainer extends AbstractTestContainer {
     public String executeJobManagerInnerCommand(String command)
             throws IOException, InterruptedException {
         return jobManager.execInContainer("bash", "-c", command).getStdout();
+    }
+
+    @Override
+    public String getJobStatus(String jobId) {
+        try {
+            Map<String, Object> matchedJob = findTrackedJob(jobId);
+            if (matchedJob == null) {
+                return null;
+            }
+            Object state = matchedJob.get("state");
+            return state == null ? null : state.toString();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(
+                    "Interrupted while querying Flink job status for " + jobId, e);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to query Flink job status for " + jobId, e);
+        }
     }
 
     @Override
@@ -204,5 +250,64 @@ public abstract class AbstractTestFlinkContainer extends AbstractTestContainer {
     @Override
     public void copyAbsolutePathToContainer(String path, String targetPath) {
         ContainerUtil.copyFileIntoContainers(Paths.get(path), targetPath, jobManager);
+    }
+
+    /** Remember the config-derived Flink job name for later REST lookups by logical job id. */
+    protected final void trackLogicalJob(String jobId, String confFile) {
+        if (jobId == null || jobId.isEmpty()) {
+            return;
+        }
+        trackedJobNames.put(jobId, new File(confFile).getName());
+    }
+
+    /**
+     * Resolve the live Flink job entry for either a runtime JID or a logical SeaTunnel test job id.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> findTrackedJob(String jobId)
+            throws IOException, InterruptedException {
+        Map<String, Object> jobInfo =
+                JsonUtils.toMap(
+                        executeJobManagerInnerCommand(
+                                "curl -s http://localhost:8081/jobs/overview"),
+                        String.class,
+                        Object.class);
+        Object jobsValue = jobInfo.get("jobs");
+        if (!(jobsValue instanceof List)) {
+            return null;
+        }
+        List<Map<String, Object>> jobs = (List<Map<String, Object>>) jobsValue;
+
+        String cachedFlinkJobId = trackedFlinkJobIds.get(jobId);
+        if (cachedFlinkJobId != null) {
+            for (Map<String, Object> job : jobs) {
+                if (cachedFlinkJobId.equals(String.valueOf(job.get("jid")))) {
+                    return job;
+                }
+            }
+            trackedFlinkJobIds.remove(jobId);
+        }
+
+        for (Map<String, Object> job : jobs) {
+            if (jobId.equals(String.valueOf(job.get("jid")))) {
+                return job;
+            }
+        }
+
+        String trackedJobName = trackedJobNames.get(jobId);
+        if (trackedJobName == null) {
+            return null;
+        }
+
+        for (Map<String, Object> job : jobs) {
+            if (trackedJobName.equals(String.valueOf(job.get("name")))) {
+                Object runtimeJobId = job.get("jid");
+                if (runtimeJobId != null) {
+                    trackedFlinkJobIds.put(jobId, runtimeJobId.toString());
+                }
+                return job;
+            }
+        }
+        return null;
     }
 }
