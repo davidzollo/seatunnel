@@ -38,6 +38,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.MinIOContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
@@ -78,7 +79,12 @@ public class HudiSparkS3MultiTableIT extends TestSuiteBase implements TestResour
     @Override
     public void startUp() throws Exception {
         container =
-                new MinIOContainer(MINIO_DOCKER_IMAGE)
+                // MinIOContainer validates its image name is a recognized substitute for
+                // "minio/minio"; the quay.io mirror needs an explicit compatibility declaration
+                // or Testcontainers rejects it with IllegalStateException at startup.
+                new MinIOContainer(
+                                DockerImageName.parse(MINIO_DOCKER_IMAGE)
+                                        .asCompatibleSubstituteFor("minio/minio"))
                         .withNetwork(NETWORK)
                         .withNetworkAliases(HOST)
                         .withUserName(MINIO_USER_NAME)

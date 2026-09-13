@@ -58,6 +58,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.MinIOContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import com.amazonaws.services.s3.AmazonS3;
 import io.minio.BucketExistsArgs;
@@ -158,7 +159,12 @@ public class IcebergSourceIT extends TestSuiteBase implements TestResource {
     @Override
     public void startUp() throws Exception {
         container =
-                new MinIOContainer(MINIO_DOCKER_IMAGE)
+                // MinIOContainer validates its image name is a recognized substitute for
+                // "minio/minio"; the quay.io mirror needs an explicit compatibility declaration
+                // or Testcontainers rejects it with IllegalStateException at startup.
+                new MinIOContainer(
+                                DockerImageName.parse(MINIO_DOCKER_IMAGE)
+                                        .asCompatibleSubstituteFor("minio/minio"))
                         .withNetwork(NETWORK)
                         .withNetworkAliases(HOST)
                         .withExposedPorts(MINIO_PORT);
